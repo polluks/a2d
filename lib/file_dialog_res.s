@@ -7,16 +7,7 @@
 
 .scope file_dialog_res
 
-;;; If set, control allows entering all printable characters.
-;;; The default is to only allow pathname characters.
-allow_all_chars_flag:
-        .byte   0
-
-;;; Buffer used when selecting filename by holding Apple key and typing name.
-;;; Length-prefixed string, initialized to 0 when the dialog is shown.
-type_down_buf:
-        .res    16, 0
-
+;;; Must be visible to MGTK
 filename_buf:
         .res    17, 0           ; filename + length + slash (for some uses)
 
@@ -32,37 +23,48 @@ filename_buf:
 str_folder:
         PASCAL_STRING {kGlyphFolderLeft, kGlyphFolderRight}
 
-selected_index:                 ; $FF if none
-        .byte   0
-
         kControlsLeft = 28
-        kControlsTop  = 26
+        kControlsTop  = 27
         kButtonGap = 3
-        kSep = kButtonGap + 1 + kButtonGap
+        kSep = kButtonGap-1 + 1 + kButtonGap-1
 
 
 pensize_normal: .byte   1, 1
 pensize_frame:  .byte   kBorderDX, kBorderDY
         DEFINE_RECT_FRAME dialog_frame_rect, kFilePickerDlgWidth, kFilePickerDlgHeight
 
-        DEFINE_RECT disk_name_rect, kControlsLeft, 16, 174, 26
+.if FD_EXTENDED
+        DEFINE_RECT_FRAME dialog_ex_frame_rect, kFilePickerDlgExWidth, kFilePickerDlgExHeight
+.endif
 
-        DEFINE_BUTTON change_drive, res_string_button_change_drive, 195, kControlsTop + 0 * (kButtonHeight + kButtonGap)
-        DEFINE_BUTTON open,         res_string_button_open,         195, kControlsTop + 1 * (kButtonHeight + kButtonGap)
-        DEFINE_BUTTON close,        res_string_button_close,        195, kControlsTop + 2 * (kButtonHeight + kButtonGap)
-        DEFINE_BUTTON cancel,       res_string_button_cancel,       195, kControlsTop + 3 * (kButtonHeight + kButtonGap) + kSep
-        DEFINE_BUTTON ok,           res_string_button_ok,           195, kControlsTop + 4 * (kButtonHeight + kButtonGap) + kSep
+kButtonsLeft = 195
+kMaxNameWidth = 120
+
+        kDirLabelCenterX = kControlsLeft + kListBoxWidth/2
+        DEFINE_POINT dir_label_pos, 0, 16 + kSystemFontHeight
+        DEFINE_RECT_SZ dir_name_rect, kDirLabelCenterX - kMaxNameWidth/2, 16, kMaxNameWidth, kSystemFontHeight
+        kDiskLabelCenterX = kButtonsLeft + kButtonWidth/2
+        DEFINE_POINT disk_label_pos, 0, 16 + kSystemFontHeight
+        DEFINE_RECT_SZ disk_name_rect, kDiskLabelCenterX - kMaxNameWidth/2, 16, kMaxNameWidth, kSystemFontHeight
+
+        DEFINE_BUTTON change_drive, res_string_button_change_drive, kButtonsLeft, kControlsTop + 0 * (kButtonHeight + kButtonGap)
+        DEFINE_BUTTON open,         res_string_button_open,         kButtonsLeft, kControlsTop + 1 * (kButtonHeight + kButtonGap)
+        DEFINE_BUTTON close,        res_string_button_close,        kButtonsLeft, kControlsTop + 2 * (kButtonHeight + kButtonGap)
+        DEFINE_BUTTON cancel,       res_string_button_cancel,       kButtonsLeft, kControlsTop + 3 * (kButtonHeight + kButtonGap) + kSep
+        DEFINE_BUTTON ok,           res_string_button_ok,           kButtonsLeft, kControlsTop + 4 * (kButtonHeight + kButtonGap) + kSep
 
 ;;; Dividing line
         DEFINE_POINT dialog_sep_start, 315, kControlsTop
-        DEFINE_POINT dialog_sep_end,   315, 100
+        DEFINE_POINT dialog_sep_end,   315, 99
 
-        kButtonSepY = kControlsTop + 3*kButtonHeight + 3*kButtonGap + 2
-        DEFINE_POINT button_sep_start, 195, kButtonSepY
-        DEFINE_POINT button_sep_end,   195 + kButtonWidth, kButtonSepY
+        kButtonSepY = kControlsTop + 3*kButtonHeight + 3*kButtonGap + 1
+        DEFINE_POINT button_sep_start, kButtonsLeft, kButtonSepY
+        DEFINE_POINT button_sep_end,   kButtonsLeft + kButtonWidth, kButtonSepY
 
-        DEFINE_LABEL disk, res_string_label_disk, kControlsLeft, 25
-
+penXOR:         .byte   MGTK::penXOR
+penOR:          .byte   MGTK::penOR
+pencopy:        .byte   MGTK::pencopy
+notpencopy:     .byte   MGTK::notpencopy
 
 textbg1:
         .byte   0
@@ -77,31 +79,29 @@ checkerboard_pattern:
 kCommonInputWidth = 435
 kCommonInputHeight = kTextBoxHeight
 
-        kInput1Y = 111
+.if FD_EXTENDED
+        kInput1Y = 114
         DEFINE_POINT input1_label_pos, kControlsLeft, kInput1Y-1
         DEFINE_RECT_SZ input1_rect, kControlsLeft, kInput1Y, kCommonInputWidth, kCommonInputHeight
         DEFINE_RECT_SZ input1_clear_rect, kControlsLeft+1, kInput1Y+1, kCommonInputWidth-2, kCommonInputHeight-2
         DEFINE_POINT input1_textpos, kControlsLeft + kTextBoxTextHOffset, kInput1Y + kTextBoxTextVOffset
-
-.if FD_EXTENDED
-        kInput2Y = 135
-        DEFINE_POINT input2_label_pos, kControlsLeft, kInput2Y-1
-        DEFINE_RECT_SZ input2_rect, kControlsLeft, kInput2Y, kCommonInputWidth, kCommonInputHeight
-        DEFINE_RECT_SZ input2_clear_rect, kControlsLeft+1, kInput2Y+1, kCommonInputWidth-2, kCommonInputHeight-2
-        DEFINE_POINT input2_textpos, kControlsLeft + kTextBoxTextHOffset, kInput2Y + kTextBoxTextVOffset
 .endif
 
 kFilePickerDlgWindowID  = $3E
-kFilePickerDlgWidth     = 500
 
-.if FD_EXTENDED
-kFilePickerDlgHeight    = 153
-.else
-kFilePickerDlgHeight    = 129
-.endif
-
+;;; Simple, no customizations supported
+kFilePickerDlgWidth     = 323
+kFilePickerDlgHeight    = 108
 kFilePickerDlgLeft      = (kScreenWidth - kFilePickerDlgWidth) / 2
 kFilePickerDlgTop       = (kScreenHeight - kFilePickerDlgHeight) / 2
+
+;;; Advanced; can have name and custom controls
+.if FD_EXTENDED
+kFilePickerDlgExWidth   = 500
+kFilePickerDlgExHeight  = 132
+kFilePickerDlgExLeft    = (kScreenWidth - kFilePickerDlgExWidth) / 2
+kFilePickerDlgExTop     = (kScreenHeight - kFilePickerDlgExHeight) / 2
+.endif
 
 ;;; File Picker Dialog
 
@@ -151,7 +151,12 @@ kLineDelta = 1
         kWidth = kListBoxWidth
         kHeight = kListItemHeight * kListRows - 1
         kLeft =   kFilePickerDlgLeft + kControlsLeft + 1 ; +1 for external border
-        kTop =    kFilePickerDlgTop + 28
+
+        kTop =    kFilePickerDlgTop + kControlsTop + 1
+.if FD_EXTENDED
+        kExLeft =   kFilePickerDlgExLeft + kControlsLeft + 1 ; +1 for external border
+        kExTop =    kFilePickerDlgExTop + 28
+.endif
 
 window_id:      .byte   kEntryListCtlWindowID
 options:        .byte   MGTK::Option::dialog_box

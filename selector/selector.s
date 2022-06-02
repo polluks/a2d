@@ -56,7 +56,7 @@ _segoffset .set 0
         DEFSEG SegmentAlert,      $D000,        $0800
 
 ;;; Dynamically loaded overlays
-        DEFSEG OverlayFileDialog, OVERLAY_ADDR, $1700
+        DEFSEG OverlayFileDialog, OVERLAY_ADDR, $1200
         DEFSEG OverlayCopyDialog, OVERLAY_ADDR, $0D00
 
 ;;; ============================================================

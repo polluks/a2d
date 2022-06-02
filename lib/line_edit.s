@@ -15,7 +15,6 @@
 ;;; * `clear_rect` - to erase contents of control
 ;;; * `textpos` - position of text
 ;;; * `SetPort` - called to set up GrafPort for drawing
-;;; * `NotifyTextChanged` - called when string changes
 ;;; * `click_coords` - for `Click`, in window coords
 ;;; * `event_params` - for `Key`
 ;;; * `line_edit_res::blink_ip_flag` - set to enable blinking IP
@@ -326,8 +325,6 @@ modified:
         ;; Now move IP to new position
         inc     line_edit_res::ip_pos
 
-        jsr     NotifyTextChanged
-
 ret:    rts
 .endproc
 
@@ -344,8 +341,6 @@ ret:    rts
 
         jsr     _SetPort
         MGTK_CALL MGTK::PaintRect, clear_rect
-
-        jsr     NotifyTextChanged
 
 ret:    rts
 .endproc
@@ -383,9 +378,7 @@ ret:    rts
 :
         ;; Redraw everything to the right of the IP
         jsr     _RedrawRightOfIP
-        param_call DrawString, line_edit_res::str_2_spaces
-
-        jmp     NotifyTextChanged
+        param_jump DrawString, line_edit_res::str_2_spaces
 .endproc
 
 ;;; ============================================================

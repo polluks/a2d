@@ -498,8 +498,6 @@ file_count:
 ;;; ============================================================
 ;;; Resources for Add/Edit a Shortcut dialog
 
-enter_the_full_pathname_label:
-        PASCAL_STRING res_string_selector_label_enter_pathname
 enter_the_name_to_appear_label:
         PASCAL_STRING res_string_selector_label_enter_name
 
@@ -565,26 +563,9 @@ kRadioControlHeight = 8         ; system font height - 1
 
 ;;; ============================================================
 
-input1_dirty_flag:              ; stash dirty flag when input2 is active
-        .byte   0
-input2_dirty_flag:              ; stash dirty flag when input1 is active
-        .byte   0
-
-saved_src_index:
-        .byte   0
-
         FONT := DEFAULT_FONT
         .define FD_EXTENDED 1
         .include "../lib/file_dialog_res.s"
-
-file_to_delete_label:
-        PASCAL_STRING res_string_delete_file_label_file_to_delete
-
-source_filename_label:
-        PASCAL_STRING res_string_copy_file_label_source_filename
-
-destination_filename_label:
-        PASCAL_STRING res_string_copy_file_label_destination_filename
 
 ;;; ============================================================
 
