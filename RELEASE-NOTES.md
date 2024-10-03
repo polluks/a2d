@@ -9,6 +9,8 @@ Project Page: https://github.com/a2stuff/a2d
 ### General
 
 * Correctly exit 80-column firmware when exiting.
+* Option "Copy to RAMCard" now defaults to off.
+* Option "Preserve uppercase and lowercase in names" no defaults to on.
 
 ### Launcher
 
@@ -23,6 +25,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Hold either Apple key when selecting File > Close to Close All.
 * Fix Apple+O to not "Open and Close" when menu already showing. ([#796](https://github.com/a2stuff/a2d/issues/796))
 * Allow keyboard selection of icons in all windows.
+* Show tip about copying PRODOS during Format/Erase process.
 
 ### Selector
 
@@ -30,13 +33,16 @@ Project Page: https://github.com/a2stuff/a2d
 
 ### Desk Accessories
 
-* About This Apple II: Detect Microdigital TK-3000 //e
+* About This Apple II
+  * Detect Microdigital TK-3000 //e
+  * Detect Pravetz 8A/C
 
 ## 1.4
 
-An unofficial release with bug fixes and enhancements. ??? 2004.
+An unofficial release with bug fixes and enhancements. July 28, 2024..
 
-
+See the release notes at:
+https://github.com/a2stuff/a2d/blob/release-1.4/RELEASE-NOTES.md
 
 ## 1.3
 
