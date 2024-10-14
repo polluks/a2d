@@ -350,13 +350,13 @@ HandleKeydown:
 
         lda     event_params::key
         cmp     #CHAR_LEFT
-        jeq     CmdHighlightPrev
+        jeq     CmdHighlightLeft
         cmp     #CHAR_UP
-        jeq     CmdHighlightPrev
+        jeq     CmdHighlightUp
         cmp     #CHAR_RIGHT
-        jeq     CmdHighlightNext
+        jeq     CmdHighlightRight
         cmp     #CHAR_DOWN
-        jeq     CmdHighlightNext
+        jeq     CmdHighlightDown
         cmp     #CHAR_TAB
         jeq     CmdHighlightAlpha
         cmp     #'`'
@@ -3377,34 +3377,50 @@ error:
 
 .proc CmdHighlightImpl
 
+;;; Local variables on ZP
+PARAM_BLOCK, $50
+delta      .byte
+END_PARAM_BLOCK
+
+        ;; ----------------------------------------
         ;; Next/prev in sorted order
-a_prev: lda     #$80
-        bne     store           ; always
-a_next: lda     #$00
-        beq     store           ; always
 
-        ;; Tab / Shift+Tab - next/prev in sorted order, based on shift
+        ;; Tab / Shift+Tab
 alpha:  jsr     ShiftDown
+        bpl     a_next
+        FALL_THROUGH_TO a_prev
 
-store:  sta     flag
-        jsr     GetNameSelectableIconsSorted
+a_prev: lda     #AS_BYTE(-1)
+        .byte   OPC_BIT_abs     ; skip next 2-byte instruction
+a_next: lda     #1
+
+        sta     delta
+        jsr     GetKeyboardSelectableIconsSorted
         jmp     common
 
+        ;; ----------------------------------------
         ;; Arrows - next/prev in icon order
-
-prev:   lda     #$80
+prev:   lda     #AS_BYTE(-1)
         .byte   OPC_BIT_abs     ; skip next 2-byte instruction
-next:   lda     #$00
-        sta     flag
+next:   lda     #1
 
-;;; First byte is icon count. Rest is a list of selectable icons.
-        buffer := $1800
-        jsr     GetSelectableIcons
+        sta     delta
+        jsr     GetKeyboardSelectableIcons
+        FALL_THROUGH_TO common
 
+;;; --------------------------------------------------
 ;;; Figure out current selected index, based on selection.
 
-common: lda     selected_icon_count
-        beq     pick_first
+common:
+        ;; First byte is icon count. Rest is a list of selectable icons.
+        buffer := $1800
+
+        ;; Anything selectable?
+        lda     buffer
+        beq     ret
+
+        lda     selected_icon_count
+        beq     fallback
 
         ;; Try to find actual selection in our list
         lda     selected_icon_list ; Only consider first, otherwise N^2
@@ -3415,56 +3431,200 @@ common: lda     selected_icon_count
         dex
         bpl     :-
 
-        ;; No selection; pick the first volume icon.
-pick_first:
-        copy    #0, selected_index
-        beq     select_next     ; always
-
-        ;; There was a selection; clear it, and pick prev/next
-        ;; based on keypress.
-pick_next_prev:
-        stx     selected_index
-        jsr     ClearSelection
-
-        flag := *+1
-        lda     #SELF_MODIFIED_BYTE
-        bmi     select_prev
-        FALL_THROUGH_TO select_next
-
-select_next:
-        selected_index := *+1
-        ldx     #SELF_MODIFIED_BYTE
-        inx
-        cpx     buffer
-        bne     :+
+        ;; If not in our list, use a fallback.
+fallback:
         ldx     #0
-:       stx     selected_index
-        jmp     HighlightIcon
-
-select_prev:
-        ldx     selected_index
-        dex
-        bpl     :+
+        ldy     delta
+    IF_NEG
         ldx     buffer
         dex
-:       stx     selected_index
-        FALL_THROUGH_TO HighlightIcon
+    END_IF
+        bpl     select_index    ; always
 
-;;; Highlight the icon in the list at `selected_index`
-HighlightIcon:
-        ldx     selected_index
+        ;; There was a selection; pick prev/next based on keypress.
+pick_next_prev:
+        txa
+        clc
+        adc     delta           ; +1 or -1
+        cmp     buffer
+        bcs     ret             ; handles >= max or < 0
+        tax
+        FALL_THROUGH_TO select_index
+
+select_index:
         lda     buffer+1,x
-        pha
-        jsr     GetIconWindow
-        jsr     ActivateWindow  ; no-op if already active, or 0
-        pla
-        jmp     SelectIcon
+        jmp     ClearSelectionActivateWindowAndSelectIcon
+
+ret:    rts
+
 .endproc ; CmdHighlightImpl
 CmdHighlightPrev := CmdHighlightImpl::prev
 CmdHighlightNext := CmdHighlightImpl::next
 CmdHighlightAlpha := CmdHighlightImpl::alpha
 CmdHighlightAlphaPrev := CmdHighlightImpl::a_prev
 CmdHighlightAlphaNext := CmdHighlightImpl::a_next
+
+;;; ============================================================
+
+.proc CmdHighlightSpatialImpl
+
+;;; Local variables on ZP
+PARAM_BLOCK, $50
+delta_x    .word
+delta_y    .word
+tmpw       .word
+iter_count .byte
+index      .byte
+END_PARAM_BLOCK
+
+        ;; Values that work in Icon and Small Icon views
+        kDeltaX = 40
+        kDeltaY = 10
+
+left:   ldx     #AS_BYTE(-kDeltaX)
+        ldy     #0
+        beq     common          ; always
+
+right:  ldx     #kDeltaX
+        ldy     #0
+        beq     common          ; always
+
+up:     ldy     #AS_BYTE(-kDeltaY)
+        ldx     #0
+        beq     common          ; always
+
+down:   ldy     #kDeltaY
+        ldx     #0
+        FALL_THROUGH_TO common
+
+;;; --------------------------------------------------
+;;; Compute 16-bit deltas
+
+common:
+        stx     delta_x
+        ;; sign-extend
+        txa
+        and     #$80
+        bpl     :+
+        lda     #$FF
+:       sta     delta_x+1
+
+        sty     delta_y
+        ;; sign-extend
+        tya
+        and     #$80
+        bpl     :+
+        lda     #$FF
+:       sta     delta_y+1
+
+;;; --------------------------------------------------
+;;; If a list view, use index-based logic
+
+        jsr     GetActiveWindowViewBy ; N=0 is icon view, N=1 is list view
+    IF_NEG
+        lda     delta_x
+        RTS_IF_NOT_ZERO         ; ignore
+        bit     delta_y
+        jpl     CmdHighlightNext
+        jmp     CmdHighlightPrev
+    END_IF
+
+;;; --------------------------------------------------
+;;; Identify a starting icon
+
+        jsr     LoadActiveWindowEntryTable
+
+        lda     selected_icon_count
+        jeq     fallback
+
+        lda     active_window_id
+        cmp     selected_window_id
+        jne     fallback
+
+        lda     selected_icon_list ; use first
+        sta     icon_param
+
+;;; --------------------------------------------------
+;;; Get bounds, walk rect until a different icon is contained
+
+        ITK_CALL IconTK::GetIconBounds, icon_param ; inits `tmp_rect`
+
+        ;; Constrain to icon bitmap width (long names tend to overlap)
+        add16   tmp_rect+MGTK::Rect::x1, tmp_rect+MGTK::Rect::x2, tmpw
+        lsr16   tmpw
+        sub16   tmpw, #kIconBitmapWidth/2, tmp_rect+MGTK::Rect::x1
+        add16   tmpw, #kIconBitmapWidth/2, tmp_rect+MGTK::Rect::x2
+
+        copy    #(560 / kDeltaX), iter_count
+
+rect_loop:
+        ;; Offset rect
+        ptr := $06
+        copy16  #tmp_rect, ptr
+        ldy     #0
+        ldx     #2
+:       add16in (ptr),y, delta_x, (ptr),y
+        iny
+        add16in (ptr),y, delta_y, (ptr),y
+        iny
+        dex
+        bne     :-
+
+        copy    #0, index
+icon_loop:
+        ldx     index
+        cpx     cached_window_entry_count
+        beq     next_rect
+
+        lda     cached_window_entry_list,x
+        sta     icon_param
+        jsr     IsIconSelected
+        beq     next_icon
+
+        ITK_CALL IconTK::IconInRect, icon_param
+    IF_NOT_ZERO
+        lda     icon_param
+        bne     select          ; always
+    END_IF
+
+next_icon:
+        inc     index
+        bne     icon_loop       ; always
+
+next_rect:
+        dec     iter_count
+        bne     rect_loop
+
+ret:    rts
+
+;;; --------------------------------------------------
+;;; If there was no (usable) selection, pick icon from active window.
+
+fallback:
+        lda     cached_window_entry_count
+        beq     ret
+
+        ;; Default to first icon
+        ldx     #0
+        lda     active_window_id
+    IF_ZERO
+        ;; ...except on desktop, since that's trash.
+        inx
+        cpx     cached_window_entry_count
+        bne     :+
+        dex
+:
+    END_IF
+        lda     cached_window_entry_list,x
+
+select:
+        jmp     ClearSelectionActivateWindowAndSelectIcon
+
+.endproc ; CmdHighlightSpatialImpl
+CmdHighlightLeft  := CmdHighlightSpatialImpl::left
+CmdHighlightRight := CmdHighlightSpatialImpl::right
+CmdHighlightDown  := CmdHighlightSpatialImpl::down
+CmdHighlightUp    := CmdHighlightSpatialImpl::up
 
 ;;; ============================================================
 ;;; Type Down Selection
@@ -3505,10 +3665,11 @@ file_char:
         sta     typedown_buf,x
 
         ;; Collect and sort the potential type-down matches
-        jsr     GetNameSelectableIconsSorted
+        jsr     GetKeyboardSelectableIconsSorted
+        lda     num_filenames
+        beq     done
 
-        ;; Find a match. There will always be one, since
-        ;; desktop icons (including Trash) are considered.
+        ;; Find a match.
         jsr     FindMatch
 
         ;; Icon to select
@@ -3522,13 +3683,9 @@ file_char:
         beq     done            ; yes, nothing to do
 
         ;; Update the selection.
-        jsr     ClearSelection
         icon := *+1
         lda     #SELF_MODIFIED_BYTE
-        jsr     GetIconWindow
-        jsr     ActivateWindow  ; no-op if already active, or 0
-        lda     icon
-        jsr     SelectIcon
+        jsr     ClearSelectionActivateWindowAndSelectIcon
 
 done:   lda     #0
         rts
@@ -3586,36 +3743,13 @@ typedown_buf:
         .res    16, 0
 
 ;;; ============================================================
-;;; Build list of selectable icons.
-;;; This is all icons, so order is stable as windows are activated
-;;; while the arrow keys are held down and selection cycles.
+;;; Build list of keyboard-selectable icons.
+;;; This is all icons in active window.
 ;;; Output: Buffer at $1800 (length prefixed)
+;;;         X = number of icons
 
-.proc GetSelectableIcons
+.proc GetKeyboardSelectableIcons
         buffer := $1800
-
-        window_id := findwindow_params::window_id
-
-        ldx     icon_count
-        stx     buffer
-        beq     ret
-
-:       lda     window_entry_table,x
-        sta     buffer+1,x
-        dex
-        bpl     :-
-
-ret:    rts
-.endproc ; GetSelectableIcons
-
-;;; Gather the name-selectable icons - those in the active window or
-;;; desktop - into buffer at $1800, and sort them by name.
-;;; Output: Buffer at $1800 (length prefixed)
-
-.proc GetNameSelectableIconsSorted
-        buffer := $1800
-        ptr1 := $06
-        ptr2 := $08
 
         jsr     LoadActiveWindowEntryTable
         ldx     #0
@@ -3625,9 +3759,22 @@ ret:    rts
         lda     cached_window_entry_list,x
         sta     buffer+1,x
         inx
-        bne     :-
+        bne     :-              ; always
 :
         stx     buffer
+        rts
+.endproc ; GetKeyboardSelectableIcons
+
+;;; Gather the keyboard-selectable icons into buffer at $1800, and
+;;; sort them by name.
+;;; Output: Buffer at $1800 (length prefixed)
+
+.proc GetKeyboardSelectableIconsSorted
+        buffer := $1800
+        ptr1 := $06
+        ptr2 := $08
+
+        jsr     GetKeyboardSelectableIcons
 
         cpx     #2
         RTS_IF_CC
@@ -3676,7 +3823,7 @@ next:   inc     inner
         bne     oloop
 
         rts
-.endproc ; GetNameSelectableIconsSorted
+.endproc ; GetKeyboardSelectableIconsSorted
 
 ;;; Assuming selectable icon buffer at $1800 is populated by the
 ;;; above functions, return ptr to nth icon's name in A,X
@@ -3729,6 +3876,23 @@ gt:     lda     #$FF            ; Z=0
         sec
 ret:    rts
 .endproc ; CompareStrings
+
+;;; ============================================================
+;;; Replace selection with the specified icon. The icon's
+;;; window is activated if necessary.
+;;; Inputs: A = icon id
+
+.proc ClearSelectionActivateWindowAndSelectIcon
+        pha
+        jsr     ClearSelection
+        pla
+        pha
+        jsr     GetIconWindow
+        jsr     ActivateWindow  ; no-op if already active, or 0
+        pla
+
+        FALL_THROUGH_TO SelectIcon
+.endproc ; ClearSelectionActivateWindowAndSelectIcon
 
 ;;; ============================================================
 ;;; Select an arbitrary icon. If windowed, it is scrolled into view.
@@ -3957,19 +4121,23 @@ done:   rts
 ;;; Effective viewport  ("Effective" discounts the window header.)
 viewport := window_grafport::maprect
 
+;;; Local variables on ZP
+;;; NOTE: $50...$6F is used because MulDiv uses $10...$19
+PARAM_BLOCK, $50
 ;;; `ubox` is a union of the effective viewport and icon bounding box
-        DEFINE_RECT ubox, 0, 0, 0, 0
+ubox    .tag    MGTK::Rect
 
 ;;; Effective dimensions of the viewport
-width:          .word   0
-height:         .word   0
+width   .word
+height  .word
 
 ;;; Initial effective viewport top/left
-        DEFINE_POINT old, 0, 0
+old     .tag    MGTK::Point
 
 ;;; Increment/decrement sizes (depends on view type)
-tick_h: .byte   0
-tick_v: .byte   0
+tick_h  .byte
+tick_v  .byte
+END_PARAM_BLOCK
 
 ;;; --------------------------------------------------
 ;;; Compute the necessary data for scroll operations:
@@ -4007,21 +4175,21 @@ _Preamble:
         ;; Make `ubox` bound both viewport and icons; needed to ensure
         ;; offset cases are handled.
         COPY_STRUCT MGTK::Rect, iconbb_rect, ubox
-        scmp16  viewport+MGTK::Rect::x1, ubox::x1
+        scmp16  viewport+MGTK::Rect::x1, ubox+MGTK::Rect::x1
     IF_NEG
-        copy16  viewport+MGTK::Rect::x1, ubox::x1
+        copy16  viewport+MGTK::Rect::x1, ubox+MGTK::Rect::x1
     END_IF
-        scmp16  viewport+MGTK::Rect::x2, ubox::x2
+        scmp16  viewport+MGTK::Rect::x2, ubox+MGTK::Rect::x2
     IF_POS
-        copy16  viewport+MGTK::Rect::x2, ubox::x2
+        copy16  viewport+MGTK::Rect::x2, ubox+MGTK::Rect::x2
     END_IF
-        scmp16  viewport+MGTK::Rect::y1, ubox::y1
+        scmp16  viewport+MGTK::Rect::y1, ubox+MGTK::Rect::y1
     IF_NEG
-        copy16  viewport+MGTK::Rect::y1, ubox::y1
+        copy16  viewport+MGTK::Rect::y1, ubox+MGTK::Rect::y1
     END_IF
-        scmp16  viewport+MGTK::Rect::y2, ubox::y2
+        scmp16  viewport+MGTK::Rect::y2, ubox+MGTK::Rect::y2
     IF_POS
-        copy16  viewport+MGTK::Rect::y2, ubox::y2
+        copy16  viewport+MGTK::Rect::y2, ubox+MGTK::Rect::y2
     END_IF
 
         rts
@@ -4102,20 +4270,20 @@ _Preamble:
 
 .proc TrackHThumb
         jsr     _Preamble
-        sub16   ubox::x2, ubox::x1, z:muldiv_number
+        sub16   ubox+MGTK::Rect::x2, ubox+MGTK::Rect::x1, z:muldiv_number
         sub16   z:muldiv_number, width, z:muldiv_number
         jsr     _TrackMulDiv
-        add16   z:muldiv_result, ubox::x1, viewport+MGTK::Rect::x1
+        add16   z:muldiv_result, ubox+MGTK::Rect::x1, viewport+MGTK::Rect::x1
         add16   viewport+MGTK::Rect::x1, width, viewport+MGTK::Rect::x2
         jmp     _MaybeUpdateHThumb
 .endproc ; TrackHThumb
 
 .proc TrackVThumb
         jsr     _Preamble
-        sub16   ubox::y2, ubox::y1, z:muldiv_number
+        sub16   ubox+MGTK::Rect::y2, ubox+MGTK::Rect::y1, z:muldiv_number
         sub16   z:muldiv_number, height, z:muldiv_number
         jsr     _TrackMulDiv
-        add16   z:muldiv_result, ubox::y1, viewport+MGTK::Rect::y1
+        add16   z:muldiv_result, ubox+MGTK::Rect::y1, viewport+MGTK::Rect::y1
         add16   viewport+MGTK::Rect::y1, height, viewport+MGTK::Rect::y2
         jmp     _MaybeUpdateVThumb
 .endproc ; TrackVThumb
@@ -4134,18 +4302,18 @@ _Preamble:
 ;;;   3. goto update
 
 .proc _Clamp_x2
-        scmp16  viewport+MGTK::Rect::x2, ubox::x2
+        scmp16  viewport+MGTK::Rect::x2, ubox+MGTK::Rect::x2
     IF_POS
-        copy16  ubox::x2, viewport+MGTK::Rect::x2
+        copy16  ubox+MGTK::Rect::x2, viewport+MGTK::Rect::x2
     END_IF
         sub16   viewport+MGTK::Rect::x2, width, viewport+MGTK::Rect::x1
         jmp     _MaybeUpdateHThumb
 .endproc ; _Clamp_x2
 
 .proc _Clamp_y2
-        scmp16  viewport+MGTK::Rect::y2, ubox::y2
+        scmp16  viewport+MGTK::Rect::y2, ubox+MGTK::Rect::y2
     IF_POS
-        copy16  ubox::y2, viewport+MGTK::Rect::y2
+        copy16  ubox+MGTK::Rect::y2, viewport+MGTK::Rect::y2
     END_IF
         sub16   viewport+MGTK::Rect::y2, height, viewport+MGTK::Rect::y1
         jmp     _MaybeUpdateVThumb
@@ -4158,18 +4326,18 @@ _Preamble:
 ;;;   3. goto update
 
 .proc _Clamp_x1
-        scmp16  viewport+MGTK::Rect::x1, ubox::x1
+        scmp16  viewport+MGTK::Rect::x1, ubox+MGTK::Rect::x1
     IF_NEG
-        copy16  ubox::x1, viewport+MGTK::Rect::x1
+        copy16  ubox+MGTK::Rect::x1, viewport+MGTK::Rect::x1
     END_IF
         add16   viewport+MGTK::Rect::x1, width, viewport+MGTK::Rect::x2
         jmp     _MaybeUpdateHThumb
 .endproc ; _Clamp_x1
 
 .proc _Clamp_y1
-        scmp16  viewport+MGTK::Rect::y1, ubox::y1
+        scmp16  viewport+MGTK::Rect::y1, ubox+MGTK::Rect::y1
     IF_NEG
-        copy16  ubox::y1, viewport+MGTK::Rect::y1
+        copy16  ubox+MGTK::Rect::y1, viewport+MGTK::Rect::y1
     END_IF
         add16   viewport+MGTK::Rect::y1, height, viewport+MGTK::Rect::y2
         jmp     _MaybeUpdateVThumb
@@ -4185,7 +4353,7 @@ _Preamble:
 ;;;     3. redraw
 
 .proc _MaybeUpdateHThumb
-        ecmp16  viewport+MGTK::Rect::x1, old::xcoord
+        ecmp16  viewport+MGTK::Rect::x1, old+MGTK::Point::xcoord
     IF_NE
         jsr     _SetHThumbFromViewport
         jsr     _UpdateViewport
@@ -4193,9 +4361,9 @@ _Preamble:
 
         ;; Handle offset case - may be able to deactivate scrollbar now
         jsr     _Preamble       ; Need updated `ubox` and `maprect`
-        scmp16  ubox::x1, viewport+MGTK::Rect::x1
+        scmp16  ubox+MGTK::Rect::x1, viewport+MGTK::Rect::x1
         bmi     :+
-        scmp16  viewport+MGTK::Rect::x2, ubox::x2
+        scmp16  viewport+MGTK::Rect::x2, ubox+MGTK::Rect::x2
         bmi     :+
         ldx     #MGTK::Ctl::horizontal_scroll_bar
         lda     #MGTK::activatectl_deactivate
@@ -4206,7 +4374,7 @@ _Preamble:
 .endproc ; _MaybeUpdateHThumb
 
 .proc _MaybeUpdateVThumb
-        ecmp16  viewport+MGTK::Rect::y1, old::ycoord
+        ecmp16  viewport+MGTK::Rect::y1, old+MGTK::Point::ycoord
     IF_NE
         jsr     _SetVThumbFromViewport
         jsr     _UpdateViewport
@@ -4214,9 +4382,9 @@ _Preamble:
 
         ;; Handle offset case - may be able to deactivate scrollbar now
         jsr     _Preamble       ; Need updated `ubox` and `maprect`
-        scmp16  ubox::y1, viewport+MGTK::Rect::y1
+        scmp16  ubox+MGTK::Rect::y1, viewport+MGTK::Rect::y1
         bmi     :+
-        scmp16  viewport+MGTK::Rect::y2, ubox::y2
+        scmp16  viewport+MGTK::Rect::y2, ubox+MGTK::Rect::y2
         bmi     :+
         ldx     #MGTK::Ctl::vertical_scroll_bar
         lda     #MGTK::activatectl_deactivate
@@ -4228,9 +4396,9 @@ _Preamble:
 
 ;;; Set hthumb position relative to `maprect` and `ubox`.
 .proc _SetHThumbFromViewport
-        sub16   viewport+MGTK::Rect::x1, ubox::x1, z:muldiv_number
+        sub16   viewport+MGTK::Rect::x1, ubox+MGTK::Rect::x1, z:muldiv_number
         copy16  #kScrollThumbMax, z:muldiv_numerator
-        sub16   ubox::x2, ubox::x1, z:muldiv_denominator
+        sub16   ubox+MGTK::Rect::x2, ubox+MGTK::Rect::x1, z:muldiv_denominator
         sub16   z:muldiv_denominator, width, z:muldiv_denominator
         jsr     MulDiv
         lda     z:muldiv_result
@@ -4240,9 +4408,9 @@ _Preamble:
 
 ;;; Set vthumb position relative to `maprect` and `ubox`.
 .proc _SetVThumbFromViewport
-        sub16   viewport+MGTK::Rect::y1, ubox::y1, z:muldiv_number
+        sub16   viewport+MGTK::Rect::y1, ubox+MGTK::Rect::y1, z:muldiv_number
         copy16  #kScrollThumbMax, z:muldiv_numerator
-        sub16   ubox::y2, ubox::y1, z:muldiv_denominator
+        sub16   ubox+MGTK::Rect::y2, ubox+MGTK::Rect::y1, z:muldiv_denominator
         sub16   z:muldiv_denominator, height, z:muldiv_denominator
         jsr     MulDiv
         lda     z:muldiv_result
@@ -4267,9 +4435,9 @@ _Preamble:
 .proc ActivateCtlsSetThumbs
         jsr     _Preamble
 
-        scmp16  ubox::x1, viewport+MGTK::Rect::x1
+        scmp16  ubox+MGTK::Rect::x1, viewport+MGTK::Rect::x1
         bmi     activate_hscroll
-        scmp16  viewport+MGTK::Rect::x2, ubox::x2
+        scmp16  viewport+MGTK::Rect::x2, ubox+MGTK::Rect::x2
         bmi     activate_hscroll
 
         ;; deactivate horizontal scrollbar
@@ -4291,9 +4459,9 @@ activate_hscroll:
         ;; --------------------------------------------------
 
 check_vscroll:
-        scmp16  ubox::y1, viewport+MGTK::Rect::y1
+        scmp16  ubox+MGTK::Rect::y1, viewport+MGTK::Rect::y1
         bmi     activate_vscroll
-        scmp16  viewport+MGTK::Rect::y2, ubox::y2
+        scmp16  viewport+MGTK::Rect::y2, ubox+MGTK::Rect::y2
         bmi     activate_vscroll
 
         ;; deactivate vertical scrollbar
@@ -5249,6 +5417,15 @@ exception_flag:
 ;;; Assert: `cached_window_id` == A
 
 .proc DragSelect
+
+PARAM_BLOCK, $10
+window_id       .byte    ; 0 = desktop, assumed to be active otherwise
+deltax          .word
+deltay          .word
+initial_pos     .tag    MGTK::Point
+last_pos        .tag    MGTK::Point
+END_PARAM_BLOCK
+
         sta     window_id
 
     IF_NOT_ZERO
@@ -5426,16 +5603,6 @@ update: lda     window_id
 
         jsr     FrameTmpRect
         jmp     event_loop
-
-window_id:                      ; 0 = desktop, assumed to be active otherwise
-        .byte   0
-
-deltax: .word   0
-deltay: .word   0
-initial_pos:
-        .tag    MGTK::Point
-last_pos:
-        .tag    MGTK::Point
 
 .proc CoordsScreenToWindow
         jsr     PushPointers
@@ -7340,23 +7507,25 @@ copy_new_window_bounds_flag:
 
 .proc CreateIconsForWindowImpl
 
-icon_type:      .addr   0
-iconentry_flags: .byte   0
-icon_height:    .word   0
+;;; Local variables on ZP
+PARAM_BLOCK, $50
+icon_type       .addr
+iconentry_flags .byte
+icon_height     .word
 
         ;; Updated based on view type
-initial_xcoord:     .word   0
-icons_this_row:
-        .byte   0
-        DEFINE_POINT icon_coords, 0, 0
+initial_xcoord  .word
+icons_this_row  .byte
+icon_coords     .tag    MGTK::Point
 
         ;; Initial values when populating a list view
-init_view:
-icons_per_row:      .byte   0
-col_spacing:        .byte   0
-row_spacing:        .byte   0
-        DEFINE_POINT row_coords, 0, 0
-        init_view_size := * - init_view
+icons_per_row   .byte
+col_spacing     .byte
+row_spacing     .byte
+row_coords      .tag    MGTK::Point
+END_PARAM_BLOCK
+        init_view := icons_per_row
+        init_view_size = 3 + .sizeof(MGTK::Point)
 
         ;; Templates for populating initial values, based on view type
 init_list_view:
@@ -7398,7 +7567,7 @@ init_smicon_view:
         bpl     :-
 
         ;; Init/zero out the rest of the state
-        copy16  row_coords::xcoord, initial_xcoord
+        copy16  row_coords+MGTK::Point::xcoord, initial_xcoord
 
         lda     #0
         sta     icons_this_row
@@ -7551,22 +7720,22 @@ L77F0:  lda     name_tmp,x
         cmp     icons_per_row
         beq     L781A
         bcs     L7826
-L781A:  copy16  row_coords::xcoord, icon_coords::xcoord
-L7826:  copy16  row_coords::ycoord, icon_coords::ycoord
+L781A:  copy16  row_coords+MGTK::Point::xcoord, icon_coords+MGTK::Point::xcoord
+L7826:  copy16  row_coords+MGTK::Point::ycoord, icon_coords+MGTK::Point::ycoord
         inc     icons_this_row
         lda     icons_this_row
         cmp     icons_per_row
         bne     L7862
 
         ;; Next row (and initial column) if necessary
-        add16_8 row_coords::ycoord, row_spacing
-        copy16  initial_xcoord, row_coords::xcoord
+        add16_8 row_coords+MGTK::Point::ycoord, row_spacing
+        copy16  initial_xcoord, row_coords+MGTK::Point::xcoord
         lda     #0
         sta     icons_this_row
         jmp     L7870
 
         ;; Next column otherwise
-L7862:  add16_8 row_coords::xcoord, col_spacing
+L7862:  add16_8 row_coords+MGTK::Point::xcoord, col_spacing
 
 L7870:  lda     cached_window_id
         ora     iconentry_flags
@@ -7896,6 +8065,20 @@ flags:  .byte   0
 
         .assert * < $5000 || * >= $6000, error, "Routine used when clearing updates in overlay zone"
 .proc DrawWindowHeader
+
+;;; Local variables on ZP
+PARAM_BLOCK, $50
+num_items               .word
+k_in_disk               .word
+k_available             .word
+
+width_num_items         .word
+width_k_in_disk         .word
+width_k_available       .word
+
+ptr_str_items_suffix    .addr
+END_PARAM_BLOCK
+
         ;; --------------------------------------------------
         ;; Separator Lines
 
@@ -8014,17 +8197,6 @@ flags:  .byte   0
         ldax    k_available
         jsr     DrawIntString
         param_jump DrawString, str_k_available
-
-num_items:      .word   0
-k_in_disk:      .word   0
-k_available:    .word   0
-
-width_num_items:        .word   0
-width_k_in_disk:        .word   0
-width_k_available:      .word   0
-
-ptr_str_items_suffix:
-        .addr   0
 
 .proc DrawIntString
         jsr     IntToStringWithSeparators
