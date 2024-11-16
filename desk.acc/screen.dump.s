@@ -58,8 +58,12 @@ sig_bytes:
         kScreenWidth  = 560
         kScreenHeight = 192
 
+        sta     ALTZPOFF
         bit     ROMIN2
+
         jsr     PrintScreen
+
+        sta     ALTZPON
         bit     LCBANK1
         bit     LCBANK1
 ret:    rts
@@ -67,21 +71,21 @@ ret:    rts
 .proc SendSpacing
         ldy     #0
 :       lda     spacing_sequence,y
-        beq     done
         jsr     COut
         iny
-        jmp     :-
-done:   rts
+        cpy     #kLenSpacingSequence
+        bne     :-
+        rts
 .endproc ; SendSpacing
 
 .proc SendRestoreState
-        ldy     #$00
-:       lda     restore_state,y
-        beq     done
+        ldy     #0
+:       lda     restore_sequence,y
         jsr     COut
         iny
-        jmp     :-
-done:   rts
+        cpy     #kLenRestoreSequence
+        bne     :-
+        rts
 .endproc ; SendRestoreState
 
 .proc SendInitGraphics
@@ -89,11 +93,12 @@ done:   rts
 :       lda     init_graphics,x
         jsr     COut
         inx
-        cpx     #6
+        cpx     #kLenInitGraphics
         bne     :-
         rts
 init_graphics:
         .byte   CHAR_ESCAPE,"G0560"     ; Graphics, 560 data bytes
+        kLenInitGraphics = * - init_graphics
 .endproc ; SendInitGraphics
 
 .proc SendRow
@@ -165,7 +170,9 @@ done:   sta     PAGE2OFF        ; Read main mem $2000-$3FFF
 
 .proc PrintScreen
         ;; Init printer
-        jsr     PRNum1
+        ldy     #SSC::PInit
+        jsr     GoCard
+
         jsr     SendSpacing
 
         lda     #0
@@ -186,8 +193,9 @@ loop:   jsr     SendRow
         ;; Finish up
         lda     #CHAR_RETURN
         jsr     COut
-        lda     #CHAR_RETURN
+        lda     #CHAR_DOWN
         jsr     COut
+
         jsr     SendRestoreState
 
         rts
@@ -218,18 +226,32 @@ loop:   jsr     SendRow
         rts
 .endproc ; ComputeHBASL
 
-.proc PRNum1
-        lda     #>SLOT1
-        sta     COUT_HOOK+1
-        lda     #<SLOT1
-        sta     COUT_HOOK
-        lda     #(CHAR_RETURN | $80)
-        jmp     invoke_slot1
-.endproc ; PRNum1
+;;; Inputs: Y = entry point, A = char to output (for `PWrite`)
+.proc GoCard
+        ldx     SLOT1,y
+        stx     vector+1
+        ldx     #>SLOT1                  ; X = $Cn
+        ldy     #((>SLOT1)<<4)&%11110000 ; Y = $n0
+vector: jmp     SLOT1                    ; self-modified
+.endproc ; GoCard
 
 .proc COut
-        jsr     COUT
+        sta     asave
+        stx     xsave
+        sty     ysave
+
+        ldy     #SSC::PWrite
+        jsr     GoCard
+
+        lda     asave
+        ldx     xsave
+        ldy     ysave
+
         rts
+
+asave:  .byte   0
+xsave:  .byte   0
+ysave:  .byte   0
 .endproc ; COut
 
 y_row:  .byte   0              ; y-coordinate of row start (0, 8, ...)
@@ -243,19 +265,16 @@ col_num:.byte   0              ; 0...79
         .byte   0, 0
 
 spacing_sequence:
-        .byte   CHAR_ESCAPE,'n'         ; 72 DPI (horizontal; "Extended")
-        .byte   CHAR_ESCAPE,"T16"       ; 72 DPI (vertical; 8 strikers / 72 = 16/144")
-        .byte   CHAR_TAB,$4C,$20,$44,$8D ; ???
-        .byte   CHAR_TAB,$5A,$8D     ; ???
-        .byte   0
+        .byte   CHAR_ESCAPE,'n'    ; IW2: 72 DPI (horizontal; "Extended")
+        .byte   CHAR_ESCAPE,"T16"  ; IW2: 72 DPI (vertical; 8 strikers / 72 = 16/144")
+        ;;         .byte   CHAR_TAB,"L D",$8D ; SSC: Disable LF after CR
+        .byte   CHAR_ESCAPE,'Z',$80,$00
+        kLenSpacingSequence = * - spacing_sequence
 
-restore_state:
-        .byte   CHAR_ESCAPE,'N'         ; 80 DPI (horizontal)
-        .byte   CHAR_ESCAPE,"T24"       ; distance between lines (24/144")
-        .byte   0
-
-invoke_slot1:
-        jmp     SLOT1
+restore_sequence:
+        .byte   CHAR_ESCAPE,'N'    ; IW2: 80 DPI (horizontal)
+        .byte   CHAR_ESCAPE,"T24"  ; IW2: distance between lines (24/144")
+        kLenRestoreSequence = * - restore_sequence
 
 .endproc ; DumpScreen
 

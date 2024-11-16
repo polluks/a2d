@@ -24,9 +24,13 @@ Project Page: https://github.com/a2stuff/a2d
 * Ignore non-alpha character typed at start when naming file/volume.
 * Hold either Apple key when selecting File > Close to Close All.
 * Fix Apple+O to not "Open and Close" when menu already showing. ([#796](https://github.com/a2stuff/a2d/issues/796))
-* Allow keyboard selection of icons in all windows.
 * Show tip about copying PRODOS during Format/Erase process.
 * Arrow keys now move icon selection in appropriate direction. ([#300](https://github.com/a2stuff/a2d/issues/300))
+* More consistently refresh (or don't refresh) window contents after canceled or failed operations.
+* Special > Make Alias now creates link file in same directory as original.
+* Add Edit menu with Cut/Copy/Paste/Clear, relocate Select All.
+* Ensure the modification date for copied folders matches the original.
+* Prompt to re-insert system disk when launching Apple Menu items.
 
 ### Selector
 
@@ -37,10 +41,15 @@ Project Page: https://github.com/a2stuff/a2d
 * About This Apple II
   * Detect Microdigital TK-3000 //e
   * Detect Pravetz 8A/C
+  * Show duplicate SmartPort device names with counts.
+* Screen Dump: Improve use of SSC and IW2.
+* Print Catalog: Improve use of SSC and IW2.
+* Options: Add option to show invisible files.
+* Calendar: Allow modifiers when clicking, double-modifiers for decade. ([#693](https://github.com/a2stuff/a2d/issues/693))
 
 ## 1.4
 
-An unofficial release with bug fixes and enhancements. July 28, 2024..
+An unofficial release with bug fixes and enhancements. July 28, 2024.
 
 See the release notes at:
 https://github.com/a2stuff/a2d/blob/release-1.4/RELEASE-NOTES.md

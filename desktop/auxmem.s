@@ -61,74 +61,86 @@
 label_apple:
         PASCAL_STRING kGlyphSolidApple
 label_file:
-        PASCAL_STRING res_string_menu_bar_item_file    ; menu bar item
+        PASCAL_STRING res_string_menu_bar_item_file
+label_edit:
+        PASCAL_STRING res_string_menu_bar_item_edit
 label_view:
-        PASCAL_STRING res_string_menu_bar_item_view    ; menu bar item
+        PASCAL_STRING res_string_menu_bar_item_view
 label_special:
-        PASCAL_STRING res_string_menu_bar_item_special ; menu bar item
+        PASCAL_STRING res_string_menu_bar_item_special
 label_startup:
-        PASCAL_STRING res_string_menu_bar_item_startup ; menu bar item
+        PASCAL_STRING res_string_menu_bar_item_startup
 label_selector:
-        PASCAL_STRING res_string_menu_bar_item_selector ; menu bar item
+        PASCAL_STRING res_string_menu_bar_item_selector
 
 label_new_folder:
-        PASCAL_STRING res_string_menu_item_new_folder ; menu item
+        PASCAL_STRING res_string_menu_item_new_folder
 label_open:
-        PASCAL_STRING res_string_menu_item_open ; menu item
+        PASCAL_STRING res_string_menu_item_open
 label_close:
-        PASCAL_STRING res_string_menu_item_close ; menu item
+        PASCAL_STRING res_string_menu_item_close
 label_close_all:
-        PASCAL_STRING res_string_menu_item_close_all ; menu item
-label_select_all:
-        PASCAL_STRING res_string_menu_item_select_all ; menu item
+        PASCAL_STRING res_string_menu_item_close_all
 label_delete_selection:
-        PASCAL_STRING res_string_menu_item_delete_selection ; menu item
+        PASCAL_STRING res_string_menu_item_delete_selection
 label_eject:
-        PASCAL_STRING res_string_menu_item_eject ; menu item
+        PASCAL_STRING res_string_menu_item_eject
 label_quit:
-        PASCAL_STRING res_string_menu_item_quit ; menu item
+        PASCAL_STRING res_string_menu_item_quit
+
+label_cut:
+        PASCAL_STRING res_string_menu_item_cut
+label_copy:
+        PASCAL_STRING res_string_menu_item_copy
+label_paste:
+        PASCAL_STRING res_string_menu_item_paste
+label_clear:
+        PASCAL_STRING res_string_menu_item_clear
+label_select_all:
+        PASCAL_STRING res_string_menu_item_select_all
 
 label_by_icon:
-        PASCAL_STRING res_string_menu_item_by_icon ; menu item
+        PASCAL_STRING res_string_menu_item_by_icon
 label_by_small_icon:
-        PASCAL_STRING res_string_menu_item_by_small_icon ; menu item
+        PASCAL_STRING res_string_menu_item_by_small_icon
 label_by_name:
-        PASCAL_STRING res_string_menu_item_by_name ; menu item
+        PASCAL_STRING res_string_menu_item_by_name
 label_by_date:
-        PASCAL_STRING res_string_menu_item_by_date ; menu item
+        PASCAL_STRING res_string_menu_item_by_date
 label_by_size:
-        PASCAL_STRING res_string_menu_item_by_size ; menu item
+        PASCAL_STRING res_string_menu_item_by_size
 label_by_type:
-        PASCAL_STRING res_string_menu_item_by_type ; menu item
+        PASCAL_STRING res_string_menu_item_by_type
 
 label_check_all_drives:
-        PASCAL_STRING res_string_menu_item_check_all_drives ; menu item
+        PASCAL_STRING res_string_menu_item_check_all_drives
 label_check_drive:
-        PASCAL_STRING res_string_menu_item_check_drive ; menu item
+        PASCAL_STRING res_string_menu_item_check_drive
 label_format_disk:
-        PASCAL_STRING res_string_menu_item_format_disk ; menu item
+        PASCAL_STRING res_string_menu_item_format_disk
 label_erase_disk:
-        PASCAL_STRING res_string_menu_item_erase_disk ; menu item
+        PASCAL_STRING res_string_menu_item_erase_disk
 label_disk_copy:
-        PASCAL_STRING res_string_menu_item_disk_copy ; menu item
+        PASCAL_STRING res_string_menu_item_disk_copy
 label_get_info:
-        PASCAL_STRING res_string_menu_item_get_info ; menu item
+        PASCAL_STRING res_string_menu_item_get_info
 label_rename_icon:
-        PASCAL_STRING res_string_menu_item_rename_icon ; menu item
+        PASCAL_STRING res_string_menu_item_rename_icon
 label_duplicate_icon:
-        PASCAL_STRING res_string_menu_item_duplicate ; menu item
+        PASCAL_STRING res_string_menu_item_duplicate
 label_make_link:
         PASCAL_STRING res_string_menu_item_make_link
 
 desktop_menu:
-        DEFINE_MENU_BAR 6
+        DEFINE_MENU_BAR kMenuNumItems
 @items: DEFINE_MENU_BAR_ITEM kMenuIdApple, label_apple, apple_menu
         DEFINE_MENU_BAR_ITEM kMenuIdFile, label_file, file_menu
+        DEFINE_MENU_BAR_ITEM kMenuIdEdit, label_edit, edit_menu
         DEFINE_MENU_BAR_ITEM kMenuIdView, label_view, view_menu
         DEFINE_MENU_BAR_ITEM kMenuIdSpecial, label_special, special_menu
         DEFINE_MENU_BAR_ITEM kMenuIdStartup, label_startup, startup_menu
         DEFINE_MENU_BAR_ITEM kMenuIdSelector, label_selector, selector_menu
-        ASSERT_RECORD_TABLE_SIZE @items, 6, .sizeof(MGTK::MenuBarItem)
+        ASSERT_RECORD_TABLE_SIZE @items, ::kMenuNumItems, .sizeof(MGTK::MenuBarItem)
 
 file_menu:
         DEFINE_MENU kMenuSizeFile
@@ -136,7 +148,6 @@ file_menu:
         DEFINE_MENU_ITEM label_open, res_char_menu_item_open_shortcut
         DEFINE_MENU_ITEM label_close, res_char_shortcut_close
         DEFINE_MENU_ITEM label_close_all
-        DEFINE_MENU_ITEM label_select_all, res_char_menu_item_select_all_shortcut
         DEFINE_MENU_SEPARATOR
         DEFINE_MENU_ITEM label_get_info, res_char_menu_item_get_info_shortcut
         DEFINE_MENU_ITEM_NOMOD label_rename_icon, CHAR_RETURN, CHAR_RETURN
@@ -152,16 +163,32 @@ file_menu:
         kMenuItemIdOpen        = 2
         kMenuItemIdClose       = 3
         kMenuItemIdCloseAll    = 4
-        kMenuItemIdSelectAll   = 5
         ;; --------------------
-        kMenuItemIdGetInfo     = 7
-        kMenuItemIdRenameIcon  = 8
-        kMenuItemIdDuplicate   = 9
+        kMenuItemIdGetInfo     = 6
+        kMenuItemIdRenameIcon  = 7
+        kMenuItemIdDuplicate   = 8
         ;; --------------------
-        kMenuItemIdCopyFile    = 11
-        kMenuItemIdDeleteFile  = 12
+        kMenuItemIdCopyFile    = 10
+        kMenuItemIdDeleteFile  = 11
         ;; --------------------
-        kMenuItemIdQuit        = 14
+        kMenuItemIdQuit        = 13
+
+edit_menu:
+        DEFINE_MENU kMenuSizeEdit
+@items: DEFINE_MENU_ITEM label_cut, res_char_menu_item_cut_shortcut
+        DEFINE_MENU_ITEM label_copy, res_char_menu_item_copy_shortcut
+        DEFINE_MENU_ITEM label_paste, res_char_menu_item_paste_shortcut
+        DEFINE_MENU_ITEM label_clear
+        DEFINE_MENU_SEPARATOR
+        DEFINE_MENU_ITEM label_select_all, res_char_menu_item_select_all_shortcut
+        ASSERT_RECORD_TABLE_SIZE @items, ::kMenuSizeEdit, .sizeof(MGTK::MenuItem)
+
+        kMenuItemIdCut       = 1
+        kMenuItemIdCopy      = 2
+        kMenuItemIdPaste     = 3
+        kMenuItemIdClear     = 4
+        ;; --------------------
+        kMenuItemIdSelectAll = 6
 
 view_menu:
         DEFINE_MENU kMenuSizeView

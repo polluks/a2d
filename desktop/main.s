@@ -197,7 +197,7 @@ ClearUpdates := ClearUpdatesImpl::clear
 ;;; ============================================================
 
 ;;; Inputs: A = `window_id` from `update` event
-;;; Note: Modifies `active_window_id` which must be restored
+;;; NOTE: Modifies `active_window_id` which must be restored
 .proc UpdateWindow
         cmp     #kMaxDeskTopWindows+1 ; directory windows are 1-8
         RTS_IF_GE
@@ -256,7 +256,6 @@ dispatch_table:
         .addr   CmdOpen
         .addr   CmdClose
         .addr   CmdCloseAll
-        .addr   CmdSelectAll
         .addr   CmdNoOp         ; --------
         .addr   CmdGetInfo
         .addr   CmdRename
@@ -268,18 +267,28 @@ dispatch_table:
         .addr   CmdQuit
         ASSERT_ADDRESS_TABLE_SIZE menu2_start, ::kMenuSizeFile
 
-        ;; View menu (3)
+        ;; Edit menu (3)
         menu3_start := *
-        .addr   CmdViewBy
-        .addr   CmdViewBy
-        .addr   CmdViewBy
-        .addr   CmdViewBy
-        .addr   CmdViewBy
-        .addr   CmdViewBy
-        ASSERT_ADDRESS_TABLE_SIZE menu3_start, ::kMenuSizeView
+        .addr   CmdCut
+        .addr   CmdCopy
+        .addr   CmdPaste
+        .addr   CmdClear
+        .addr   CmdNoOp         ; --------
+        .addr   CmdSelectAll
+        ASSERT_ADDRESS_TABLE_SIZE menu3_start, ::kMenuSizeEdit
 
-        ;; Special menu (4)
+        ;; View menu (4)
         menu4_start := *
+        .addr   CmdViewBy
+        .addr   CmdViewBy
+        .addr   CmdViewBy
+        .addr   CmdViewBy
+        .addr   CmdViewBy
+        .addr   CmdViewBy
+        ASSERT_ADDRESS_TABLE_SIZE menu4_start, ::kMenuSizeView
+
+        ;; Special menu (5)
+        menu5_start := *
         .addr   CmdCheckDrives
         .addr   CmdCheckDrive
         .addr   CmdEject
@@ -289,21 +298,21 @@ dispatch_table:
         .addr   CmdDiskCopy
         .addr   CmdNoOp         ; --------
         .addr   CmdMakeLink
-        ASSERT_ADDRESS_TABLE_SIZE menu4_start, ::kMenuSizeSpecial
+        ASSERT_ADDRESS_TABLE_SIZE menu5_start, ::kMenuSizeSpecial
 
-        ;; Startup menu (5)
-        menu5_start := *
-        .addr   CmdStartupItem
-        .addr   CmdStartupItem
-        .addr   CmdStartupItem
-        .addr   CmdStartupItem
-        .addr   CmdStartupItem
-        .addr   CmdStartupItem
-        .addr   CmdStartupItem
-        ASSERT_ADDRESS_TABLE_SIZE menu5_start, ::kMenuSizeStartup
-
-        ;; Selector menu (6)
+        ;; Startup menu (6)
         menu6_start := *
+        .addr   CmdStartupItem
+        .addr   CmdStartupItem
+        .addr   CmdStartupItem
+        .addr   CmdStartupItem
+        .addr   CmdStartupItem
+        .addr   CmdStartupItem
+        .addr   CmdStartupItem
+        ASSERT_ADDRESS_TABLE_SIZE menu6_start, ::kMenuSizeStartup
+
+        ;; Selector menu (7)
+        menu7_start := *
         .addr   CmdSelectorAction
         .addr   CmdSelectorAction
         .addr   CmdSelectorAction
@@ -317,7 +326,7 @@ dispatch_table:
         .addr   CmdSelectorItem
         .addr   CmdSelectorItem
         .addr   CmdSelectorItem
-        ASSERT_ADDRESS_TABLE_SIZE menu6_start, ::kMenuSizeSelector
+        ASSERT_ADDRESS_TABLE_SIZE menu7_start, ::kMenuSizeSelector
 
         menu_end := *
 
@@ -329,7 +338,9 @@ offset_table:
         .byte   menu4_start - dispatch_table
         .byte   menu5_start - dispatch_table
         .byte   menu6_start - dispatch_table
+        .byte   menu7_start - dispatch_table
         .byte   menu_end - dispatch_table
+        ASSERT_TABLE_SIZE offset_table, ::kMenuNumItems+1
 
         ;; Set if there are open windows
 window_open_flag:   .byte   $00
@@ -403,7 +414,7 @@ modifiers:
         jeq     CmdResize
         cmp     #kShortcutMoveWindow  ; Apple-M (Move)
         jeq     CmdMove
-        cmp     #kShortcutScrollWindow ; Apple-X (Scroll)
+        cmp     #kShortcutScrollWindow ; Apple-S (Scroll)
         jeq     CmdScroll
         cmp     #'`'            ; Apple-` (Cycle Windows)
         beq     cycle
@@ -468,7 +479,7 @@ window_open_flag := HandleKeydownImpl::window_open_flag
         copy    #0, findwindow_params::window_id
         ITK_CALL IconTK::FindIcon, event_params::coords
         lda     findicon_params::which_icon
-        jne     HandleVolumeIconClick
+        jne     HandleIconClick
 
         jsr     LoadDesktopEntryTable
         lda     #0
@@ -516,7 +527,11 @@ not_menu:
     IF_ZERO
         ;; Try to select the window's parent icon.
         lda     active_window_id
-        jne     SelectIconForWindow
+      IF_NOT_ZERO
+        jsr     GetWindowPath
+        jsr     IconToAnimate
+        jmp     SelectIcon
+      END_IF
     END_IF
         rts
 
@@ -596,25 +611,6 @@ dispatch_click:
 .endproc ; ClearAndDrawActiveWindowEntries
 
 ;;; ============================================================
-;;; Inputs: A = window_id
-;;; Selection should be cleared before calling
-
-.proc SelectIconForWindow
-        jsr     GetWindowPath
-        jsr     IconToAnimate
-        sta     icon_param
-
-        jsr     GetIconWindow
-        sta     selected_window_id
-        copy    #1, selected_icon_count
-        copy    icon_param, selected_icon_list
-        ITK_CALL IconTK::HighlightIcon, icon_param
-        ITK_CALL IconTK::DrawIcon, icon_param
-
-        rts
-.endproc ; SelectIconForWindow
-
-;;; ============================================================
 
 ;;; Used only for file windows; adjusts port to account for header.
 ;;; Returns 0 if ok, `MGTK::Error::window_obscured` if the window is obscured.
@@ -623,7 +619,6 @@ dispatch_click:
         MGTK_CALL MGTK::GetWinPort, getwinport_params
         bne     :+              ; MGTK::Error::window_obscured
         jsr     OffsetWindowGrafportAndSet
-        lda     #0
 :       rts
 .endproc ; UnsafeOffsetAndSetPortFromWindowId
 
@@ -882,6 +877,12 @@ tmp_path_buf:
 ;;; Inputs: Path in `src_path_buf` (a.k.a. `INVOKER_PREFIX`)
 
 .proc LaunchFileWithPath
+        clc
+        bcc     :+              ; always
+sys_disk:
+        sec
+:       ror     sys_prompt_flag
+
         jsr     SetCursorWatch ; before invoking
 
         ;; Assume no interpreter to start
@@ -891,9 +892,18 @@ tmp_path_buf:
         param_call MakePathAbsolute, src_path_buf
 
         ;; Get the file info to determine type.
-        jsr     GetSrcFileInfo
+retry:  jsr     GetSrcFileInfo
         bcc     :+
-        jmp     ShowAlert
+
+        sys_prompt_flag := *+1
+        lda     #SELF_MODIFIED_BYTE
+        jpl     ShowAlert
+
+        lda     #kErrInsertSystemDisk
+        jsr     ShowAlert
+        cmp     #kAlertResultOK
+        beq     retry           ; ok, so try again
+        rts                     ; cancel, so fail
 
         ;; Check file type.
 :       copy    src_file_info_params::file_type, icontype_filetype
@@ -1169,6 +1179,7 @@ check_header:
         DEFINE_GET_PREFIX_PARAMS get_prefix_params, INVOKER_INTERPRETER
 
 .endproc ; LaunchFileWithPath
+LaunchFileWithPathOnSystemDisk := LaunchFileWithPath::sys_disk
 
 ;;; ============================================================
 
@@ -1417,8 +1428,17 @@ done:   rts
         ;; Need to copy to RAMCard
         jsr     PrepEntryCopyPaths
         jsr     DoCopyToRAM
-        bne     ret             ; canceled!
 
+        cmp     #kOperationCanceled
+        RTS_IF_EQ
+
+        cmp     #kOperationFailed
+    IF_EQ
+        param_call CopyRAMCardPrefix, path_buf4
+        jmp     RefreshWindowForPathBuf4
+    END_IF
+
+        ;; Success!
         ldx     entry_num
         lda     #$FF
         jsr     SetEntryCopiedToRAMCardFlag
@@ -1447,8 +1467,6 @@ use_entry_path:
 
 launch: param_call CopyPtr1ToBuf, INVOKER_PREFIX
         jmp     LaunchFileWithPath
-
-ret:    rts
 
 entry_num:
         .byte   0
@@ -1668,7 +1686,7 @@ skip:   iny
         stx     path
 
         ;; Allow arbitrary types in menu (e.g. folders)
-        jmp     LaunchFileWithPath
+        jmp     LaunchFileWithPathOnSystemDisk
 .endproc ; CmdDeskaccImpl
 CmdDeskAcc      := CmdDeskaccImpl::start
 
@@ -1933,9 +1951,16 @@ ret:    rts
         param_call CopyPtr1ToBuf, path_buf3
         jsr     DoCopySelection
 
-        ;; --------------------------------------------------
-        ;; Update windows with results
+        cmp     #kOperationCanceled
+        RTS_IF_EQ
 
+        FALL_THROUGH_TO RefreshWindowForPathBuf4
+
+.endproc ; CmdCopySelection
+
+;;; ============================================================
+
+.proc RefreshWindowForPathBuf4
         ;; See if there's a window we should activate later.
         param_call FindWindowForPath, path_buf4
         pha                     ; save for later
@@ -1948,8 +1973,7 @@ ret:    rts
         jne     ActivateAndRefreshWindowOrClose
 
         rts
-
-.endproc ; CmdCopySelection
+.endproc ; RefreshWindowForPathBuf4
 
 ;;; ============================================================
 ;;; Copy string at ($6) to `path_buf3`, string at ($8) to `path_buf4`,
@@ -2302,7 +2326,7 @@ done:   rts
 volume: lda     window_id_to_close
         beq     :+
         jsr     CloseActiveWindow
-:       jsr     ClearSelection
+:
         ldx     src_path_buf ; Strip '/'
         dex
         stx     src_path_buf+1
@@ -2310,7 +2334,7 @@ volume: lda     window_id_to_close
         ldy     #0              ; 0=desktop
         jsr     FindIconByName
         beq     :+
-        jsr     SelectIcon
+        jsr     SelectIconAndEnsureVisible
 :       rts
 .endproc ; CmdOpenParentImpl
 CmdOpenParent := CmdOpenParentImpl::normal
@@ -2450,19 +2474,13 @@ create:
         MLI_CALL CREATE, create_params
         bcs     error
 
-        ;; Update cached used/free for all same-volume windows
+        ;; Update cached used/free for all same-volume windows and refresh
         lda     active_window_id
-        jsr     GetWindowPath
-        jsr     UpdateUsedFreeViaPath
-
-        ;; Refresh the window
-        lda     active_window_id
-        jsr     ActivateAndRefreshWindowOrClose
+        jsr     UpdateActivateAndRefreshWindow
         RTS_IF_NE
 
         ;; Select and rename the file
-        param_call SelectFileIconByName, stashed_name
-        jmp     CmdRename
+        jmp     TriggerRenameForFileIconWithStashedName
 
         ;; --------------------------------------------------
 error:
@@ -2480,15 +2498,9 @@ CmdNewFolder    := CmdNewFolderImpl::start
 .proc SelectFileIconByName
         ldy     active_window_id
         jsr     FindIconByName
-        beq     ret             ; not found
+        RTS_IF_ZERO             ; not found
 
-        pha
-        jsr     HighlightAndSelectIcon
-        copy    active_window_id, selected_window_id
-        pla
-        jsr     ScrollIconIntoView
-
-ret:    rts
+        jmp     SelectIconAndEnsureVisible
 .endproc ; SelectFileIconByName
 
 ;;; ============================================================
@@ -3029,11 +3041,9 @@ ret:    rts
 :       ldx     selected_icon_count
         lda     selected_icon_list,x
         jsr     FindIconForRecordNum
-        ldx     selected_icon_count
-        sta     selected_icon_list,x
+        jsr     AddToSelectionList
         sta     icon_param
         ITK_CALL IconTK::HighlightIcon, icon_param
-        inc     selected_icon_count
         dec     selection_preserved_count
         bne     :-
 
@@ -3274,7 +3284,50 @@ ret:    rts
 ;;; ============================================================
 
 ;;; Assert: Single icon selected, and it's not Trash
+
+.proc CmdCopy
+        lda     selected_icon_list
+        jsr     GetIconName
+        stax    $06
+        param_jump CopyPtr1ToBuf, clipboard
+.endproc ; CmdCopy
+
+.proc CmdPaste
+        ;; MacOS 6 behavior - no-op if clipboard is empty
+        lda     clipboard
+        RTS_IF_EQ
+
+        ldax    #clipboard
+        jmp     CmdRenameWithDefaultNameGiven
+.endproc ; CmdPaste
+
+.proc CmdCut
+        jsr     CmdCopy
+        FALL_THROUGH_TO CmdClear
+.endproc ; CmdCut
+
+.proc CmdClear
+        ldax    #str_empty
+        jmp     CmdRenameWithDefaultNameGiven
+.endproc ; CmdClear
+
+;;; ============================================================
+
+.proc TriggerRenameForFileIconWithStashedName
+        param_call SelectFileIconByName, stashed_name
+        FALL_THROUGH_TO CmdRename
+.endproc ; TriggerRenameForFileIconWithStashedName
+
+;;; ============================================================
+
+;;; Assert: Single icon selected, and it's not Trash
 .proc CmdRename
+        ;; Dialog will use this field (populated in `DoRename`) as default
+        ldax    #old_name_buf
+
+        ;; ... but callers can override and use this entry point instead.
+ep2:
+        stax    rename_dialog_params__a_prev
         jsr     DoRename
         pha                     ; A = result
 
@@ -3306,6 +3359,7 @@ ret:    rts
 :
         rts
 .endproc ; CmdRename
+CmdRenameWithDefaultNameGiven := CmdRename::ep2 ; A,X = name
 
 ;;; ============================================================
 
@@ -3345,25 +3399,27 @@ spin:   jsr     GetSelectionWindow
         copy16  #dst_path_buf, $08
         jsr     CopyPathsFromPtrsToBufsAndSplitName
         jsr     DoCopyFile
-        RTS_IF_NS
+        sta     result
+        cmp     #kOperationCanceled
+        RTS_IF_EQ
 
         ;; Update name case bits on disk, if possible.
-        COPY_STRING dst_path_buf, src_path_buf
+        param_call CopyToSrcPath, dst_path_buf
         jsr     ApplyCaseBits ; applies `stashed_name` to `src_path_buf`
 
-        ;; Update cached used/free for all same-volume windows
+        ;; Update cached used/free for all same-volume windows, and refresh
         lda     selected_window_id
-        jsr     GetWindowPath
-        jsr     UpdateUsedFreeViaPath
-
-        ;; Refresh the window
-        lda     selected_window_id
-        jsr     ActivateAndRefreshWindowOrClose
+        jsr     UpdateActivateAndRefreshWindow
         RTS_IF_NE
 
+        ;; If operation failed, then just leave the default name.
+        result := *+1
+        lda     #SELF_MODIFIED_BYTE
+        .assert kOperationFailed <> 0, error, "enum mismatch"
+        RTS_IF_NOT_ZERO
+
         ;; Select and rename the file
-        param_call SelectFileIconByName, stashed_name
-        jmp     CmdRename
+        jmp     TriggerRenameForFileIconWithStashedName
 
         ;; --------------------------------------------------
 error:
@@ -3453,7 +3509,7 @@ pick_next_prev:
 
 select_index:
         lda     buffer+1,x
-        jmp     ClearSelectionActivateWindowAndSelectIcon
+        jmp     SelectIconAndEnsureVisible
 
 ret:    rts
 
@@ -3471,14 +3527,12 @@ CmdHighlightAlphaNext := CmdHighlightImpl::a_next
 ;;; Local variables on ZP
 PARAM_BLOCK, $50
 dir        .byte
-tmpw       .word
 index      .byte
 cur_icon   .byte
 icon_rect  .tag MGTK::Rect
 best_icon  .byte
 best_value .word
 END_PARAM_BLOCK
-        view_by := tmpw
         .assert icon_rect = cur_icon+1, error, "Must be adjacent"
 
         kDirLeft  = 0
@@ -3503,7 +3557,6 @@ down:   lda     #kDirDown
 ;;; If a list view, use index-based logic
 
         jsr     GetActiveWindowViewBy ; N=0 is icon view, N=1 is list view
-        sta     view_by
     IF_NEG
         lda     dir
         cmp     #kDirUp
@@ -3530,17 +3583,7 @@ down:   lda     #kDirDown
 ;;; --------------------------------------------------
 ;;; Get bounds
 
-        ITK_CALL IconTK::GetIconBounds, icon_param ; inits `tmp_rect`
-
-        lda     view_by
-        .assert kViewByIcon = 0, error, "enum mismatch"
-    IF_ZERO
-        ;; Constrain to icon bitmap width (long names tend to overlap)
-        add16   tmp_rect+MGTK::Rect::x1, tmp_rect+MGTK::Rect::x2, tmpw
-        lsr16   tmpw
-        sub16   tmpw, #kIconBitmapWidth/2, tmp_rect+MGTK::Rect::x1
-        add16   tmpw, #kIconBitmapWidth/2, tmp_rect+MGTK::Rect::x2
-    END_IF
+        ITK_CALL IconTK::GetBitmapRect, icon_param ; inits `tmp_rect`
 
 ;;; --------------------------------------------------
 ;;; Extend rect, based on dir
@@ -3631,24 +3674,30 @@ compare_order:  .byte   $80, $00, $80, $00
 ;;; If there was no (usable) selection, pick icon from active window.
 
 fallback:
-        lda     cached_window_entry_count
+        ldy     cached_window_entry_count
         beq     ret
 
-        ;; Default to first icon
+        ;; Default to first (X) / last (Y) icon
         ldx     #0
+        dey
         lda     active_window_id
     IF_ZERO
-        ;; ...except on desktop, since that's trash.
-        inx
+        ;; ...except on desktop, since first is Trash.
+        tay                     ; make last (Y) be Trash (0)
+        inx                     ; and first (X) be 1st volume icon
         cpx     cached_window_entry_count
-        bne     :+
+        bne     :+              ; unless there isn't one
         dex
 :
     END_IF
+        ror     dir             ; C = 1 if right/down
         lda     cached_window_entry_list,x
+        bcs     :+
+        lda     cached_window_entry_list,y
+:
 
 select:
-        jmp     ClearSelectionActivateWindowAndSelectIcon
+        jmp     SelectIconAndEnsureVisible
 
 .endproc ; CmdHighlightSpatialImpl
 CmdHighlightLeft  := CmdHighlightSpatialImpl::left
@@ -3715,7 +3764,7 @@ file_char:
         ;; Update the selection.
         icon := *+1
         lda     #SELF_MODIFIED_BYTE
-        jsr     ClearSelectionActivateWindowAndSelectIcon
+        jsr     SelectIconAndEnsureVisible
 
 done:   lda     #0
         rts
@@ -3909,27 +3958,20 @@ ret:    rts
 
 ;;; ============================================================
 ;;; Replace selection with the specified icon. The icon's
-;;; window is activated if necessary.
+;;; window is activated if necessary. If windowed, it is scrolled
+;;; into view.
 ;;; Inputs: A = icon id
 
-.proc ClearSelectionActivateWindowAndSelectIcon
+.proc SelectIconAndEnsureVisible
         pha
         jsr     ClearSelection
         pla
+
         pha
         jsr     GetIconWindow
         jsr     ActivateWindow  ; no-op if already active, or 0
         pla
 
-        FALL_THROUGH_TO SelectIcon
-.endproc ; ClearSelectionActivateWindowAndSelectIcon
-
-;;; ============================================================
-;;; Select an arbitrary icon. If windowed, it is scrolled into view.
-;;; Inputs: A = icon id
-;;; Assert: Selection is empty. If windowed, it's in the active window.
-
-.proc SelectIcon
         sta     icon_param
         ITK_CALL IconTK::HighlightIcon, icon_param
 
@@ -3950,7 +3992,7 @@ ret:    rts
         ITK_CALL IconTK::DrawIcon, selected_icon_list
 
         rts
-.endproc ; SelectIcon
+.endproc ; SelectIconAndEnsureVisible
 
 ;;; ============================================================
 
@@ -3974,12 +4016,11 @@ ret:    rts
 
         lda     selected_window_id
     IF_ZERO
-        sta     err             ; zero if desktop; will overwrite if windowed
         jsr     InitSetDesktopPort
     ELSE
         jsr     UnsafeOffsetAndSetPortFromWindowId ; CHECKED
-        sta     err
     END_IF
+        pha                     ; A = obscured?
 
         ;; --------------------------------------------------
         ;; Mark all icons as highlighted
@@ -3996,8 +4037,8 @@ ret:    rts
 
         ;; --------------------------------------------------
         ;; Repaint the icons
-        err := *+1
-        lda     #SELF_MODIFIED_BYTE
+
+        pla                     ; A = obscured?
     IF_ZERO                     ; Skip drawing if obscured
         lda     cached_window_id
         beq     :+
@@ -4861,18 +4902,18 @@ END_PARAM_BLOCK
 header: .byte   kLinkFileSig1Value, kLinkFileSig2Value, kLinkFileCurrentVersion
         kHeaderSize = * - header
 
-dir_path:
-        PASCAL_STRING kFilenameLinksDir
+        .define kAliasSuffix ".alias"
+suffix: .byte   kAliasSuffix
 
-        DEFINE_CREATE_PARAMS create_dir_params, dir_path, ACCESS_DEFAULT, FT_DIRECTORY,, ST_LINKED_DIRECTORY
-        DEFINE_GET_PREFIX_PARAMS prefix_params, src_path_buf
-        DEFINE_CREATE_PARAMS create_params, src_path_buf, ACCESS_DEFAULT, FT_LINK, kLinkFileAuxType
-        DEFINE_OPEN_PARAMS open_params, src_path_buf, IO_BUFFER
+        DEFINE_CREATE_PARAMS create_params, dst_path_buf, ACCESS_DEFAULT, FT_LINK, kLinkFileAuxType
+        DEFINE_OPEN_PARAMS open_params, dst_path_buf, IO_BUFFER
         DEFINE_WRITE_PARAMS write_params, link_struct, 0
         DEFINE_CLOSE_PARAMS close_params
 
 start:
+        ;; --------------------------------------------------
         ;; Prep struct for writing
+
         lda     selected_icon_list
         jsr     GetIconPath     ; `path_buf3` set to path; A=0 on success
         jne     ShowAlert
@@ -4888,27 +4929,50 @@ start:
         adc     #link_struct::path-link_struct+1
         sta     write_params::request_count
 
-        ;; Create dir (ok if it already exists)
-        MLI_CALL CREATE, create_dir_params
-        bcc     :+
-        cmp     #ERR_DUPLICATE_FILENAME
-        bne     err
-:
-        ;; Compose link file path
-        MLI_CALL GET_PREFIX, prefix_params
-        dec     src_path_buf    ; remove trailing '/'
-        param_call AppendFilenameToSrcPath, dir_path
+        ;; --------------------------------------------------
+        ;; Determine the name to use
+
+        ;; Start with original name
         lda     selected_icon_list
         jsr     GetIconName
-        jsr     AppendFilenameToSrcPath
+        stax    $06
+        param_call CopyPtr1ToBuf, stashed_name
 
-        ;; Create link file (ok if it already exists)
-        MLI_CALL CREATE, create_params
+        ;; Append ".alias"
+        lda     stashed_name
+        clc
+        adc     #.strlen(kAliasSuffix)
+        cmp     #kMaxFilenameLength+1
         bcc     :+
-        cmp     #ERR_DUPLICATE_FILENAME
+        lda     #kMaxFilenameLength
+:       tax
+        sta     stashed_name
+        ldy     #.strlen(kAliasSuffix)-1
+:       lda     suffix,y
+        sta     stashed_name,x
+        dex
+        dey
+        bpl     :-
+
+        ;; Repeat to find a free name
+retry:  jsr     GetSelectionWindow
+        jsr     GetWindowPath
+        jsr     CopyToDstPath
+        param_call AppendFilenameToDstPath, stashed_name
+        jsr     GetDstFileInfo
+        bcc     spin
+        cmp     #ERR_FILE_NOT_FOUND
+        beq     create
         bne     err
-:
-        ;; Write out link file
+spin:   jsr     SpinName
+        jmp     retry
+
+        ;; --------------------------------------------------
+        ;; Create and write link file
+create:
+        MLI_CALL CREATE, create_params
+        bcs     err
+
         MLI_CALL OPEN, open_params
         bcs     err
         lda     open_params::ref_num
@@ -4920,12 +4984,20 @@ start:
         plp
         bcs     err
 
-        ;; Update cached used/free for all same-volume windows
-        param_call UpdateUsedFreeViaPath, src_path_buf
+        ;; Update name case bits on disk, if possible.
+        param_call CopyToSrcPath, dst_path_buf
+        jsr     ApplyCaseBits ; applies `stashed_name` to `src_path_buf`
 
-        ;; Show target file
-        jmp     ShowFileWithPath
+        ;; --------------------------------------------------
+        ;; Update cached used/free for all same-volume windows, and refresh
+        lda     selected_window_id
+        jsr     UpdateActivateAndRefreshWindow
+        RTS_IF_NE
 
+        ;; Select and rename the file
+        jmp     TriggerRenameForFileIconWithStashedName
+
+        ;; --------------------------------------------------
 err:    jmp     ShowAlert
 
 .endproc ; CmdMakeLinkImpl
@@ -5093,7 +5165,7 @@ bail:   return  #$FF            ; high bit set = not repeating
         copy    active_window_id, findicon_params::window_id
         ITK_CALL IconTK::FindIcon, findicon_params
         lda     findicon_params::which_icon
-        bne     HandleFileIconClick
+        bne     HandleIconClick
 
         ;; Not an icon - maybe a drag?
         lda     active_window_id
@@ -5101,15 +5173,18 @@ bail:   return  #$FF            ; high bit set = not repeating
 .endproc ; HandleContentClick
 
 ;;; ============================================================
-
+;;; Handle a click on an icon, either windowed or desktop. They
+;;; are processed the same way, unless a drag occurs.
 ;;; Input: A = icon
-.proc HandleFileIconClick
+;;;   `findicon_params::which_icon` and `findicon_params::window_id`
+;;;   must still be populated
+
+.proc HandleIconClick
         pha
         jsr     GetSingleSelectedIcon
         sta     prev_selected_icon
         pla
 
-        sta     icon_num
         jsr     IsIconSelected
         bne     not_selected
 
@@ -5119,33 +5194,29 @@ bail:   return  #$FF            ; high bit set = not repeating
         bpl     :+
 
         ;; Modifier down - remove from selection
-        icon_num := *+1
-        lda     #SELF_MODIFIED_BYTE
+        lda     findicon_params::which_icon
         jmp     UnhighlightAndDeselectIcon ; deselect, nothing further
 
         ;; Double click or drag?
 :       jmp     check_double_click
 
         ;; --------------------------------------------------
-        ;; Icon not already selected
+        ;; Icon was not already selected
 not_selected:
         jsr     ExtendSelectionModifierDown
         bpl     replace_selection
 
         ;; Modifier down - add to selection
-        lda     selected_window_id
-        cmp     active_window_id ; same window?
-        beq     :+               ; if so, retain selection
-        jsr     ClearSelection
-        copy    active_window_id, selected_window_id
-:       lda     icon_num
-        jmp     HighlightAndSelectIcon ; select, nothing further
+        lda     findicon_params::window_id
+        cmp     selected_window_id
+        bne     replace_selection
+        lda     findicon_params::which_icon
+        jmp     AddIconToSelection ; select, nothing further
 
+        ;; Replace selection with clicked icon
 replace_selection:
-        jsr     ClearSelection
-        copy    active_window_id, selected_window_id
-        lda     icon_num
-        jsr     HighlightAndSelectIcon
+        lda     findicon_params::which_icon
+        jsr     SelectIcon
         FALL_THROUGH_TO check_double_click
 
         ;; --------------------------------------------------
@@ -5156,11 +5227,22 @@ check_double_click:
         ;; --------------------------------------------------
         ;; Drag of file icon
 
-        copy    icon_num, drag_drop_params::icon
+        copy    findicon_params::which_icon, drag_drop_params::icon
         jsr     GetSelectionViewBy
         .assert kViewByName >= $80, error, "enum mismatch"
         sta     drag_drop_params::fixed
         ITK_CALL IconTK::DragHighlighted, drag_drop_params
+        ldy     findicon_params::window_id
+        jeq     HandleVolumeIconDrag
+
+        FALL_THROUGH_TO HandleFileIconDrag
+.endproc ; HandleIconClick
+
+;;; ============================================================
+;;; Inputs: A = `IconTK::DragHighlighted` return value, and
+;;;         `drag_drop_params::result` is set.
+
+.proc HandleFileIconDrag
         tax
         lda     drag_drop_params::result
         beq     same_or_desktop
@@ -5207,9 +5289,9 @@ failure:
 
         ;; --------------------------------------------------
 
-.endproc ; HandleFileIconClick
+.endproc ; HandleFileIconDrag
         ;; Used for delete shortcut; set `drag_drop_params::icon` first
-        process_drop := HandleFileIconClick::process_drop
+        process_drop := HandleFileIconDrag::process_drop
 
 ;;; ============================================================
 ;;; After an icon drop (file or volume), update any affected
@@ -5221,7 +5303,6 @@ failure:
         ;; (1/4) Canceled?
 
         cmp     #kOperationCanceled
-        ;; TODO: Refresh source/dest if partial success
         RTS_IF_EQ
 
         ;; Was a move?
@@ -5269,38 +5350,73 @@ failure:
         ;; (4/4) Dropped on window!
 
         and     #$7F            ; mask off window number
-        pha
-        jsr     UpdateUsedFreeViaWindow
-        pla
-        jmp     ActivateAndRefreshWindowOrClose
+        bne     UpdateActivateAndRefreshWindow ; always
 
 .proc UpdateSelectedWindow
         lda     selected_window_id
-        jsr     UpdateUsedFreeViaWindow
-        lda     selected_window_id
-        jmp     ActivateAndRefreshWindowOrClose
+        FALL_THROUGH_TO UpdateActivateAndRefreshWindow
 .endproc ; UpdateSelectedWindow
 
 .endproc ; PerformPostDropUpdates
 
 ;;; ============================================================
-;;; Add specified icon to selection list, and redraw.
+;;; Given a window, update used/free data for all same-volume windows,
+;;; then activate the window (if needed) and refresh the contents
+;;; (closing on error).
+;;; Same inputs/outputs as `ActivateAndRefreshWindowOrClose`
+
+.proc UpdateActivateAndRefreshWindow
+        pha
+        jsr     UpdateUsedFreeViaWindow
+        pla
+        jmp     ActivateAndRefreshWindowOrClose
+.endproc ; UpdateActivateAndRefreshWindow
+
+;;; ============================================================
+;;; Input: A = icon id
+;;; NOTE: It does not activate the icon's window, or scroll the icon
+;;; into view.
+
+.proc SelectIcon
+        pha
+        jsr     ClearSelection
+        pla
+        pha
+        jsr     GetIconWindow
+        sta     selected_window_id
+        pla
+        FALL_THROUGH_TO AddIconToSelection
+.endproc ; SelectIcon
+
+;;; ============================================================
+;;; Add specified icon to selection list, mark it highlighted, and redraw.
 ;;; NOTE: This increments `selected_icon_count` and does NOT change
 ;;; `selected_window_id`
 ;;; Input: A = icon number
 ;;; Assert: Icon is in active window/desktop, `selected_window_id` is set.
 
-.proc HighlightAndSelectIcon
+.proc AddIconToSelection
         sta     icon_param
         ITK_CALL IconTK::HighlightIcon, icon_param
         ITK_CALL IconTK::DrawIcon, icon_param
 
-        ldx     selected_icon_count
-        copy    icon_param, selected_icon_list,x
-        inc     selected_icon_count
+        lda     icon_param
+        FALL_THROUGH_TO AddToSelectionList
+.endproc ; AddIconToSelection
 
+;;; ============================================================
+;;; Add specified icon to `selected_icon_list`
+;;; Inputs: A = icon_num
+;;; Outputs: A is not modified
+;;; Assert: icon is not present in the list.
+;;; NOTE: Does not modify `selected_window_id`.
+
+.proc AddToSelectionList
+        ldx     selected_icon_count
+        sta     selected_icon_list,x
+        inc     selected_icon_count
         rts
-.endproc ; HighlightAndSelectIcon
+.endproc ; AddToSelectionList
 
 ;;; ============================================================
 ;;; Remove specified icon from selection list, and redraw.
@@ -5313,13 +5429,14 @@ failure:
         ITK_CALL IconTK::DrawIcon, icon_param
 
         lda     icon_param
-        jmp     RemoveFromSelectionList
+        FALL_THROUGH_TO RemoveFromSelectionList
 .endproc ; UnhighlightAndDeselectIcon
 
 ;;; ============================================================
 ;;; Remove specified icon from `selected_icon_list`
 ;;; Inputs: A = icon_num
 ;;; Assert: icon is present in the list.
+;;; NOTE: Clears `selected_window_id` if count drops to 0.
 
 .proc RemoveFromSelectionList
         ;; Find index in list
@@ -5336,6 +5453,9 @@ failure:
         bne     :-
 
         dec     selected_icon_count
+    IF_ZERO
+        copy    #0, selected_window_id
+    END_IF
         rts
 .endproc ; RemoveFromSelectionList
 
@@ -5516,14 +5636,7 @@ event_loop:
         jsr     FrameTmpRect
         ldx     #0
 iloop:  cpx     cached_window_entry_count
-    IF_ZERO
-        ;; Finished!
-        lda     window_id
-      IF_ZERO
-        sta     selected_window_id
-      END_IF
-        rts
-    END_IF
+        RTS_IF_EQ
 
         ;; Check if icon should be selected
         txa
@@ -5542,10 +5655,11 @@ iloop:  cpx     cached_window_entry_count
         jsr     IsIconSelected
     IF_NE
         ;; Highlight and add to selection
+        ;; NOTE: Does not use `AddIconToSelection` because we perform
+        ;; a more optimized drawing below.
         ITK_CALL IconTK::HighlightIcon, icon_param
-        ldx     selected_icon_count
-        inc     selected_icon_count
-        copy    icon_param, selected_icon_list,x
+        lda     icon_param
+        jsr     AddToSelectionList
         copy    window_id, selected_window_id
     ELSE
         ;; Unhighlight and remove from selection
@@ -5783,11 +5897,7 @@ update: lda     window_id
 
         anim_icon := *+1
         lda     #SELF_MODIFIED_BYTE
-        pha                     ; A = `anim_icon`
-        jsr     GetIconWindow
-        sta     selected_window_id
-        pla                     ; A = `anim_icon`
-        jmp     HighlightAndSelectIcon
+        jmp     SelectIcon
 
 .endproc ; CloseSpecifiedWindow
 
@@ -5964,10 +6074,18 @@ disable:lda     #MGTK::disableitem_disable
         lda     #aux::kMenuItemIdRenameIcon
         jsr     DisableMenuItem
 
-        ;; Special
-        copy    #kMenuIdSpecial, disableitem_params::menu_id
-        lda     #aux::kMenuItemIdMakeLink
+        ;; Edit
+        copy    #kMenuIdEdit, disableitem_params::menu_id
+        lda     #aux::kMenuItemIdCut
         jsr     DisableMenuItem
+        lda     #aux::kMenuItemIdCopy
+        jsr     DisableMenuItem
+        lda     #aux::kMenuItemIdPaste
+        jsr     DisableMenuItem
+        lda     #aux::kMenuItemIdClear
+        jsr     DisableMenuItem
+
+        rts
 .endproc ; ToggleMenuItemsRequiringSingleSelection
 EnableMenuItemsRequiringSingleSelection := ToggleMenuItemsRequiringSingleSelection::enable
 DisableMenuItemsRequiringSingleSelection := ToggleMenuItemsRequiringSingleSelection::disable
@@ -6012,8 +6130,14 @@ enable: lda     #MGTK::disableitem_enable
 disable:lda     #MGTK::disableitem_disable
         sta     disableitem_params::disable
 
+        ;; File
         copy    #kMenuIdFile, disableitem_params::menu_id
         lda     #aux::kMenuItemIdDuplicate
+        jsr     DisableMenuItem
+
+        ;; Special
+        copy    #kMenuIdSpecial, disableitem_params::menu_id
+        lda     #aux::kMenuItemIdMakeLink
         jsr     DisableMenuItem
 
         rts
@@ -6069,59 +6193,9 @@ DisableSelectorMenuItems := ToggleSelectorMenuItems::disable
 
 ;;; ============================================================
 
-;;; Input: A = icon
-.proc HandleVolumeIconClick
-        pha
-        jsr     GetSingleSelectedIcon
-        sta     prev_selected_icon
-        pla
-
-        jsr     IsIconSelected
-        bne     not_selected
-
-        ;; --------------------------------------------------
-        ;; Icon was already selected
-        jsr     ExtendSelectionModifierDown
-        bpl     :+
-
-        ;; Modifier down - remove from selection
-        lda     findicon_params::which_icon
-        jmp     UnhighlightAndDeselectIcon ; deselect, nothing further
-
-        ;; Double click or drag?
-:       jmp     check_double_click
-
-        ;; --------------------------------------------------
-        ;; Icon was not already selected
-not_selected:
-        jsr     ExtendSelectionModifierDown
-        bpl     replace_selection
-
-        ;; Modifier down - add to selection
-        lda     selected_window_id ; on desktop?
-        beq     :+                 ; if so, retain selection
-        jsr     ClearSelection
-:       lda     findicon_params::which_icon
-        jmp     HighlightAndSelectIcon ; select, nothing further
-
-        ;; Replace selection with clicked icon
-replace_selection:
-        jsr     ClearSelection
-        lda     findicon_params::which_icon
-        jsr     HighlightAndSelectIcon
-        FALL_THROUGH_TO check_double_click
-
-        ;; --------------------------------------------------
-check_double_click:
-        jsr     StashCoordsAndDetectDoubleClick
-        jpl     CmdOpenFromDoubleClick
-
-        ;; --------------------------------------------------
-        ;; Drag of volume icon
-
-        copy    findicon_params::which_icon, drag_drop_params::icon
-        copy    #0, drag_drop_params::fixed
-        ITK_CALL IconTK::DragHighlighted, drag_drop_params
+;;; Inputs: A = `IconTK::DragHighlighted` return value, and
+;;;         `drag_drop_params::result` is set.
+.proc HandleVolumeIconDrag
         tax
         lda     drag_drop_params::result
         beq     same_or_desktop
@@ -6139,7 +6213,7 @@ same_or_desktop:
 
         ;; Icons moved on desktop - update and redraw
         jmp     RedrawSelectedIcons
-.endproc ; HandleVolumeIconClick
+.endproc ; HandleVolumeIconDrag
 
 ;;; ============================================================
 
@@ -7026,10 +7100,15 @@ L71F7:  ldx     #$00
         beq     next            ; inactive entry
         sta     record,x
 
+        ldx     #DeskTopSettings::options
+        jsr     ReadSetting
+        and     #DeskTopSettings::kOptionsShowInvisible
+    IF_ZERO
         ldy     #FileEntry::access
         lda     (entry_ptr),y
         and     #ACCESS_I
         bne     do_entry
+    END_IF
 
         inc     record_count
 
@@ -10362,8 +10441,6 @@ common:
 ;;; Start the actual operation
 
 .proc BeginOperation
-        copy    #0, do_op_flag
-
         jsr     PrepCallbacksForEnumeration
         bit     copy_delete_flags
         bmi     @trash
@@ -10426,13 +10503,13 @@ loop:   ldx     #SELF_MODIFIED_BYTE
         jsr     CheckRecursion
     IF_NE
         param_call ShowAlertParams, AlertButtonOptions::OK, aux::str_alert_move_copy_into_self
-        jmp     CloseFilesCancelDialog
+        jmp     CloseFilesCancelDialogWithCanceledResult
     END_IF
         jsr     AppendSrcPathLastSegmentToDstPath
         jsr     CheckBadReplacement
     IF_NE
         param_call ShowAlertParams, AlertButtonOptions::OK, aux::str_alert_bad_replacement
-        jmp     CloseFilesCancelDialog
+        jmp     CloseFilesCancelDialogWithCanceledResult
     END_IF
 :
         jsr     OpProcessSelectedFile
@@ -10449,7 +10526,6 @@ next_icon:
         bne     finish
 
         ;; No, we finished enumerating. Now do the real work.
-        inc     do_op_flag
 
         ;; Do we need to show a confirmation dialog? (i.e. Delete)
         bit     operation_flags
@@ -10514,6 +10590,7 @@ copy_delete_flags:
 move_flag:
         .byte   0
 
+        ;; bit 7 set = "all" selected in Yes / No / All prompt
 all_flag:
         .byte   0
 
@@ -11025,6 +11102,7 @@ a_prev: .addr   old_name_buf
 a_path: .addr   SELF_MODIFIED_BYTE
         DEFINE_RECT rect,0,0,0,0
 .endparams
+rename_dialog_params__a_prev := rename_dialog_params::a_prev
 
 ;;; Assert: Single icon selected, and it's not Trash.
 .proc DoRenameImpl
@@ -11235,8 +11313,7 @@ end_filerecord_and_icon_update:
     END_IF
 
         ;; Update affected window paths, ProDOS prefix
-        jsr     UpdateWindowPaths
-        jsr     UpdatePrefix
+        jsr     NotifyPathChanged
 
         ;; --------------------------------------------------
         ;; Totally done
@@ -11282,29 +11359,69 @@ DoRename        := DoRenameImpl::start
 
 ;;; ============================================================
 ;;; Following a rename or move of `src_path_buf` to `dst_path_buf`,
-;;; update any affected window paths.
+;;; update any affected paths.
 ;;;
-;;; Uses `FindWindowsForPrefix`
+;;; * Window paths (so operations within windows still work)
+;;; * ProDOS PREFIX (which points at DeskTop's folder)
+;;; * Original PREFIX (if copied to RAMCard)
+;;; * Restart PREFIX (in the ProDOS Selector code)
+;;;
 ;;; Assert: The path actually changed.
 
-.proc UpdateWindowPaths
-        ;; Update paths for any matching/child windows.
-        param_call FindWindowsForPrefix, src_path_buf
-        lda     found_windows_count
-    IF_NOT_ZERO
+.proc NotifyPathChanged
 
-        dec     found_windows_count
-wloop:  ldx     found_windows_count
-        lda     found_windows_list,x
+        ;; --------------------------------------------------
+        ;; Update any affected window paths
+
+        ldx     #kMaxDeskTopWindows
+wloop:  txa
+        pha
+        ldy     window_to_dir_icon_table-1,x ; X = 1-based id, so -1 to index
+        beq     wnext           ; not in use
         jsr     GetWindowPath
-        jsr     UpdateTargetPath
+        jsr     MaybeUpdateTargetPath
+wnext:  pla
+        tax
+        dex
+        bne     wloop
 
-        dec     found_windows_count
-        bpl     wloop
+        ;; --------------------------------------------------
+        ;; Update prefixes
+
+        path := tmp_path_buf    ; depends on `src_path_buf`, `dst_path_buf`
+
+        ;; ProDOS Prefix
+        MLI_CALL GET_PREFIX, get_set_prefix_params
+        param_call MaybeUpdateTargetPath, path
+    IF_NE
+        MLI_CALL SET_PREFIX, get_set_prefix_params
     END_IF
 
+        ;; Original Prefix
+        jsr     GetCopiedToRAMCardFlag
+    IF_MINUS
+        sta     ALTZPOFF
+        bit     LCBANK2
+        bit     LCBANK2
+        param_call MaybeUpdateTargetPath, DESKTOP_ORIG_PREFIX
+        param_call MaybeUpdateTargetPath, RAMCARD_PREFIX
+        sta     ALTZPON
+        bit     LCBANK1
+        bit     LCBANK1
+    END_IF
+
+        ;; Restart Prefix
+        sta     ALTZPOFF
+        bit     LCBANK2
+        bit     LCBANK2
+        param_call MaybeUpdateTargetPath, SELECTOR + QuitRoutine::prefix_buffer_offset
+        sta     ALTZPON
+        bit     LCBANK1
+        bit     LCBANK1
+
         rts
-.endproc ; UpdateWindowPaths
+
+        DEFINE_GET_PREFIX_PARAMS get_set_prefix_params, path
 
 ;;; ============================================================
 ;;; Replace `src_path_buf` as the prefix of path at $06 with `dst_path_buf`.
@@ -11362,7 +11479,7 @@ assign: ldy     new_path
 ;;; update the target path if needed.
 ;;;
 ;;; Inputs: A,X = pointer to path to update
-;;; Outputs: Z=1 if updated, Z=0 if no change
+;;; Outputs: Z=0 if updated, Z=1 if no change
 ;;; NOTE: Sometimes called with LCBANK2; must not assume LCBANK1 present!
 ;;; Trashes $06, $08
 
@@ -11383,10 +11500,7 @@ assign: ldy     new_path
 
         jsr     MaybeRestoreSlash
         plp                     ; Z=0 if updated
-    IF_NE
-        return  #0
-    END_IF
-        return  #$FF
+        rts
 
 .proc MaybeStripSlash
         ;; Did path end with a '/'? If so, set flag and remove.
@@ -11425,44 +11539,7 @@ assign: ldy     new_path
 
 .endproc ; MaybeUpdateTargetPath
 
-;;; ============================================================
-
-.proc UpdatePrefix
-        path := tmp_path_buf    ; depends on `src_path_buf`, `dst_path_buf`
-
-        ;; ProDOS Prefix
-        MLI_CALL GET_PREFIX, get_set_prefix_params
-        param_call MaybeUpdateTargetPath, path
-    IF_EQ
-        MLI_CALL SET_PREFIX, get_set_prefix_params
-    END_IF
-
-        ;; Original Prefix
-        jsr     GetCopiedToRAMCardFlag
-    IF_MINUS
-        sta     ALTZPOFF
-        bit     LCBANK2
-        bit     LCBANK2
-        param_call MaybeUpdateTargetPath, DESKTOP_ORIG_PREFIX
-        param_call MaybeUpdateTargetPath, RAMCARD_PREFIX
-        sta     ALTZPON
-        bit     LCBANK1
-        bit     LCBANK1
-    END_IF
-
-        ;; Restart Prefix
-        sta     ALTZPOFF
-        bit     LCBANK2
-        bit     LCBANK2
-        param_call MaybeUpdateTargetPath, SELECTOR + QuitRoutine::prefix_buffer_offset
-        sta     ALTZPON
-        bit     LCBANK1
-        bit     LCBANK1
-
-        rts
-
-        DEFINE_GET_PREFIX_PARAMS get_set_prefix_params, path
-.endproc ; UpdatePrefix
+.endproc ; NotifyPathChanged
 
 ;;; ============================================================
 
@@ -11587,7 +11664,7 @@ do_op_flag:
         jsr     ShowAlertOption
         .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
         beq     @retry          ; `kAlertResultTryAgain` = 0
-        jmp     CloseFilesCancelDialog
+        jmp     CloseFilesCancelDialogWithFailedResult
 
 :       lda     open_src_dir_params::ref_num
         sta     op_ref_num
@@ -11599,7 +11676,7 @@ do_op_flag:
         jsr     ShowAlertOption
         .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
         beq     @retry2         ; `kAlertResultTryAgain` = 0
-        jmp     CloseFilesCancelDialog
+        jmp     CloseFilesCancelDialogWithFailedResult
 
 :       jmp     ReadFileEntry
 .endproc ; OpenSrcDir
@@ -11613,7 +11690,7 @@ do_op_flag:
         jsr     ShowAlertOption
         .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
         beq     @retry          ; `kAlertResultTryAgain` = 0
-        jmp     CloseFilesCancelDialog
+        jmp     CloseFilesCancelDialogWithFailedResult
 
 :       rts
 .endproc ; CloseSrcDir
@@ -11630,7 +11707,7 @@ do_op_flag:
         jsr     ShowAlertOption
         .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
         beq     @retry          ; `kAlertResultTryAgain` = 0
-        jmp     CloseFilesCancelDialog
+        jmp     CloseFilesCancelDialogWithFailedResult
 
 :       inc     entries_read_this_block
         lda     entries_read_this_block
@@ -11720,7 +11797,7 @@ cancel_descent_flag:  .byte   0
 ;;;
 ;;; Input: A=`storage_type`
 ;;; Output: C=0 if supported type, C=1 if unsupported but user picks OK.
-;;; Exception: If user selects Cancel, `CloseFilesCancelDialog` is invoked.
+;;; Exception: If user selects Cancel, `CloseFilesCancelDialogWithFailedResult` is invoked.
 .proc ValidateStorageType
         cmp     #ST_VOLUME_DIRECTORY
         beq     ok
@@ -11732,7 +11809,7 @@ cancel_descent_flag:  .byte   0
         ;; Unsupported type - show error, and either abort or return failure
         param_call ShowAlertParams, AlertButtonOptions::OKCancel, aux::str_alert_unsupported_type
         cmp     #kAlertResultCancel
-        jeq     CloseFilesCancelDialog
+        jeq     CloseFilesCancelDialogWithFailedResult
         sec
         rts
 
@@ -11799,6 +11876,7 @@ a_dst:  .addr   dst_path_buf
         bpl     :-
 
         copy    #0, all_flag
+        copy    #1, do_op_flag
         rts
 .endproc ; PrepCallbacksForCopy
 
@@ -11831,11 +11909,12 @@ a_dst:  .addr   dst_path_buf
 
         copy    #$80, all_flag
         copy16  #DownloadDialogTooLargeCallback, operation_toolarge_callback
+        copy    #1, do_op_flag
         rts
 
 .proc DownloadDialogTooLargeCallback
         param_call ShowAlertParams, AlertButtonOptions::OK, aux::str_ramcard_full
-        jmp     CloseFilesCancelDialog
+        jmp     CloseFilesCancelDialogWithFailedResult
 .endproc ; DownloadDialogTooLargeCallback
 .endproc ; PrepCallbacksForDownload
 
@@ -11931,18 +12010,17 @@ dir:
         bit     move_flag       ; same volume relink move?
     IF_VS
         jsr     RelinkFile
-        jsr     UpdateWindowPaths
-        jmp     UpdatePrefix
+        jmp     NotifyPathChanged
     END_IF
 
 copy_dir_contents:
         jsr     ProcessDir
+        jsr     GetAndApplySrcInfoToDst ; copy modified date/time
         jsr     MaybeFinishFileMove
 
         bit     move_flag
     IF_NS
-        jsr     UpdateWindowPaths
-        jsr     UpdatePrefix
+        jsr     NotifyPathChanged
     END_IF
 
 done:
@@ -11995,6 +12073,7 @@ ok_dir: jsr     RemoveSrcPathSegment
 ;;; If moving, delete src file/directory.
 
 .proc CopyFinishDirectory
+        jsr     GetAndApplySrcInfoToDst ; apply modification date/time
         jsr     RemoveDstPathSegment
         FALL_THROUGH_TO MaybeFinishFileMove
 .endproc ; CopyFinishDirectory
@@ -12110,7 +12189,7 @@ retry:  copy    dst_path_buf, saved_length
         jsr     SetCursorWatch  ; preserves A
 
         cmp     #kAlertResultCancel
-        jeq     CloseFilesCancelDialog
+        jeq     CloseFilesCancelDialogWithFailedResult
 
         sec
         rts
@@ -12171,7 +12250,7 @@ retry:  jsr     GetDstFileInfo
         ;; TODO: In the future, prompt and recursively delete
         param_call ShowAlertParams, AlertButtonOptions::OK, aux::str_no_overwrite_dir
         jsr     SetCursorWatch
-        jmp     CloseFilesCancelDialog
+        jmp     CloseFilesCancelDialogWithFailedResult
     END_IF
         ;; Prompt to replace
         bit     all_flag
@@ -12213,7 +12292,7 @@ failure:
         sec
         rts
 
-cancel: jmp     CloseFilesCancelDialog
+cancel: jmp     CloseFilesCancelDialogWithFailedResult
 .endproc ; TryCreateDst
 
 ;;; ============================================================
@@ -12483,8 +12562,7 @@ eof:    jsr     CloseDst
         bit     src_dst_exclusive_flag
         bmi     :+
         jsr     CloseSrc
-:       jsr     CopyFileInfo
-        jmp     SetDstFileInfo
+:       jmp     ApplySrcInfoToDst
 
 .proc OpenSrc
 @retry: MLI_CALL OPEN, open_src_params
@@ -12629,8 +12707,7 @@ a_path: .addr   src_path_buf
 
         cmp     #kAlertResultOK
         beq     :+
-        lda     #kOperationCanceled
-        jmp     CloseFilesCancelDialogWithResult
+        jmp     CloseFilesCancelDialogWithCanceledResult
 :       rts
 .endproc ; DeleteDialogConfirmCallback
 .endproc ; OpenDeleteProgressDialog
@@ -12644,6 +12721,7 @@ a_path: .addr   src_path_buf
         bpl     :-
 
         copy    #0, all_flag
+        copy    #1, do_op_flag
         rts
 .endproc ; PrepCallbacksForDelete
 
@@ -12715,7 +12793,7 @@ retry:  MLI_CALL DESTROY, destroy_src_params
         bne     :+
         copy    #$80, all_flag
         bne     unlock          ; always
-:       jmp     CloseFilesCancelDialog
+:       jmp     CloseFilesCancelDialogWithFailedResult
 
 unlock: jsr     UnlockSrcFile
         beq     retry
@@ -12803,6 +12881,7 @@ callbacks_for_size_or_count:
         sta     op_file_count+1
         sta     op_block_count
         sta     op_block_count+1
+        sta     do_op_flag
 
         rts
 .endproc ; PrepCallbacksForEnumeration
@@ -13114,17 +13193,27 @@ src_path_slash_index:
 
         lda     event_params::key
         cmp     #CHAR_ESCAPE
-        beq     CloseFilesCancelDialog
+        beq     cancel
+
 ret:    rts
+
+cancel: lda     do_op_flag
+        beq     CloseFilesCancelDialogWithCanceledResult
+        FALL_THROUGH_TO CloseFilesCancelDialogWithFailedResult
 .endproc ; CheckCancel
 
 ;;; ============================================================
 ;;; Closes dialog, closes all open files, and restores stack.
 
-.proc CloseFilesCancelDialog
+.proc CloseFilesCancelDialogImpl
+failed:
         lda     #kOperationFailed
-ep2:    sta     @result
+        .byte   OPC_BIT_abs     ; skip next 2-byte instruction
 
+canceled:
+        lda     #kOperationCanceled
+
+        sta     @result
         jsr     InvokeOperationCompleteCallback
 
         MLI_CALL CLOSE, close_params
@@ -13137,8 +13226,9 @@ ep2:    sta     @result
         rts
 
         DEFINE_CLOSE_PARAMS close_params
-.endproc ; CloseFilesCancelDialog
-CloseFilesCancelDialogWithResult := CloseFilesCancelDialog::ep2
+.endproc ; CloseFilesCancelDialogImpl
+CloseFilesCancelDialogWithFailedResult := CloseFilesCancelDialogImpl::failed
+CloseFilesCancelDialogWithCanceledResult := CloseFilesCancelDialogImpl::canceled
 
 ;;; ============================================================
 ;;; Move or Copy? Compare src/dst paths, same vol = move.
@@ -13231,10 +13321,17 @@ match:  lda     flag
 
 ;;; ============================================================
 
-.proc CopyFileInfo
+.proc GetAndApplySrcInfoToDst
+        jsr     GetSrcFileInfo
+        FALL_THROUGH_TO ApplySrcInfoToDst
+.endproc  ; GetAndApplySrcInfoToDst
+
+.proc ApplySrcInfoToDst
         COPY_BYTES 11, src_file_info_params::access, dst_file_info_params::access
-        rts
-.endproc ; CopyFileInfo
+        FALL_THROUGH_TO SetDstFileInfo
+.endproc ; ApplySrcInfoToDst
+
+;;; ============================================================
 
 .proc SetDstFileInfo
 :       copy    #7, dst_file_info_params::param_count ; SET_FILE_INFO
@@ -13288,7 +13385,7 @@ not_found:
         MLI_CALL ON_LINE, on_line_params2
         rts
 
-close:  jmp     CloseFilesCancelDialog
+close:  jmp     CloseFilesCancelDialogWithFailedResult
 
 flag:   .byte   0
 
@@ -14829,7 +14926,7 @@ done:   rts
 
         MGTK_CALL MGTK::OpenWindow, winfo_rename_dialog
         rts
-.endproc ; OpenDialogWindow
+.endproc ; OpenRenameWindow
 
 ;;; ============================================================
 
@@ -15703,6 +15800,9 @@ datetime_for_conversion := list_view_filerecord + FileRecord::modification_date
 
 ;;; ============================================================
 
+;;; Holds a single filename
+clipboard:
+        .res    16, 0
 
 path_buf4:
         .res    ::kPathBufferSize, 0

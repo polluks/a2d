@@ -1,5 +1,6 @@
 .define res_string_status_loading_desktop "Iniciando Apple II DeskTop..."
 .define res_string_menu_bar_item_file "Archivo"
+.define res_string_menu_bar_item_edit "Edici\x13n"
 .define res_string_menu_bar_item_view "Listado"
 .define res_string_menu_bar_item_special "Especial"
 .define res_string_menu_bar_item_startup "Arranque"
@@ -8,7 +9,7 @@
 .define res_char_menu_item_new_folder_shortcut 'N'
 .define res_string_menu_item_open "Abrir"
 .define res_char_menu_item_open_shortcut 'O'
-.define res_string_menu_item_close "Cerrar Ventana"
+.define res_string_menu_item_close "Cerrar"
 .define res_string_menu_item_close_all "Cerrar Todo"
 .define res_string_menu_item_select_all "Seleccionar Todo"
 .define res_char_menu_item_select_all_shortcut 'A'
@@ -18,6 +19,13 @@
 .define res_char_menu_item_eject_shortcut 'E'
 .define res_string_menu_item_quit "Salir"
 .define res_char_menu_item_quit_shortcut 'Q'
+.define res_string_menu_item_cut "Cortar"
+.define res_char_menu_item_cut_shortcut 'X'
+.define res_string_menu_item_copy "Copiar"
+.define res_char_menu_item_copy_shortcut 'C'
+.define res_string_menu_item_paste "Pegar"
+.define res_char_menu_item_paste_shortcut 'V'
+.define res_string_menu_item_clear "Borrar"
 .define res_string_menu_item_by_icon "por Iconos"
 .define res_string_menu_item_by_small_icon "por Iconos Peque|os"
 .define res_string_menu_item_by_name "por Nombre"

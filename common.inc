@@ -24,7 +24,6 @@
 .define kFilenameDADir         "Apple.Menu"
 .define kFilenameExtrasDir     "Extras"
 .define kFilenameRAMCardDir    "DeskTop"
-.define kFilenameLinksDir      "Links"
 
 ;;; ============================================================
 ;;; DeskTop Modules
@@ -215,6 +214,7 @@ DeskTopSettings::kOptionsSkipRAMCard   = %00000001 ; skip copy to RAMCard, if se
 DeskTopSettings::kOptionsSkipSelector  = %00000010 ; skip starting Selector, if set
 DeskTopSettings::kOptionsShowShortcuts = %00000100 ; show button shortcuts, if set
 DeskTopSettings::kOptionsSetCaseBits   = %00001000 ; write GS/OS case bits, if set
+DeskTopSettings::kOptionsShowInvisible = %00010000 ; show "invisible" files, if set
 
 DeskTopSettings::kSysCapIsIIgs     = %00000001
 DeskTopSettings::kSysCapIsIIc      = %00000010 ; also set for IIc Plus

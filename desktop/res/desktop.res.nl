@@ -1,5 +1,6 @@
 .define res_string_status_loading_desktop "Apple II DeskTop starten..."
 .define res_string_menu_bar_item_file "Archief"
+.define res_string_menu_bar_item_edit "Wijzig"
 .define res_string_menu_bar_item_view "Weergave"
 .define res_string_menu_bar_item_special "Speciaal"
 .define res_string_menu_bar_item_startup "Opstart"
@@ -8,7 +9,7 @@
 .define res_char_menu_item_new_folder_shortcut 'N'
 .define res_string_menu_item_open "Open"
 .define res_char_menu_item_open_shortcut 'O'
-.define res_string_menu_item_close "Sluit venster"
+.define res_string_menu_item_close "Sluit"
 .define res_string_menu_item_close_all "Sluit alles"
 .define res_string_menu_item_select_all "Selecteer alles"
 .define res_char_menu_item_select_all_shortcut 'A'
@@ -18,6 +19,13 @@
 .define res_char_menu_item_eject_shortcut 'E'
 .define res_string_menu_item_quit "Stop"
 .define res_char_menu_item_quit_shortcut 'Q'
+.define res_string_menu_item_cut "Knip"
+.define res_char_menu_item_cut_shortcut 'X'
+.define res_string_menu_item_copy "Kopieer"
+.define res_char_menu_item_copy_shortcut 'C'
+.define res_string_menu_item_paste "Plak"
+.define res_char_menu_item_paste_shortcut 'V'
+.define res_string_menu_item_clear "Wis"
 .define res_string_menu_item_by_icon "als Symbolen"
 .define res_string_menu_item_by_small_icon "als Kleine Symbolen"
 .define res_string_menu_item_by_name "op Naam"
