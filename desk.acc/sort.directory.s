@@ -59,13 +59,13 @@
         MLIEntry := MLI
 
 ;;; There is not enough room in the DA load area to a directory with
-;;; 127 entries, the maximum number of icons DeskTop can handle. A 10k
+;;; 127 entries, the maximum number of icons DeskTop can handle. A
 ;;; buffer is available in DeskTop itself, in an area that can be
 ;;; restored after use.
-dir_data_buffer         := OVERLAY_10K_BUFFER
+dir_data_buffer         := OVERLAY_BUFFER
         .assert (<dir_data_buffer) = 0, error, "Must be page aligned"
 
-kDirDataBufferLen       = kOverlay10KBufferSize
+kDirDataBufferLen       = kOverlayBufferSize
 
 ;;; ============================================================
 
@@ -98,7 +98,7 @@ start:  tsx
         lda     #kErrNoWindowsOpen
         jmp     JUMP_TABLE_SHOW_ALERT
 
-:       lda     #kDynamicRoutineRestore10K
+:       lda     #kDynamicRoutineRestoreBuffer
         jsr     JUMP_TABLE_RESTORE_OVL
 
         lda     window_id
