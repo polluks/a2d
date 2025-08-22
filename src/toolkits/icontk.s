@@ -259,7 +259,7 @@ which_area:     .byte   0
 window_id:      .byte   0
 .endparams
 window_ptr:     .word   0       ; do not move this; see above
-        .assert window_ptr = findwindow_params::window_id + 1, error, "struct moved"
+        ASSERT_EQUALS window_ptr, findwindow_params::window_id + 1, "struct moved"
 
 .params findcontrol_params
 mousex:         .word   0
@@ -294,7 +294,7 @@ textback:       .byte   MGTK::textbg_black
 textfont:       .addr   0
         REF_GRAFPORT_MEMBERS
 .endparams
-        .assert .sizeof(drag_outline_grafport) = .sizeof(MGTK::GrafPort), error, "size mismatch"
+        ASSERT_EQUALS .sizeof(drag_outline_grafport), .sizeof(MGTK::GrafPort)
 desktop_bounds := drag_outline_grafport::maprect
 
 
@@ -397,7 +397,7 @@ bufsize:
         ;; Initialize IconEntry::state
         lda     #0
         ;; ldy     #IconEntry::state
-        .assert IconEntry::state = 0, error, "enum mismatch"
+        ASSERT_EQUALS IconEntry::state, 0
         tay
         sta     (ptr_icon),y
 
@@ -484,7 +484,7 @@ done:   rts
 
         ;; Mark it as free
         jmp     FreeIcon
-.endproc ; RemoveIconCommon
+.endproc ; FreeIconCommon
 
 ;;; ============================================================
 
@@ -546,7 +546,7 @@ done:   rts
         jsr     RemoveIconFromList ; returns with A unchanged, X = `num_icons`
         sta     icon_list-1,x
         rts
-.endproc ; MoveIconToTop
+.endproc ; MaybeMoveIconToTop
 
 ;;; ============================================================
 ;;; EraseIcon
@@ -620,7 +620,7 @@ loop:   ldx     #SELF_MODIFIED_BYTE
 
         ldax    params
         stax    out_params
-        .assert FindIconParams::coords = 0, error, "coords must be first"
+        ASSERT_EQUALS FindIconParams::coords, 0, "coords must be first"
         stax    moveto_params_addr
 
         ldy     #FindIconParams::window_id
@@ -690,7 +690,7 @@ inside: pla
         ldy     #DragHighlightedParams::icon
         lda     (params),y
         sta     icon_id
-        .assert DragHighlightedParams::icon = 0, error, "enum mismatch"
+        ASSERT_EQUALS DragHighlightedParams::icon, 0
         tya
         sta     (params),y
 
@@ -701,7 +701,7 @@ inside: pla
         sta     last_coords-1,y
         dey
         ;;cpy     #DragHighlightedParams::coords-1
-        .assert DragHighlightedParams::coords = 1, error, "coords must be 1"
+        ASSERT_EQUALS DragHighlightedParams::coords, 1
         bne     :-
 
         jsr     PushPointers    ; save `params`
@@ -929,7 +929,7 @@ not_drag:
 same_window:
         ldx     #$80            ; clip (if desktop)
         lda     findwindow_params::which_area
-        .assert MGTK::Area::desktop = 0, error, "enum mismatch"
+        ASSERT_EQUALS MGTK::Area::desktop, 0
         beq     move_ok
 
         cmp     #MGTK::Area::content
@@ -954,7 +954,7 @@ move_ok:
         ora     BUTN1
     IF_NS
         lda     #IconTK::kDragResultMoveModified
-        .assert IconTK::kDragResultMoveModified <> 0, error, "enum mismatch"
+        ASSERT_NOT_EQUALS IconTK::kDragResultMoveModified, 0
         bne     exit_with_a
     END_IF
 
@@ -1003,12 +1003,12 @@ exit_with_a:
 
 exit_drop:
         lda     #IconTK::kDragResultDrop
-        .assert IconTK::kDragResultDrop = 0, error, "enum mismatch"
+        ASSERT_EQUALS IconTK::kDragResultDrop, 0
         beq     exit_with_a
 
 exit_canceled:
         lda     #IconTK::kDragResultCanceled
-        .assert IconTK::kDragResultCanceled <> 0, error, "enum mismatch"
+        ASSERT_NOT_EQUALS IconTK::kDragResultCanceled, 0
         bne     exit_with_a
 
 
@@ -1069,7 +1069,7 @@ next:   inc     index
 .proc _FindIconValidateWindow
         MGTK_CALL MGTK::FindWindow, findwindow_params
         lda     findwindow_params::which_area
-        .assert MGTK::Area::desktop = 0, error, "enum mismatch"
+        ASSERT_EQUALS MGTK::Area::desktop, 0
         beq     desktop
 
         ;; --------------------------------------------------
@@ -1106,7 +1106,7 @@ find_icon:
         MGTK_CALL MGTK::FindControlEx, findcontrol_params
         bne     fail
         lda     findcontrol_params::which_ctl
-        .assert MGTK::Ctl::not_a_control = 0, error, "enum mismatch"
+        ASSERT_EQUALS MGTK::Ctl::not_a_control, 0
         bne     fail            ; scrollbar, etc.
 
         ;; Ignore if y coord < window's header height
@@ -1140,17 +1140,17 @@ headery:
 
         ;; Highlighted?
         ;;and     #kIconEntryStateHighlighted
-        .assert kIconEntryStateHighlighted = $40, error, "kIconEntryStateHighlighted must be $40"
+        ASSERT_EQUALS ::kIconEntryStateHighlighted, $40
         asl
         bmi     done            ; Not valid (it's being dragged)
 
         ;; Is it a drop target?
         ;;ldy     #IconEntry::win_flags
-        .assert (IconEntry::win_flags - IconEntry::state) = 1, error, "win_flags must be 1 more than state"
+        ASSERT_EQUALS (IconEntry::win_flags - IconEntry::state), 1
         iny
         lda     (ptr),y
         ;;and     #kIconEntryFlagsDropTarget
-        .assert kIconEntryFlagsDropTarget = $40, error, "kIconEntryFlagsDropTarget must be $40"
+        ASSERT_EQUALS ::kIconEntryFlagsDropTarget, $40
         asl
         bpl     done
 
@@ -1362,8 +1362,8 @@ IconInRectImpl := IconInRectImplImpl::start
 .endstruct
 
         ;; Calc icon bounds
-        .assert params = $06, error, "param placement"
-        .assert GetRenameRectParams::icon = 0, error, "struct layout"
+        ASSERT_EQUALS params, $06
+        ASSERT_EQUALS GetRenameRectParams::icon, 0
         jsr     GetXYZRectImplHelper
 
         ;; Copy rect into out params
@@ -1389,8 +1389,8 @@ IconInRectImpl := IconInRectImplImpl::start
 .endstruct
 
         ;; Calc icon bounds
-        .assert params = $06, error, "param placement"
-        .assert GetBitmapRectParams::icon = 0, error, "struct layout"
+        ASSERT_EQUALS params, $06
+        ASSERT_EQUALS GetBitmapRectParams::icon, 0
         jsr     GetXYZRectImplHelper
 
         ;; Copy rect into out params
@@ -1489,7 +1489,7 @@ clip_window_id:
         ldy     #IconEntry::state
         lda     (ptr),y
         sta     state
-        .assert IconEntry::win_flags = IconEntry::state + 1, error, "enum mismatch"
+        ASSERT_EQUALS IconEntry::win_flags, IconEntry::state + 1
         iny
         lda     ($06),y
         sta     win_flags
@@ -1558,7 +1558,7 @@ ret:    rts
 
         ;; Set text background color
         lda     #MGTK::textbg_white
-        .assert kIconEntryStateHighlighted = $40, error, "flag mismatch"
+        ASSERT_EQUALS ::kIconEntryStateHighlighted, $40
         bit     state           ; highlighted?
         bvc     :+
         lda     #MGTK::textbg_black
@@ -1571,7 +1571,7 @@ ret:    rts
         ;; Icon
 
         ;; Shade (XORs background)
-        .assert kIconEntryStateDimmed = $80, error, "flag mismatch"
+        ASSERT_EQUALS ::kIconEntryStateDimmed, $80
         bit     state
     IF_NS
         MGTK_CALL MGTK::SetPattern, dark_pattern
@@ -1579,7 +1579,7 @@ ret:    rts
     END_IF
 
         ;; Mask (cleared to white or black)
-        .assert kIconEntryStateHighlighted = $40, error, "flag mismatch"
+        ASSERT_EQUALS ::kIconEntryStateHighlighted, $40
         bit     state
     IF_VS
         MGTK_CALL MGTK::SetPenMode, penBIC
@@ -1589,14 +1589,14 @@ ret:    rts
         MGTK_CALL MGTK::PaintBitsHC, mask_paintbits_params
 
         ;; Shade again (restores background)
-        .assert kIconEntryStateDimmed = $80, error, "flag mismatch"
+        ASSERT_EQUALS ::kIconEntryStateDimmed, $80
         bit     state
     IF_NS
         jsr     _Shade
     END_IF
 
         ;; Icon (drawn in black or white)
-        .assert kIconEntryStateHighlighted = $40, error, "flag mismatch"
+        ASSERT_EQUALS ::kIconEntryStateHighlighted, $40
         bit     state
     IF_VS
         MGTK_CALL MGTK::SetPenMode, penOR
@@ -2218,13 +2218,6 @@ empty:  return #$FF
 ;;; C=1 if no clipping rect remains, so no drawing is needed.
 .proc CalcWindowIntersectionsImpl
 
-.params findwindow_params
-mousex:         .word   0
-mousey:         .word   0
-which_area:     .byte   0
-window_id:      .byte   0
-.endparams
-
 pt_num: .byte   0
 
 ;;; Points at corners of icon's bounding rect
@@ -2580,7 +2573,7 @@ table:  .byte   1<<0, 1<<1, 1<<2, 1<<3, 1<<4, 1<<5, 1<<6, 1<<7
 free_icon_map:
         .byte   $FE, $FF, $FF, $FF, $FF, $FF, $FF, $FF
         .byte   $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF
-        .assert * - free_icon_map = (::kMaxIconCount + 7)/8, error, "table size"
+        ASSERT_TABLE_SIZE free_icon_map, (::kMaxIconCount + 7)/8
 
 ;;; ============================================================
 

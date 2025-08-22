@@ -954,6 +954,7 @@ skip:   dec     arg
 
 .macro PARAM_BLOCK name, addr
     .ifnblank name
+        WARN_IF_SHADOWING name
         name := addr
         .refto name
     .endif
@@ -1011,6 +1012,7 @@ loop:   lda     src,x
 ;;;       .assert * = back to normal
 
 .macro PROC_AT name, addr
+        WARN_IF_SHADOWING name
 .proc name
         .pushorg addr
 .endmacro
@@ -1044,6 +1046,32 @@ __pushorg_depth__ .set 0
         ::__pushorg_depth__ .set ::__pushorg_depth__ - 1
 .endmacro
 
+;;; ============================================================
+;;; Scope Helpers
+;;; ============================================================
+
+.macro PREDEFINE_SCOPE scope_name
+    scope_name::__predefine_scope__ = 0
+.endmacro
+
+__shadow_warning_suppress_count__ .set 0
+
+;;; TODO: More careful scoping throughout the project to eliminate these
+.macro SUPPRESS_SHADOW_WARNING
+::__shadow_warning_suppress_count__ .set ::__shadow_warning_suppress_count__ + 1
+.endmacro
+
+.macro UNSUPPRESS_SHADOW_WARNING
+::__shadow_warning_suppress_count__ .set ::__shadow_warning_suppress_count__ - 1
+.endmacro
+
+.macro WARN_IF_SHADOWING ident
+  .if !::__shadow_warning_suppress_count__
+    .ifdef ident
+        .warning .sprintf("Declaration of '%s' shadows existing '%s'", .string(ident), .string(ident))
+    .endif
+  .endif
+.endmacro
 
 ;;; ============================================================
 ;;; Parameter Blocks - named scopes that indicate data
@@ -1055,6 +1083,7 @@ __pushorg_depth__ .set 0
 ;;; .endparams
 
 .macro .params label
+        WARN_IF_SHADOWING label
         .proc label
 .endmacro
 
@@ -1067,8 +1096,20 @@ __pushorg_depth__ .set 0
 ;;; Assertions
 ;;; ============================================================
 
-.macro ASSERT_EQUALS actual, expected
-    .assert (actual) = (expected), error, .sprintf("expected %d actual %d", (expected), (actual))
+.macro ASSERT_EQUALS actual, expected, message
+    .if .paramcount = 3
+        .assert (actual) = (expected), error, .sprintf("expected %d actual %d: %s", (expected), (actual), message)
+    .else
+        .assert (actual) = (expected), error, .sprintf("expected %d actual %d", (expected), (actual))
+    .endif
+.endmacro
+
+.macro ASSERT_NOT_EQUALS actual, expected, message
+    .if .paramcount = 3
+        .assert (actual) <> (expected), error, .sprintf("unexpected %d: %s", (expected), message)
+    .else
+        .assert (actual) <> (expected), error, .sprintf("unexpected %d", (expected))
+    .endif
 .endmacro
 
 .macro ASSERT_ADDRESS addr, opt_message

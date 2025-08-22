@@ -19,20 +19,17 @@
         .incbin .concat("../../out/System.", kBuildLang, ".font")
 
 ;;; ============================================================
-;;; Generic Resources (outside scope for convenience)
 
+.scope app
+
+;;; ============================================================
+
+;;; TODO: Move these somewhere more sensible
 pencopy:        .byte   MGTK::pencopy
 penXOR:         .byte   MGTK::penXOR
 notpencopy:     .byte   MGTK::notpencopy
 
-;;; ============================================================
-;;; Event Params (and overlapping param structs)
-
         .include "../lib/event_params.s"
-
-;;; ============================================================
-
-.scope app
 
 ;;; See docs/Selector_List_Format.md for file format
 selector_list   := $B300
@@ -619,7 +616,7 @@ retry:  param_call GetFileInfo, str_desktop_2
         bcc     :+
         lda     #AlertID::insert_system_disk
         jsr     ShowAlert
-        .assert kAlertResultCancel <> 0, error, "Branch assumes enum value"
+        ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
         bne     EventLoop       ; `kAlertResultCancel` = 1
         beq     retry           ; `kAlertResultTryAgain` = 0
 :       jmp     RunDesktop
@@ -813,7 +810,7 @@ cancel: jmp     LoadSelectorList
 
 L9443:  lda     #AlertID::insert_system_disk
         jsr     ShowAlert
-        .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
         beq     retry           ; `kAlertResultTryAgain` = 0
         rts
 .endproc ; CmdRunAProgram
@@ -823,7 +820,7 @@ L9443:  lda     #AlertID::insert_system_disk
 .proc HandleButtonDown
         MGTK_CALL MGTK::FindWindow, findwindow_params
         lda     findwindow_params::which_area
-        .assert MGTK::Area::desktop = 0, error, "enum mismatch"
+        ASSERT_EQUALS MGTK::Area::desktop, 0
         RTS_IF_ZERO
 
         cmp     #MGTK::Area::menubar
@@ -869,7 +866,7 @@ check_desktop_btn:
         bcc     :+
         lda     #AlertID::insert_system_disk
         jsr     ShowAlert
-        .assert kAlertResultCancel <> 0, error, "Branch assumes enum value"
+        ASSERT_NOT_EQUALS kAlertResultCancel, 0
         bne     done            ; `kAlertResultCancel` = 1
         beq     @retry          ; `kAlertResultTryAgain` = 0
 :       jmp     RunDesktop
@@ -1143,7 +1140,7 @@ start:  MLI_CALL OPEN, open_selector_params
 
 error:  lda     #AlertID::insert_system_disk
         jsr     ShowAlert       ; `kAlertResultCancel` = 1
-        .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
         beq     start           ; `kAlertResultTryAgain` = 0
         rts
 .endproc ; LoadOverlayCopyDialog
@@ -1474,7 +1471,7 @@ check_entry_flags:
         stax    ptr
         ldy     #kSelectorEntryFlagsOffset
         lda     (ptr),y
-        .assert kSelectorEntryCopyOnBoot = 0, error, "enum mismatch"
+        ASSERT_EQUALS ::kSelectorEntryCopyOnBoot, 0
         beq     on_boot
         cmp     #kSelectorEntryCopyNever
         beq     use_entry_path  ; not copied
@@ -1558,7 +1555,7 @@ retry:
         cmp     #ERR_VOL_NOT_FOUND
         bne     fail
         txa
-        .assert kAlertResultCancel <> 0, error, "Branch assumes enum value"
+        ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
         bne     fail            ; `kAlertResultCancel` = 1
         jsr     SetCursorWatch
         jmp     retry
@@ -1645,7 +1642,7 @@ check_path:
         bne     :-
         lda     #AlertID::insert_source_disk
         jsr     ShowAlert
-        .assert kAlertResultCancel <> 0, error, "Branch assumes enum value"
+        ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
         bne     ClearSelectedIndex ; `kAlertResultCancel` = 1
         jmp     retry
 
@@ -2019,6 +2016,7 @@ loop_counter:
          ADJUSTCASE_BLOCK_BUFFER := $1C00
         .include "../lib/adjustfilecase.s"
 
+        ;; TODO: Move these out of the `app` scope
         .include "../toolkits/btk.s"
         BTKEntry := btk::BTKEntry
 

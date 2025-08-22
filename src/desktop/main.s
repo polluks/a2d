@@ -57,7 +57,7 @@ JT_RESUME_SPEED:        jmp     ResumeSpeed             ; *
 JT_READ_SETTING:        jmp     ReadSetting             ; *
 JT_GET_TICKS:           jmp     GetTickCount            ; *
 
-        .assert JUMP_TABLE_LAST = *, error, "Jump table mismatch"
+        ASSERT_EQUALS ::JUMP_TABLE_LAST, *
 
 .macro PROC_USED_IN_OVERLAY
         .assert * < OVERLAY_BUFFER || * >= OVERLAY_BUFFER + kOverlayBufferSize, error, "Routine used by overlays in overlay zone"
@@ -190,7 +190,7 @@ ClearUpdates := ClearUpdatesImpl::clear
         inc     tick_counter+1
         bne     :+
         inc     tick_counter+2
-
+:
         inc     loop_counter
         inc     loop_counter
         loop_counter := *+1
@@ -221,7 +221,6 @@ tick_counter:
 ;;; ============================================================
 
 ;;; Inputs: A = `window_id` from `update` event
-;;; NOTE: Modifies `active_window_id` which must be restored
 .proc UpdateWindow
         cmp     #kMaxDeskTopWindows+1 ; directory windows are 1-8
         RTS_IF_GE
@@ -235,12 +234,9 @@ tick_counter:
         MGTK_CALL MGTK::GetWinPort, getwinport_params
         jsr     DrawWindowHeader
 
-        ;; `MaybeOffsetUpdatePort` also relies on `window_grafport`
-        jsr     MaybeOffsetUpdatePort
-    IF_CC
-        ;; Actually draw the window icons/list
+        ;; `AdjustUpdatePortForEntries` also relies on `window_grafport`
+        jsr     AdjustUpdatePortForEntries
         jsr     DrawWindowEntries
-    END_IF
 
         rts
 .endproc ; UpdateWindow
@@ -570,7 +566,7 @@ window_click:
         MGTK_CALL MGTK::FindControlEx, findcontrolex_params
         lda     findcontrol_params::which_ctl
 
-        .assert MGTK::Ctl::not_a_control = 0, error, "enum mismatch"
+        ASSERT_EQUALS MGTK::Ctl::not_a_control, 0
     IF_ZERO
         ;; Ignore clicks in the header area
         copy8   clicked_window_id, screentowindow_params::window_id
@@ -992,7 +988,7 @@ ret:    rts
         window_id := *+1
         lda     #SELF_MODIFIED_BYTE
         jmp     ActivateWindow
-.endproc
+.endproc ; _ActivateClickedWindow
 clicked_window_id := _ActivateClickedWindow::window_id
 
 .endproc ; HandleClick
@@ -1026,7 +1022,7 @@ clicked_window_id := _ActivateClickedWindow::window_id
         jsr     UnsafeSetPortFromWindowId ; CHECKED
     IF_ZERO
         jsr     DrawWindowHeader
-        jsr     OffsetWindowGrafportAndSet
+        jsr     AdjustWindowPortForEntries
         jsr     DrawWindowEntries
     END_IF
         rts
@@ -1037,7 +1033,7 @@ clicked_window_id := _ActivateClickedWindow::window_id
 
 .proc ClearAndDrawActiveWindowEntries
         lda     active_window_id
-        jsr     UnsafeOffsetAndSetPortFromWindowId ; CHECKED
+        jsr     UnsafeSetPortFromWindowIdAndAdjustForEntries ; CHECKED
     IF_ZERO
         MGTK_CALL MGTK::PaintRect, window_grafport::maprect
         jsr     DrawWindowEntries
@@ -1049,13 +1045,13 @@ clicked_window_id := _ActivateClickedWindow::window_id
 
 ;;; Used only for file windows; adjusts port to account for header.
 ;;; Returns 0 if ok, `MGTK::Error::window_obscured` if the window is obscured.
-.proc UnsafeOffsetAndSetPortFromWindowId
+.proc UnsafeSetPortFromWindowIdAndAdjustForEntries
         sta     getwinport_params::window_id
         MGTK_CALL MGTK::GetWinPort, getwinport_params
         bne     :+              ; MGTK::Error::window_obscured
-        jsr     OffsetWindowGrafportAndSet
+        jsr     AdjustWindowPortForEntries
 :       rts
-.endproc ; UnsafeOffsetAndSetPortFromWindowId
+.endproc ; UnsafeSetPortFromWindowIdAndAdjustForEntries
 
 ;;; Used for all sorts of windows, not just file windows.
 ;;; For file windows, used for drawing headers (sometimes);
@@ -1131,8 +1127,12 @@ last_disk_in_devices_table:
 
 ;;; ============================================================
 
+;;; Preserves Y
 .proc CheckDisksInDevices
         status_buffer := $800
+
+        tya                     ; preserve Y
+        pha
 
         ldx     removable_device_table
         beq     done
@@ -1142,19 +1142,21 @@ last_disk_in_devices_table:
         sta     disk_in_device_table,x
         dex
         bne     :-
-done:   rts
+done:
+        pla
+        tay                     ; restore Y
+        rts
 
+;;; Input: A = unit_number
+;;; Preserves X
 check_disk_in_drive:
-        sta     unit_number
-        txa
+        tay                     ; Y = unit_number
+        txa                     ; preserve X
         pha
-        tya
-        pha
+        tya                     ; A = unit_number
 
-        unit_number := *+1
-        lda     #SELF_MODIFIED_BYTE
         jsr     FindSmartportDispatchAddress
-        bcs     notsp           ; not SmartPort
+    IF_CC                       ; is SmartPort
         stax    dispatch
         sty     status_unit_num
 
@@ -1166,19 +1168,17 @@ check_disk_in_drive:
 
         lda     status_buffer
         and     #$10            ; general status byte, $10 = disk in drive
-        beq     notsp
-        lda     #$FF
-        bne     finish
+      IF_NOT_ZERO
+        ldy     #$FF            ; is SmartPort and disk in drive
+        bne     finish          ; always
+      END_IF
+    END_IF
 
-notsp:  lda     #0              ; not SmartPort (or no disk in drive)
+        ldy     #0              ; not SmartPort or no disk in drive
 
-finish: sta     result
-        pla
-        tay
-        pla
-        tax
-        result := *+1
-        lda     #SELF_MODIFIED_BYTE
+finish: pla
+        tax                     ; restore X
+        tya                     ; A = result
         rts
 
         ;; params for call
@@ -1338,7 +1338,7 @@ table:
 .proc _CheckViewMenuItemImpl
 check:  lda     #MGTK::checkitem_check
         SKIP_NEXT_2_BYTE_INSTRUCTION
-        .assert MGTK::checkitem_uncheck <> $C0, error, "Bad BIT skip"
+        ASSERT_NOT_EQUALS MGTK::checkitem_uncheck, $C0, "Bad BIT skip"
 uncheck:lda     #MGTK::checkitem_uncheck
 
         sta     checkitem_params::check
@@ -1850,9 +1850,6 @@ str_preview_mus:
 str_preview_pt3:
         PASCAL_STRING .concat(kFilenameExtrasDir, "/PT3PLR.system")
 
-str_date_and_time:
-        PASCAL_STRING .concat(kFilenameDADir, "/", res_filename_control_panels, "/", res_filename_date_and_time)
-
 ;;; ============================================================
 
 str_empty:
@@ -1995,7 +1992,7 @@ done:   rts
 
         ldy     #kSelectorEntryFlagsOffset ; flag byte following name
         lda     (ptr),y
-        .assert kSelectorEntryCopyOnBoot = 0, error, "enum mismatch"
+        ASSERT_EQUALS ::kSelectorEntryCopyOnBoot, 0
         beq     on_boot
         cmp     #kSelectorEntryCopyNever
         beq     use_entry_path  ; not copied
@@ -2884,9 +2881,6 @@ CmdDiskCopy := CmdDiskCopyImpl::start
         ;; access = destroy/rename/write/read
         DEFINE_CREATE_PARAMS create_params, src_path_buf, ACCESS_DEFAULT, FT_DIRECTORY,, ST_LINKED_DIRECTORY
 
-str_new_folder:
-        PASCAL_STRING res_string_new_folder_default
-
 start:
         ;; Create with current date
         MLI_CALL GET_TIME
@@ -3556,30 +3550,24 @@ RefreshView := RefreshViewImpl::entry3
 
         ITK_CALL IconTK::FreeAll, cached_window_id
 
-        FALL_THROUGH_TO FreeCachedWindowIcons
-.endproc ; RemoveAndFreeCachedWindowIcons
-
-;;; ============================================================
-
-.proc FreeCachedWindowIcons
-        copy8   #0, index
-
-        index := *+1
-loop:   ldx     #SELF_MODIFIED_BYTE
-        cpx     cached_window_entry_count
+        ;; Remove any associations with windows
+        ldx     cached_window_entry_count
         beq     done
 
-        lda     cached_window_entry_list,x
+loop:   txa                     ; X = index+1
+        pha                     ; A = index+1
+        lda     cached_window_entry_list-1,x
         jsr     FindWindowIndexForDirIcon ; X = window id-1 if found
     IF_EQ
         copy8   #kWindowToDirIconNone, window_to_dir_icon_table,x
     END_IF
-
-        inc     index
+        pla                     ; A = index+1
+        tax                     ; X = index+1
+        dex
         bne     loop
 
 done:   rts
-.endproc ; FreeCachedWindowIcons
+.endproc ; RemoveAndFreeCachedWindowIcons
 
 ;;; ============================================================
 
@@ -3827,7 +3815,7 @@ spin:   jsr     GetSelectionWindow
         ;; If operation failed, then just leave the default name.
         result := *+1
         lda     #SELF_MODIFIED_BYTE
-        .assert kOperationFailed <> 0, error, "enum mismatch"
+        ASSERT_NOT_EQUALS kOperationFailed, 0
         RTS_IF_NOT_ZERO
 
         ;; Select and rename the file
@@ -3945,7 +3933,7 @@ icon_rect  .tag MGTK::Rect
 best_icon  .byte
 best_value .word
 END_PARAM_BLOCK
-        .assert icon_rect = cur_icon+1, error, "Must be adjacent"
+        ASSERT_EQUALS icon_rect, cur_icon+1, "Must be adjacent"
 
         kDirLeft  = 0
         kDirRight = 1
@@ -4456,7 +4444,7 @@ ret:    rts
     IF_ZERO
         jsr     InitSetDesktopPort
     ELSE
-        jsr     UnsafeOffsetAndSetPortFromWindowId ; CHECKED
+        jsr     UnsafeSetPortFromWindowIdAndAdjustForEntries ; CHECKED
     END_IF
     IF_ZERO                     ; Skip drawing if obscured
         jsr     CachedIconsScreenToWindow
@@ -5696,7 +5684,7 @@ clear:  jsr     ClearSelection
         ;; Set up drawing port, draw initial rect
         lda     window_id
     IF_NOT_ZERO
-        jsr     UnsafeOffsetAndSetPortFromWindowId ; ASSERT: not obscured
+        jsr     UnsafeSetPortFromWindowIdAndAdjustForEntries ; ASSERT: not obscured
     ELSE
         jsr     InitSetDesktopPort
     END_IF
@@ -5921,8 +5909,8 @@ dloop:
         jsr     RemoveWindowFileRecords
 
         ldx     cached_window_id
-        .assert kWindowToDirIconFree = 0, error, "enum mismatch"
-        .assert DeskTopSettings::kViewByIcon = 0, error, "enum mismatch"
+        ASSERT_EQUALS ::kWindowToDirIconFree, 0
+        ASSERT_EQUALS DeskTopSettings::kViewByIcon, 0
         lda     #0
         sta     window_to_dir_icon_table-1,x ; `kWindowToDirIconFree`
 
@@ -5999,9 +5987,13 @@ done:   rts
 ;;; ============================================================
 
 .proc ApplyActiveWinfoToWindowGrafport
+        lda     active_window_id
+        FALL_THROUGH_TO ApplyWinfoToWindowGrafport
+.endproc ; ApplyActiveWinfoToWindowGrafport
+
+.proc ApplyWinfoToWindowGrafport
         ptr := $06
 
-        lda     active_window_id
         jsr     GetWindowPtr
         addax   #MGTK::Winfo::port, ptr
         ldy     #.sizeof(MGTK::GrafPort) - 1
@@ -6010,7 +6002,7 @@ done:   rts
         dey
         bpl     :-
         rts
-.endproc ; ApplyActiveWinfoToWindowGrafport
+.endproc ; ApplyWinfoToWindowGrafport
 
 ;;; NOTE: Does not update icon positions, so only use in empty windows.
 .proc ResetActiveWindowViewport
@@ -6173,7 +6165,7 @@ no_win:
         jsr     _UpdateIcon
 
         ;; Set path (using `ptr`), size, contents, and volume free/used.
-        jsr     PrepareNewWindow
+        jsr     _PrepareNewWindow
 
         ;; Create the window
         lda     cached_window_id
@@ -6217,6 +6209,190 @@ no_win:
         copy16  #filename_buf - IconEntry::name, ptr
         rts
 .endproc ; _UpdateIcon
+
+;;; ------------------------------------------------------------
+;;; Set up path and coords for new window, contents and free/used.
+;;; Inputs: IconEntry pointer in $06, new window id in `cached_window_id`,
+;;;         `src_path_buf` has full path
+;;; Outputs: Winfo configured, window path table entry set
+
+.proc _PrepareNewWindow
+        icon_ptr := $06
+
+        ;; Copy icon name to window title
+.scope
+        name_ptr := icon_ptr
+        title_ptr := $08
+
+        jsr     PushPointers
+
+        lda     cached_window_id
+        jsr     GetWindowTitle
+        stax    title_ptr
+
+        add16_8 icon_ptr, #IconEntry::name, name_ptr
+
+        ldy     #0
+        lda     (name_ptr),y
+        tay
+:       lda     (name_ptr),y
+        sta     (title_ptr),y
+        dey
+        bpl     :-
+
+        jsr     PopPointers
+.endscope
+
+        ;; --------------------------------------------------
+        path_ptr := $08
+
+        ;; Copy previously composed path into window path
+        lda     cached_window_id
+        jsr     GetWindowPath
+        stax    path_ptr
+        ldy     src_path_buf
+:       lda     src_path_buf,y
+        sta     (path_ptr),y
+        dey
+        bpl     :-
+
+        ;; --------------------------------------------------
+
+        winfo_ptr := $06
+
+        ;; Set window coordinates
+        lda     cached_window_id
+        jsr     GetWindowPtr
+        stax    winfo_ptr
+        ldy     #MGTK::Winfo::port + MGTK::GrafPort::viewloc
+
+        ;; xcoord = (window_id-1) * 16 + kWindowXOffset
+        ;; ycoord = (window_id-1) * 8 + kWindowYOffset
+
+        lda     cached_window_id
+        sec
+        sbc     #1              ; * 16
+        asl     a
+        asl     a
+        asl     a
+        asl     a
+
+        pha
+        adc     #kWindowXOffset
+        sta     (winfo_ptr),y   ; viewloc::xcoord
+        iny
+        lda     #0
+        sta     (winfo_ptr),y
+        iny
+        pla
+
+        lsr     a               ; / 2
+        clc
+        adc     #kWindowYOffset
+        sta     (winfo_ptr),y   ; viewloc::ycoord
+        iny
+        lda     #0
+        sta     (winfo_ptr),y
+
+        ;; Map rect (initially empty, size assigned in `ComputeInitialWindowSize`)
+        lda     #0
+        ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + .sizeof(MGTK::Rect)-1
+        ldx     #.sizeof(MGTK::Rect)-1
+:       sta     (winfo_ptr),y
+        dey
+        dex
+        bpl     :-
+
+        ;; --------------------------------------------------
+        ;; Scrollbars - start off inactive but ready to go
+
+        lda     #MGTK::Scroll::option_present | MGTK::Scroll::option_thumb
+        ldy     #MGTK::Winfo::hscroll
+        sta     (winfo_ptr),y
+        ASSERT_EQUALS MGTK::Winfo::vscroll, MGTK::Winfo::hscroll + 1
+        iny
+        sta     (winfo_ptr),y
+
+        ;; --------------------------------------------------
+        ;; Read FileRecords
+
+        lda     cached_window_id
+        jsr     CreateFileRecordsForWindow
+
+        ;; --------------------------------------------------
+        ;; Update used/free table
+
+        lda     icon_param      ; set to `kWindowToDirIconNone` if opening via path
+    IF_NC
+        ;; If a windowed icon, source from that
+        jsr     GetIconWindow
+      IF_NOT_ZERO
+        ;; Windowed (folder) icon
+        asl     a
+        tax
+        copy16  window_k_used_table-2,x, vol_kb_used ; 1-based to 0-based
+        copy16  window_k_free_table-2,x, vol_kb_free
+      END_IF
+    END_IF
+
+        ;; Used cached window's details, which are correct now.
+        lda     cached_window_id
+        asl     a
+        tax
+        copy16  vol_kb_used, window_k_used_table-2,x ; 1-based to 0-based
+        copy16  vol_kb_free, window_k_free_table-2,x
+
+        copy16  window_k_used_table-2,x, window_draw_k_used_table-2,x ; 1-based to 0-based
+        copy16  window_k_free_table-2,x, window_draw_k_free_table-2,x
+
+        ;; --------------------------------------------------
+        ;; Create window and icons
+
+        bit     copy_new_window_bounds_flag
+    IF_NS
+        ;; DeskTopSettings::kViewByXXX
+        ldx     cached_window_id
+        copy8   new_window_view_by, win_view_by_table-1,x
+
+        ;; viewloc
+        ldy     #MGTK::Winfo::port + MGTK::GrafPort::viewloc + .sizeof(MGTK::Point)-1
+        ldx     #.sizeof(MGTK::Point)-1
+:       lda     new_window_viewloc,x
+        sta     (winfo_ptr),y
+        dey
+        dex
+        bpl     :-
+
+        ;; maprect
+        ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + .sizeof(MGTK::Rect)-1
+        ldx     #.sizeof(MGTK::Rect)-1
+:       lda     new_window_maprect,x
+        sta     (winfo_ptr),y
+        dey
+        dex
+        bpl     :-
+    END_IF
+
+        jsr     InitWindowEntriesAndIcons
+
+        bit     copy_new_window_bounds_flag
+    IF_NC
+        jsr     ComputeInitialWindowSize
+        jsr     AdjustViewportForNewIcons
+    END_IF
+
+        ;; --------------------------------------------------
+        ;; Animate the window being opened
+
+        lda     cached_window_id
+        jsr     GetWindowPath
+        jsr     IconToAnimate
+        ldx     cached_window_id
+        jsr     AnimateWindowOpen
+
+        rts
+.endproc ; _PrepareNewWindow
+
 .endproc ; OpenWindowImpl
 OpenWindowForIcon := OpenWindowImpl::for_icon
 OpenWindowForPath := OpenWindowImpl::for_path
@@ -6393,19 +6569,22 @@ err:    sec
         stax    pos_col::ycoord
 
         ;; Draw each list view row
-        lda     #0
-        sta     rows_done
-        rows_done := *+1
-rloop:  lda     #SELF_MODIFIED_BYTE
-        cmp     cached_window_entry_count
+        ldx     #0              ; X = index
+rloop:  cpx     cached_window_entry_count
         beq     done
-        tax
+        txa                     ; A = index
+        pha
         lda     cached_window_entry_list,x
 
         ;; Look up file record number
         jsr     GetIconRecordNum
         jsr     DrawListViewRow
-        inc     rows_done
+
+        MGTK_CALL MGTK::CheckEvents
+
+        pla                     ; A = index
+        tax                     ; X = index
+        inx
         jmp     rloop
 
         ;; --------------------------------------------------
@@ -6479,7 +6658,7 @@ done:
         ;; drawing can be done using `IconTK::DrawIconRaw` in a
         ;; clipped port.
 
-        jsr     UnsafeOffsetAndSetPortFromWindowId ; CHECKED
+        jsr     UnsafeSetPortFromWindowIdAndAdjustForEntries ; CHECKED
         RTS_IF_NOT_ZERO                            ; obscured
 
         jsr     PushPointers
@@ -6573,12 +6752,12 @@ done:   jsr     PopPointers     ; do not tail-call optimize!
 ;;; ============================================================
 ;;; Adjust grafport for header.
 
-.proc OffsetWindowGrafportAndSet
+.proc AdjustWindowPortForEntries
         add16_8 window_grafport::viewloc::ycoord, #kWindowHeaderHeight
         add16_8 window_grafport::maprect::y1, #kWindowHeaderHeight
         MGTK_CALL MGTK::SetPort, window_grafport
         rts
-.endproc ; OffsetWindowGrafportAndSet
+.endproc ; AdjustWindowPortForEntries
 
 ;;; ============================================================
 
@@ -7207,494 +7386,9 @@ finish:
         rts
 .endproc ; RemoveWindowFileRecords
 
-;;; ============================================================
-;;; Set up path and coords for new window, contents and free/used.
-;;; Inputs: IconEntry pointer in $06, new window id in `cached_window_id`,
-;;;         `src_path_buf` has full path
-;;; Outputs: Winfo configured, window path table entry set
-
-.proc PrepareNewWindow
-        icon_ptr := $06
-
-        ;; Copy icon name to window title
-.scope
-        name_ptr := icon_ptr
-        title_ptr := $08
-
-        jsr     PushPointers
-
-        lda     cached_window_id
-        jsr     GetWindowTitle
-        stax    title_ptr
-
-        add16_8 icon_ptr, #IconEntry::name, name_ptr
-
-        ldy     #0
-        lda     (name_ptr),y
-        tay
-:       lda     (name_ptr),y
-        sta     (title_ptr),y
-        dey
-        bpl     :-
-
-        jsr     PopPointers
-.endscope
-
-        ;; --------------------------------------------------
-        path_ptr := $08
-
-        ;; Copy previously composed path into window path
-        lda     cached_window_id
-        jsr     GetWindowPath
-        stax    path_ptr
-        ldy     src_path_buf
-:       lda     src_path_buf,y
-        sta     (path_ptr),y
-        dey
-        bpl     :-
-
-        ;; --------------------------------------------------
-
-        winfo_ptr := $06
-
-        ;; Set window coordinates
-        lda     cached_window_id
-        jsr     GetWindowPtr
-        stax    winfo_ptr
-        ldy     #MGTK::Winfo::port + MGTK::GrafPort::viewloc
-
-        ;; xcoord = (window_id-1) * 16 + kWindowXOffset
-        ;; ycoord = (window_id-1) * 8 + kWindowYOffset
-
-        lda     cached_window_id
-        sec
-        sbc     #1              ; * 16
-        asl     a
-        asl     a
-        asl     a
-        asl     a
-
-        pha
-        adc     #kWindowXOffset
-        sta     (winfo_ptr),y   ; viewloc::xcoord
-        iny
-        lda     #0
-        sta     (winfo_ptr),y
-        iny
-        pla
-
-        lsr     a               ; / 2
-        clc
-        adc     #kWindowYOffset
-        sta     (winfo_ptr),y   ; viewloc::ycoord
-        iny
-        lda     #0
-        sta     (winfo_ptr),y
-
-        ;; Map rect (initially empty, size assigned in `ComputeInitialWindowSize`)
-        lda     #0
-        ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + .sizeof(MGTK::Rect)-1
-        ldx     #.sizeof(MGTK::Rect)-1
-:       sta     (winfo_ptr),y
-        dey
-        dex
-        bpl     :-
-
-        ;; --------------------------------------------------
-        ;; Scrollbars - start off inactive but ready to go
-
-        lda     #MGTK::Scroll::option_present | MGTK::Scroll::option_thumb
-        ldy     #MGTK::Winfo::hscroll
-        sta     (winfo_ptr),y
-        .assert MGTK::Winfo::vscroll = MGTK::Winfo::hscroll + 1, error, "enum mismatch"
-        iny
-        sta     (winfo_ptr),y
-
-        ;; --------------------------------------------------
-        ;; Read FileRecords
-
-        lda     cached_window_id
-        jsr     CreateFileRecordsForWindow
-
-        ;; --------------------------------------------------
-        ;; Update used/free table
-
-        lda     icon_param      ; set to `kWindowToDirIconNone` if opening via path
-    IF_NC
-        ;; If a windowed icon, source from that
-        jsr     GetIconWindow
-      IF_NOT_ZERO
-        ;; Windowed (folder) icon
-        asl     a
-        tax
-        copy16  window_k_used_table-2,x, vol_kb_used ; 1-based to 0-based
-        copy16  window_k_free_table-2,x, vol_kb_free
-      END_IF
-    END_IF
-
-        ;; Used cached window's details, which are correct now.
-        lda     cached_window_id
-        asl     a
-        tax
-        copy16  vol_kb_used, window_k_used_table-2,x ; 1-based to 0-based
-        copy16  vol_kb_free, window_k_free_table-2,x
-
-        copy16  window_k_used_table-2,x, window_draw_k_used_table-2,x ; 1-based to 0-based
-        copy16  window_k_free_table-2,x, window_draw_k_free_table-2,x
-
-        ;; --------------------------------------------------
-        ;; Create window and icons
-
-        bit     copy_new_window_bounds_flag
-    IF_NS
-        ;; DeskTopSettings::kViewByXXX
-        ldx     cached_window_id
-        copy8   new_window_view_by, win_view_by_table-1,x
-
-        ;; viewloc
-        ldy     #MGTK::Winfo::port + MGTK::GrafPort::viewloc + .sizeof(MGTK::Point)-1
-        ldx     #.sizeof(MGTK::Point)-1
-:       lda     new_window_viewloc,x
-        sta     (winfo_ptr),y
-        dey
-        dex
-        bpl     :-
-
-        ;; maprect
-        ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + .sizeof(MGTK::Rect)-1
-        ldx     #.sizeof(MGTK::Rect)-1
-:       lda     new_window_maprect,x
-        sta     (winfo_ptr),y
-        dey
-        dex
-        bpl     :-
-    END_IF
-
-        jsr     InitWindowEntriesAndIcons
-
-        bit     copy_new_window_bounds_flag
-    IF_NC
-        jsr     ComputeInitialWindowSize
-        jsr     AdjustViewportForNewIcons
-    END_IF
-
-        ;; --------------------------------------------------
-        ;; Animate the window being opened
-
-        lda     cached_window_id
-        jsr     GetWindowPath
-        jsr     IconToAnimate
-        ldx     cached_window_id
-        jsr     AnimateWindowOpen
-
-        rts
-.endproc ; PrepareNewWindow
 
 copy_new_window_bounds_flag:
         .byte   0
-
-;;; ============================================================
-;;; File Icon Entry Construction
-;;; Inputs: `cached_window_id` must be set
-
-.proc CreateIconsForWindowImpl
-
-;;; Local variables on ZP
-PARAM_BLOCK, $50
-icon_type       .addr
-icon_flags      .byte
-icon_height     .word
-
-        ;; Updated based on view type
-initial_xcoord  .word
-icons_this_row  .byte
-
-        ;; Initial values when populating a list view
-icons_per_row   .byte
-col_spacing     .byte
-row_spacing     .byte
-icon_coords     .tag    MGTK::Point
-END_PARAM_BLOCK
-        init_view := icons_per_row
-        init_view_size = 3 + .sizeof(MGTK::Point)
-
-        ;; Templates for populating initial values, based on view type
-init_views:
-init_list_view:
-        .byte   1, 0, kListItemHeight
-        .word   kListViewInitialLeft, kListViewInitialTop
-        .assert * - init_list_view = init_view_size, error, "struct size"
-init_icon_view:
-        .byte   kIconViewIconsPerRow, kIconViewSpacingX, kIconViewSpacingY
-        .word   kIconViewInitialLeft, kIconViewInitialTop
-        .assert * - init_icon_view = init_view_size, error, "struct size"
-init_smicon_view:
-        .byte   kSmallIconViewIconsPerRow, kSmallIconViewSpacingX, kSmallIconViewSpacingY
-        .word   kSmallIconViewInitialLeft, kSmallIconViewInitialTop
-        .assert * - init_smicon_view = init_view_size, error, "struct size"
-
-.proc _Start
-        jsr     PushPointers
-
-        ;; Select the template
-        jsr     GetCachedWindowViewBy ; N=0 is icon view, N=1 is list view
-    IF_NEG
-        ldy     #init_list_view - init_views + init_view_size-1
-    ELSE
-        .assert DeskTopSettings::kViewByIcon = 0, error, "enum mismatch"
-      IF_ZERO
-        ldy     #init_icon_view - init_views + init_view_size-1
-      ELSE
-        ldy     #init_smicon_view - init_views + init_view_size-1
-      END_IF
-    END_IF
-
-        ;; Populate the initial values from the template
-        ldx     #init_view_size-1
-:       lda     init_views,y
-        sta     init_view,x
-        dey
-        dex
-        bpl     :-
-
-        ;; Init/zero out the rest of the state
-        copy16  icon_coords+MGTK::Point::xcoord, initial_xcoord
-
-        lda     #0
-        sta     icons_this_row
-        sta     index
-
-        ;; Copy `cached_window_entry_list` to temp location
-        record_order_list := $800
-        ldx     cached_window_entry_count
-        stx     num_files
-        dex
-:       lda     cached_window_entry_list,x
-        sta     record_order_list,x
-        dex
-        bpl     :-
-
-        copy8   #0, cached_window_entry_count
-
-        ;; Get base pointer to records
-        lda     cached_window_id
-        jsr     GetFileRecordListForWindow
-        addax   #1, records_base_ptr ; first byte in list is the list size
-
-        lda     cached_window_id
-        sta     active_window_id
-
-        ;; Loop over files, creating icon for each
-        index := *+1
-:       ldx     #SELF_MODIFIED_BYTE
-        num_files := *+1
-        cpx     #SELF_MODIFIED_BYTE
-        beq     :+
-
-        ;; Get record from ordered list
-        lda     record_order_list,x
-        tax                     ; 1-based to 0-based
-        dex
-        txa
-        pha                     ; A = record_num-1
-        .assert .sizeof(FileRecord) = 32, error, "FileRecord size must be 2^5"
-        jsr     ATimes32        ; A,X = A * 32
-        record_ptr := $08
-        addax   records_base_ptr, record_ptr
-        pla                     ; A = record_num-1
-        jsr     _AllocAndPopulateFileIcon
-
-        inc     index
-        bne     :-              ; always
-:
-        jsr     CachedIconsWindowToScreen
-        jsr     PopPointers     ; do not tail-call optimise!
-        rts
-
-records_base_ptr:
-        .word   0
-
-.endproc ; _Start
-
-;;; ============================================================
-;;; Create icon
-;;; Inputs: A = record_num, $08 = `FileRecord`
-
-.proc _AllocAndPopulateFileIcon
-        icon_entry  := $06
-        file_record := $08
-        name_tmp := $1800
-
-        pha                     ; A = record_num
-
-        inc     icon_count
-        ITK_CALL IconTK::AllocIcon, get_icon_entry_params
-        copy16  get_icon_entry_params::addr, icon_entry
-        lda     get_icon_entry_params::id
-        sta     icon_num
-        ldx     cached_window_entry_count
-        inc     cached_window_entry_count
-        sta     cached_window_entry_list,x
-
-        ;; Assign record number
-        pla                     ; A = record_num
-        ldy     #IconEntry::record_num
-        sta     (icon_entry),y
-
-        ;; Bank in the `FileRecord` entries
-        bit     LCBANK2
-        bit     LCBANK2
-
-        ;; Copy the name out
-        .assert FileRecord::name = 0, error, "Name must be at start of FileRecord"
-        ldy     #kMaxFilenameLength
-:       lda     (file_record),y
-        sta     name_tmp,y
-        dey
-        bpl     :-
-
-        ;; Copy out file metadata needed to determine icon type
-        jsr     FileRecordToSrcFileInfo ; uses `FileRecord` ptr in $08
-
-        ;; Done with `FileRecord` entries
-        bit     LCBANK1
-        bit     LCBANK1
-
-        ;; Determine icon type
-        jsr     GetCachedWindowViewBy
-        sta     view_by
-        ldax    #name_tmp
-        jsr     DetermineIconType ; uses passed name and `src_file_info_params`
-        view_by := *+1
-        ldy     #SELF_MODIFIED_BYTE
-        jsr     _FindIconDetailsForIconType
-
-        ;; Copy name into `IconEntry`
-        ldy     #IconEntry::name + kMaxFilenameLength
-        ldx     #kMaxFilenameLength
-:       lda     name_tmp,x
-        sta     (icon_entry),y
-        dey
-        dex
-        bpl     :-
-
-        ;; Assign location
-        ldy     #IconEntry::iconx + .sizeof(MGTK::Point) - 1
-        ldx     #.sizeof(MGTK::Point) - 1
-:       lda     icon_coords,x
-        sta     (icon_entry),y
-        dey
-        dex
-        bpl     :-
-
-        jsr     GetCachedWindowViewBy
-        .assert DeskTopSettings::kViewByIcon = 0, error, "enum mismatch"
-    IF_ZERO
-        ;; Icon view: include y-offset
-        ldy     #IconEntry::icony
-        sub16in (icon_entry),y, icon_height, (icon_entry),y
-    END_IF
-
-        ;; Next col
-        add16_8 icon_coords+MGTK::Point::xcoord, col_spacing
-        inc     icons_this_row
-        ;; Next row?
-        lda     icons_this_row
-        cmp     icons_per_row
-    IF_EQ
-        add16_8 icon_coords+MGTK::Point::ycoord, row_spacing
-        copy16  initial_xcoord, icon_coords+MGTK::Point::xcoord
-        copy8   #0, icons_this_row
-    END_IF
-
-        ;; Assign `IconEntry::win_flags`
-        lda     cached_window_id
-        ora     icon_flags
-        ldy     #IconEntry::win_flags
-        sta     (icon_entry),y
-
-        ;; Assign `IconEntry::type`
-        ldy     #IconEntry::type
-        copy8   icon_type, (icon_entry),y
-
-        ;; If folder, see if there's an associated window
-        lda     src_file_info_params::file_type
-        cmp     #FT_DIRECTORY
-        bne     :+
-        icon_num := *+1
-        lda     #SELF_MODIFIED_BYTE
-        jsr     GetIconPath     ; `path_buf3` set to path; A=0 on success
-        bne     :+              ; too long
-
-        jsr     PushPointers
-        param_call FindWindowForPath, path_buf3
-        jsr     PopPointers
-        tax                     ; A = window id, 0 if none
-        beq     :+
-        lda     icon_num
-        sta     window_to_dir_icon_table-1,x
-
-        ;; Update `IconEntry::state`
-        ldy     #IconEntry::state ; mark as dimmed
-        lda     (icon_entry),y
-        ora     #kIconEntryStateDimmed
-        sta     (icon_entry),y
-:
-        rts
-.endproc ; _AllocAndPopulateFileIcon
-
-;;; ============================================================
-;;; Inputs: A = `IconType` member, Y = `DeskTopSettings::kViewByXXX` value
-;;; Outputs: Populates `icon_flags`, `icon_type`, `icon_height`
-
-.proc _FindIconDetailsForIconType
-        ptr := $6
-
-        sty     view_by
-        jsr     PushPointers
-
-        ;; For populating `IconEntry::win_flags`
-        tay                     ; Y = `IconType`
-        lda     icontype_iconentryflags_table,y
-        sta     icon_flags
-
-        ;; Adjust type and flags based on view
-        view_by := *+1
-        lda     #SELF_MODIFIED_BYTE
-        .assert DeskTopSettings::kViewByIcon = 0, error, "enum mismatch"
-    IF_NOT_ZERO
-        ;; List View / Small Icon View
-        php
-        lda     icon_flags
-        ora     #kIconEntryFlagsSmall
-        plp
-      IF_NS
-        ora     #kIconEntryFlagsFixed
-      END_IF
-        sta     icon_flags
-
-        lda     icontype_to_smicon_table,y
-        tay
-   END_IF
-
-        ;; For populating `IconEntry::type`
-        sty     icon_type
-
-        ;; Icon height will be needed too
-        tya
-        asl                     ; *= 2
-        tay
-        ldax    type_icons_table,y
-        stax    ptr
-        ldy     #IconResource::maprect + MGTK::Rect::y2
-        copy16in (ptr),y, icon_height
-
-        jsr     PopPointers     ; do not tail-call optimise!
-        rts
-.endproc ; _FindIconDetailsForIconType
-
-.endproc ; CreateIconsForWindowImpl
-CreateIconsForWindow := CreateIconsForWindowImpl::_Start
 
 ;;; ============================================================
 ;;; Compute the window initial size for `cached_window_id`,
@@ -7850,13 +7544,13 @@ loop:   ldy     #ICTRecord::mask ; $00 if done
         ;; Check type (with mask)
 :       and     file_type       ; A = type & mask
         iny                     ; ASSERT: Y = ICTRecord::filetype
-        .assert ICTRecord::filetype = ICTRecord::mask+1, error, "enum mismatch"
+        ASSERT_EQUALS ICTRecord::filetype, ICTRecord::mask+1
         cmp     (ptr),y         ; type check
         jne     next
 
         ;; Flags
         iny                     ; ASSERT: Y = ICTRecord::flags
-        .assert ICTRecord::flags = ICTRecord::filetype+1, error, "enum mismatch"
+        ASSERT_EQUALS ICTRecord::flags, ICTRecord::filetype+1
         lda     (ptr),y
         sta     flags
 
@@ -7864,7 +7558,7 @@ loop:   ldy     #ICTRecord::mask ; $00 if done
         bit     flags
     IF_NS                       ; bit 7 = compare aux
         iny                     ; ASSERT: Y = FTORecord::aux_suf
-        .assert ICTRecord::aux_suf = ICTRecord::flags+1, error, "enum mismatch"
+        ASSERT_EQUALS ICTRecord::aux_suf, ICTRecord::flags+1
         lda     aux_type
         cmp     (ptr),y
         bne     next
@@ -8163,7 +7857,7 @@ more:   lda     cached_window_entry_list,x
         ITK_CALL IconTK::GetIconBounds, icon_param ; inits `tmp_rect`
 
         jsr     GetCachedWindowViewBy
-        .assert DeskTopSettings::kViewByIcon = 0, error, "enum mismatch"
+        ASSERT_EQUALS DeskTopSettings::kViewByIcon, 0
     IF_ZERO
         ;; Pretend icon is max height
         sub16   tmp_rect::y2, #kMaxIconTotalHeight, tmp_rect::y1
@@ -8229,8 +7923,308 @@ next:   inc     icon_num
         ;; --------------------------------------------------
         ;; Create icons
 
-        jsr     CreateIconsForWindow
+        jsr     _CreateIconsForWindow
         jmp     StoreWindowEntryTable
+
+;;; ------------------------------------------------------------
+;;; File Icon Entry Construction
+;;; Inputs: `cached_window_id` must be set
+
+.proc _CreateIconsForWindow
+
+;;; Local variables on ZP
+PARAM_BLOCK, $50
+icon_type       .addr
+icon_flags      .byte
+icon_height     .word
+
+        ;; Updated based on view type
+initial_xcoord  .word
+icons_this_row  .byte
+
+        ;; Initial values when populating a list view
+icons_per_row   .byte
+col_spacing     .byte
+row_spacing     .byte
+icon_coords     .tag    MGTK::Point
+END_PARAM_BLOCK
+        init_view := icons_per_row
+        init_view_size = 3 + .sizeof(MGTK::Point)
+
+        jsr     PushPointers
+
+        ;; Select the template
+        jsr     GetCachedWindowViewBy ; N=0 is icon view, N=1 is list view
+    IF_NEG
+        ldy     #init_list_view - init_views + init_view_size-1
+    ELSE
+        ASSERT_EQUALS DeskTopSettings::kViewByIcon, 0
+      IF_ZERO
+        ldy     #init_icon_view - init_views + init_view_size-1
+      ELSE
+        ldy     #init_smicon_view - init_views + init_view_size-1
+      END_IF
+    END_IF
+
+        ;; Populate the initial values from the template
+        ldx     #init_view_size-1
+:       lda     init_views,y
+        sta     init_view,x
+        dey
+        dex
+        bpl     :-
+
+        ;; Init/zero out the rest of the state
+        copy16  icon_coords+MGTK::Point::xcoord, initial_xcoord
+
+        lda     #0
+        sta     icons_this_row
+        sta     index
+
+        ;; Copy `cached_window_entry_list` to temp location
+        record_order_list := $800
+        ldx     cached_window_entry_count
+        stx     num_files
+        dex
+:       lda     cached_window_entry_list,x
+        sta     record_order_list,x
+        dex
+        bpl     :-
+
+        copy8   #0, cached_window_entry_count
+
+        ;; Get base pointer to records
+        lda     cached_window_id
+        jsr     GetFileRecordListForWindow
+        addax   #1, records_base_ptr ; first byte in list is the list size
+
+        lda     cached_window_id
+        sta     active_window_id
+
+        ;; Loop over files, creating icon for each
+        index := *+1
+:       ldx     #SELF_MODIFIED_BYTE
+        num_files := *+1
+        cpx     #SELF_MODIFIED_BYTE
+        beq     :+
+
+        ;; Get record from ordered list
+        lda     record_order_list,x
+        tax                     ; 1-based to 0-based
+        dex
+        txa
+        pha                     ; A = record_num-1
+        ASSERT_EQUALS .sizeof(FileRecord), 32
+        jsr     ATimes32        ; A,X = A * 32
+        record_ptr := $08
+        addax   records_base_ptr, record_ptr
+        pla                     ; A = record_num-1
+        jsr     _AllocAndPopulateFileIcon
+
+        inc     index
+        bne     :-              ; always
+:
+        jsr     CachedIconsWindowToScreen
+        jsr     PopPointers     ; do not tail-call optimise!
+        rts
+
+        ;; Templates for populating initial values, based on view type
+init_views:
+init_list_view:
+        .byte   1, 0, kListItemHeight
+        .word   kListViewInitialLeft, kListViewInitialTop
+        ASSERT_EQUALS * - init_list_view, init_view_size
+init_icon_view:
+        .byte   kIconViewIconsPerRow, kIconViewSpacingX, kIconViewSpacingY
+        .word   kIconViewInitialLeft, kIconViewInitialTop
+        ASSERT_EQUALS * - init_icon_view, init_view_size
+init_smicon_view:
+        .byte   kSmallIconViewIconsPerRow, kSmallIconViewSpacingX, kSmallIconViewSpacingY
+        .word   kSmallIconViewInitialLeft, kSmallIconViewInitialTop
+        ASSERT_EQUALS * - init_smicon_view, init_view_size
+
+records_base_ptr:
+        .word   0
+
+;;; ============================================================
+;;; Create icon
+;;; Inputs: A = record_num, $08 = `FileRecord`
+
+.proc _AllocAndPopulateFileIcon
+        icon_entry  := $06
+        file_record := $08
+        name_tmp := $1800
+
+        pha                     ; A = record_num
+
+        inc     icon_count
+        ITK_CALL IconTK::AllocIcon, get_icon_entry_params
+        copy16  get_icon_entry_params::addr, icon_entry
+        lda     get_icon_entry_params::id
+        sta     icon_num
+        ldx     cached_window_entry_count
+        inc     cached_window_entry_count
+        sta     cached_window_entry_list,x
+
+        ;; Assign record number
+        pla                     ; A = record_num
+        ldy     #IconEntry::record_num
+        sta     (icon_entry),y
+
+        ;; Bank in the `FileRecord` entries
+        bit     LCBANK2
+        bit     LCBANK2
+
+        ;; Copy the name out
+        ASSERT_EQUALS FileRecord::name, 0
+        ldy     #kMaxFilenameLength
+:       lda     (file_record),y
+        sta     name_tmp,y
+        dey
+        bpl     :-
+
+        ;; Copy out file metadata needed to determine icon type
+        jsr     FileRecordToSrcFileInfo ; uses `FileRecord` ptr in $08
+
+        ;; Done with `FileRecord` entries
+        bit     LCBANK1
+        bit     LCBANK1
+
+        ;; Determine icon type
+        jsr     GetCachedWindowViewBy
+        sta     view_by
+        ldax    #name_tmp
+        jsr     DetermineIconType ; uses passed name and `src_file_info_params`
+        view_by := *+1
+        ldy     #SELF_MODIFIED_BYTE
+        jsr     _FindIconDetailsForIconType
+
+        ;; Copy name into `IconEntry`
+        ldy     #IconEntry::name + kMaxFilenameLength
+        ldx     #kMaxFilenameLength
+:       lda     name_tmp,x
+        sta     (icon_entry),y
+        dey
+        dex
+        bpl     :-
+
+        ;; Assign location
+        ldy     #IconEntry::iconx + .sizeof(MGTK::Point) - 1
+        ldx     #.sizeof(MGTK::Point) - 1
+:       lda     icon_coords,x
+        sta     (icon_entry),y
+        dey
+        dex
+        bpl     :-
+
+        jsr     GetCachedWindowViewBy
+        ASSERT_EQUALS DeskTopSettings::kViewByIcon, 0
+    IF_ZERO
+        ;; Icon view: include y-offset
+        ldy     #IconEntry::icony
+        sub16in (icon_entry),y, icon_height, (icon_entry),y
+    END_IF
+
+        ;; Next col
+        add16_8 icon_coords+MGTK::Point::xcoord, col_spacing
+        inc     icons_this_row
+        ;; Next row?
+        lda     icons_this_row
+        cmp     icons_per_row
+    IF_EQ
+        add16_8 icon_coords+MGTK::Point::ycoord, row_spacing
+        copy16  initial_xcoord, icon_coords+MGTK::Point::xcoord
+        copy8   #0, icons_this_row
+    END_IF
+
+        ;; Assign `IconEntry::win_flags`
+        lda     cached_window_id
+        ora     icon_flags
+        ldy     #IconEntry::win_flags
+        sta     (icon_entry),y
+
+        ;; Assign `IconEntry::type`
+        ldy     #IconEntry::type
+        copy8   icon_type, (icon_entry),y
+
+        ;; If folder, see if there's an associated window
+        lda     src_file_info_params::file_type
+        cmp     #FT_DIRECTORY
+        bne     :+
+        icon_num := *+1
+        lda     #SELF_MODIFIED_BYTE
+        jsr     GetIconPath     ; `path_buf3` set to path; A=0 on success
+        bne     :+              ; too long
+
+        jsr     PushPointers
+        param_call FindWindowForPath, path_buf3
+        jsr     PopPointers
+        tax                     ; A = window id, 0 if none
+        beq     :+
+        lda     icon_num
+        sta     window_to_dir_icon_table-1,x
+
+        ;; Update `IconEntry::state`
+        ldy     #IconEntry::state ; mark as dimmed
+        lda     (icon_entry),y
+        ora     #kIconEntryStateDimmed
+        sta     (icon_entry),y
+:
+        rts
+.endproc ; _AllocAndPopulateFileIcon
+
+;;; ============================================================
+;;; Inputs: A = `IconType` member, Y = `DeskTopSettings::kViewByXXX` value
+;;; Outputs: Populates `icon_flags`, `icon_type`, `icon_height`
+
+.proc _FindIconDetailsForIconType
+        ptr := $6
+
+        sty     view_by
+        jsr     PushPointers
+
+        ;; For populating `IconEntry::win_flags`
+        tay                     ; Y = `IconType`
+        lda     icontype_iconentryflags_table,y
+        sta     icon_flags
+
+        ;; Adjust type and flags based on view
+        view_by := *+1
+        lda     #SELF_MODIFIED_BYTE
+        ASSERT_EQUALS DeskTopSettings::kViewByIcon, 0
+    IF_NOT_ZERO
+        ;; List View / Small Icon View
+        php
+        lda     icon_flags
+        ora     #kIconEntryFlagsSmall
+        plp
+      IF_NS
+        ora     #kIconEntryFlagsFixed
+      END_IF
+        sta     icon_flags
+
+        lda     icontype_to_smicon_table,y
+        tay
+   END_IF
+
+        ;; For populating `IconEntry::type`
+        sty     icon_type
+
+        ;; Icon height will be needed too
+        tya
+        asl                     ; *= 2
+        tay
+        ldax    type_icons_table,y
+        stax    ptr
+        ldy     #IconResource::maprect + MGTK::Rect::y2
+        copy16in (ptr),y, icon_height
+
+        jsr     PopPointers     ; do not tail-call optimise!
+        rts
+.endproc ; _FindIconDetailsForIconType
+
+.endproc ; _CreateIconsForWindow
+
 .endproc ; InitWindowEntriesAndIcons
 
 ;;; ============================================================
@@ -8353,7 +8347,7 @@ next:   inc     inner
         tya
 
         ;; Calculate the pointer
-        .assert .sizeof(FileRecord) = 32, error, "FileRecord size must be 2^5"
+        ASSERT_EQUALS .sizeof(FileRecord), 32
         jsr     ATimes32
 
         clc
@@ -8381,7 +8375,7 @@ next:   inc     inner
         lda     #SELF_MODIFIED_BYTE
         cmp     #DeskTopSettings::kViewByName
     IF_EQ
-        .assert FileRecord::name = 0, error, "Assumes name is at offset 0"
+        ASSERT_EQUALS FileRecord::name, 0
         jmp     CompareStrings
     END_IF
 
@@ -8513,7 +8507,7 @@ _CompareFileRecords_sort_by := _CompareFileRecords::sort_by
 
         ptr := $06
 
-        .assert .sizeof(FileRecord) = 32, error, "FileRecord size must be 2^5"
+        ASSERT_EQUALS .sizeof(FileRecord), 32
         jsr     ATimes32      ; A,X = A * 32
         addax   file_record_ptr, ptr
 
@@ -8724,7 +8718,7 @@ append_date_strings:
 
         ldx     #DeskTopSettings::intl_date_order
         jsr     ReadSetting
-        .assert DeskTopSettings::kDateOrderMDY = 0, error, "enum mismatch"
+        ASSERT_EQUALS DeskTopSettings::kDateOrderMDY, 0
       IF_EQ
         ;; Month Day, Year
         jsr     _AppendMonthString
@@ -9355,7 +9349,7 @@ done:
         ;; Technical Note: SmartPort #4: SmartPort Device Types
         ;; https://web.archive.org/web/2007/http://web.pdx.edu/~heiss/technotes/smpt/tn.smpt.4.html
         lda     dib_buffer+SPDIB::Device_Type_Code
-        .assert SPDeviceType::MemoryExpansionCard = 0, error, "enum mismatch"
+        ASSERT_EQUALS SPDeviceType::MemoryExpansionCard, 0
         bne     :+            ; $00 = Memory Expansion Card (RAM Disk)
         ldax    #dib_buffer+SPDIB::ID_String_Length
         ldy     #IconType::ramdisk
@@ -9375,13 +9369,12 @@ done:
 not_sp:
         ;; Not SmartPort - try AppleTalk
         MLI_CALL READ_BLOCK, block_params
-        bcc     :+
         cmp     #ERR_NETWORK_ERROR
-        bne     :+
+    IF_EQ
         ldax    #str_device_type_appletalk
         ldy     #IconType::fileshare
         rts
-:
+    END_IF
 
         ;; RAM-based driver or not SmartPort
 generic:
@@ -9740,15 +9733,7 @@ open:   ldy     #$00
         ;; --------------------------------------------------
         ;; Get window rect - used as last rect
 
-        jsr     GetWindowPtr    ; copy window's port somewhere handy
-        stax    ptr
-        ldy     #MGTK::Winfo::port + .sizeof(MGTK::GrafPort)-1
-        ldx     #.sizeof(MGTK::GrafPort)-1
-:       lda     (ptr),y
-        sta     window_grafport,x
-        dey
-        dex
-        bpl     :-
+        jsr     ApplyWinfoToWindowGrafport
 
         ;; Convert viewloc and maprect to bounding rect
         COPY_STRUCT MGTK::Point, window_grafport + MGTK::GrafPort::viewloc, win_rect + MGTK::Rect::topleft
@@ -9981,17 +9966,18 @@ target_is_icon:
 ;;; Operations where source/target paths are passed by callers
 
 ;;; File > Duplicate - for a single file copy
-;;; Caller sets `path_buf3` (source) and `path_buf4` (destination
+;;; Caller sets `path_buf3` (source) and `path_buf4` (destination)
 .proc DoCopyFile
         copy8   #0, operation_flags ; bit7=0 = copy/delete
         copy8   #0, move_flag
         tsx
         stx     stack_stash
 
-        jsr     PrepCallbacksForEnumeration
+        jsr     PrepTraversalCallbacksForEnumeration
         jsr     OpenCopyProgressDialog
+        jsr     SetDstIsAppleShareFlag  ; uses `path_buf4`, may fail
         jsr     EnumerationProcessSelectedFile
-        jsr     PrepCallbacksForCopy
+        jsr     PrepTraversalCallbacksForCopy
         FALL_THROUGH_TO DoCopyCommon
 .endproc ; DoCopyFile
 
@@ -10009,12 +9995,14 @@ FinishOperation:
 .proc DoCopyToRAM
         copy8   #0, move_flag
         copy8   #%11000000, operation_flags ; bits7&6=1 = copy to RAMCard
+        copy8   #0, dst_is_appleshare_flag  ; by definition, not AppleShare
         tsx
         stx     stack_stash
-        jsr     PrepCallbacksForEnumeration
-        jsr     OpenDownloadProgressDialog
+
+        jsr     PrepTraversalCallbacksForEnumeration
+        jsr     OpenCopyProgressDialog
         jsr     EnumerationProcessSelectedFile
-        jsr     PrepCallbacksForDownload
+        jsr     PrepTraversalCallbacksForDownload
         jmp     DoCopyCommon
 .endproc ; DoCopyToRAM
 
@@ -10032,17 +10020,18 @@ FinishOperation:
 :       SKIP_NEXT_2_BYTE_INSTRUCTION
 
 ep_always_copy:
-        lda     #0
+        lda     #0              ; do not convert to `copy8`!
 
         sta     move_flag
 
         copy8   #0, operation_flags ; bit7=0 = copy/delete
         copy8   #$00, copy_delete_flags ; bit7=0 = copy
-
         tsx
         stx     stack_stash
-        jsr     PrepCallbacksForEnumeration
+
+        jsr     PrepTraversalCallbacksForEnumeration
         jsr     OpenCopyProgressDialog
+        jsr     SetDstIsAppleShareFlag  ; uses `path_buf4`, may fail
         jmp     OperationOnSelection
 .endproc ; DoCopyOrMoveSelection
 DoCopySelection := DoCopyOrMoveSelection::ep_always_copy
@@ -10053,10 +10042,10 @@ DoCopySelection := DoCopyOrMoveSelection::ep_always_copy
         copy8   #0, move_flag
         copy8   #0, operation_flags ; bit7=0 = copy/delete
         copy8   #$80, copy_delete_flags ; bit7=1 = delete
-
         tsx
         stx     stack_stash
-        jsr     PrepCallbacksForEnumeration
+
+        jsr     PrepTraversalCallbacksForEnumeration
         jsr     OpenDeleteProgressDialog
         FALL_THROUGH_TO OperationOnSelection
 .endproc ; DoDeleteSelection
@@ -10071,12 +10060,8 @@ DoCopySelection := DoCopyOrMoveSelection::ep_always_copy
 
 iterate_selection:
         ldx     #0
-        stx     icon_index
-
-        ;; --------------------------------------------------
-
-        icon_index := *+1
-loop:   ldx     #SELF_MODIFIED_BYTE
+loop:   txa                     ; X = index
+        pha                     ; A = index
         lda     selected_icon_list,x
         cmp     trash_icon_num
         beq     next_icon
@@ -10117,9 +10102,9 @@ loop:   ldx     #SELF_MODIFIED_BYTE
         jsr     OpProcessSelectedFile
 
 next_icon:
-
-        inc     icon_index
-        ldx     icon_index
+        pla                     ; A = index
+        tax                     ; X = index
+        inx
         cpx     selected_icon_count
         bne     loop
 
@@ -10133,47 +10118,13 @@ next_icon:
     END_IF
 
         ;; No, we finished enumerating. Now do the real work.
-
-        ;; Do we need to show a confirmation dialog? (i.e. Delete)
-        bit     copy_delete_flags ; bit7=1 = delete
-    IF_NS
         jsr     InvokeOperationConfirmCallback
-    END_IF
-
-        ;; Set up callbacks for the real work.
-        bit     copy_delete_flags ; bit7=0 = copy
-    IF_NC
-        jsr     PrepCallbacksForCopy
-    ELSE
-        jsr     PrepCallbacksForDelete
-    END_IF
+        jsr     InvokeOperationPrepTraversalCallback
 
         ;; And iterate selection again.
         jmp     iterate_selection
 
 .endproc ; OperationOnSelection
-
-;;; ============================================================
-
-;;; Called for each file during enumeration; A,X = file count
-InvokeOperationEnumerationCallback:
-        operation_enumeration_callback := *+1
-        jmp     SELF_MODIFIED
-
-;;; Called on operation completion (success or failure)
-InvokeOperationCompleteCallback:
-        operation_complete_callback := *+1
-        jmp     SELF_MODIFIED
-
-;;; Called once enumeration is complete, to confirm the operation.
-InvokeOperationConfirmCallback:
-        operation_confirm_callback := *+1
-        jmp     SELF_MODIFIED
-
-;;; Called when there are not enough free blocks on destination.
-InvokeOperationTooLargeCallback:
-        operation_toolarge_callback := *+1
-        jmp     SELF_MODIFIED
 
 ;;; ============================================================
 
@@ -10199,6 +10150,10 @@ move_flag:
 all_flag:
         .byte   0
 
+        ;; bit 7 set = destination is an AppleShare (network) drive
+dst_is_appleshare_flag:
+        .byte   0
+
 ;;; ============================================================
 
 ;;; Memory Map
@@ -10214,7 +10169,7 @@ all_flag:
 
         ;; 4 bytes is .sizeof(SubdirectoryHeader) - .sizeof(FileEntry)
         .define kBlockPointersSize 4
-        .assert .sizeof(SubdirectoryHeader) - .sizeof(FileEntry) = kBlockPointersSize, error, "bad structs"
+        ASSERT_EQUALS .sizeof(SubdirectoryHeader) - .sizeof(FileEntry), kBlockPointersSize
 
         ;; Blocks are 512 bytes, 13 entries of 39 bytes each leaves 5 bytes between.
         ;; Except first block, directory header is 39+4 bytes, leaving 1 byte, but then
@@ -10240,7 +10195,7 @@ file_entry_buf          .tag    FileEntry
         file_data_buffer := $1500
         kBufSize = $A00
         .assert file_data_buffer + kBufSize <= dst_path_buf, error, "Buffer overlap"
-        .assert (kBufSize .mod BLOCK_SIZE) = 0, error, "better performance for an integral number of blocks"
+        .assert (kBufSize .mod BLOCK_SIZE) = 0, error, "integral number of blocks needed for sparse copies and performance"
 
         DEFINE_CLOSE_PARAMS close_src_params
         DEFINE_CLOSE_PARAMS close_dst_params
@@ -10260,31 +10215,74 @@ file_entry_buf          .tag    FileEntry
         DEFINE_READ_BLOCK_PARAMS block_params, block_buffer, SELF_MODIFIED
 
 ;;; ============================================================
-
-        ;; overlayed indirect jump table
-        kOpJTAddrsSize = 6
-
-op_jt0: jmp     (op_jt_addr0)   ; process selected file
-op_jt1: jmp     (op_jt_addr1)   ; process directory entry
-op_jt3: jmp     (op_jt_addr3)   ; when finished directory
+;;; Callbacks used during operations. There are two sets:
+;;;
+;;; * Callbacks for the overall operation lifecycle
+;;; * Callbacks for selection and file system traversal
+;;;
+;;; These are separate because the latter are swapped out between the
+;;; initial enumeration phase and the actual operation phase.
 
 ;;; NOTE: These are referenced by indirect JMP and *must not*
 ;;; cross page boundaries.
-op_jt_addrs:
-op_jt_addr0:  .addr   0
-op_jt_addr1:  .addr   0
-op_jt_addr3:  .addr   0
-        ASSERT_TABLE_SIZE op_jt_addrs, kOpJTAddrsSize
+operation_lifecycle_callbacks:
+operation_enumeration_callback: .addr   SELF_MODIFIED
+operation_complete_callback:    .addr   SELF_MODIFIED
+operation_confirm_callback:     .addr   SELF_MODIFIED
+operation_prep_callback:        .addr   SELF_MODIFIED
+        kOpLifecycleCallbacksSize = * - operation_lifecycle_callbacks
 
-OpProcessSelectedFile   := op_jt0
-OpProcessDirectoryEntry := op_jt1
-OpFinishDirectory       := op_jt3
+;;; NOTE: These are referenced by indirect JMP and *must not*
+;;; cross page boundaries.
+operation_traversal_callbacks:
+op_process_selected_file_callback:      .addr   SELF_MODIFIED
+op_process_dir_entry_callback:          .addr   SELF_MODIFIED
+op_finish_directory_callback:           .addr   SELF_MODIFIED
+        kOpTraversalCallbacksSize = * - operation_traversal_callbacks
+
+;;; ------------------------------------------------------------
+;;; Operation lifecycle callbacks
+
+;;; Called for each file during enumeration; A,X = file count
+InvokeOperationEnumerationCallback:
+        jmp     (operation_enumeration_callback)
+
+;;; Called on operation completion (success or failure)
+InvokeOperationCompleteCallback:
+        jmp     (operation_complete_callback)
+
+;;; Called once enumeration is complete, to confirm the operation.
+InvokeOperationConfirmCallback:
+        jmp     (operation_confirm_callback)
+
+;;; Called once selection enumeration is complete, to prepare for the actual op.
+InvokeOperationPrepTraversalCallback:
+        jmp     (operation_prep_callback)
+
+;;; ------------------------------------------------------------
+;;; Selection and file system traversal callbacks
+
+;;; Called for each file in the selection
+OpProcessSelectedFile:
+        jmp     (op_process_selected_file_callback)
+
+;;; Called for each file in a directory
+OpProcessDirectoryEntry:
+        jmp     (op_process_dir_entry_callback)
+
+;;; Called when a directory is complete
+OpFinishDirectory:
+        jmp     (op_finish_directory_callback)
+
+;;; ------------------------------------------------------------
 
 DoNothing:   rts
 
 ;;; 0 for count/size pass, non-zero for actual operation
 do_op_flag:
         .byte   0
+
+;;; ============================================================
 
 .proc PushEntryCount
         ldx     entry_count_stack_index
@@ -10320,7 +10318,7 @@ do_op_flag:
         bcc     :+
         ldx     #AlertButtonOptions::TryAgainCancel
         jsr     ShowAlertOption
-        .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
         beq     @retry          ; `kAlertResultTryAgain` = 0
         jmp     CloseFilesCancelDialogWithFailedResult
 
@@ -10332,7 +10330,7 @@ do_op_flag:
         bcc     :+
         ldx     #AlertButtonOptions::TryAgainCancel
         jsr     ShowAlertOption
-        .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
         beq     @retry2         ; `kAlertResultTryAgain` = 0
         jmp     CloseFilesCancelDialogWithFailedResult
 
@@ -10346,7 +10344,7 @@ do_op_flag:
         bcc     :+
         ldx     #AlertButtonOptions::TryAgainCancel
         jsr     ShowAlertOption
-        .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
         beq     @retry          ; `kAlertResultTryAgain` = 0
         jmp     CloseFilesCancelDialogWithFailedResult
 
@@ -10363,7 +10361,7 @@ do_op_flag:
         beq     eof
         ldx     #AlertButtonOptions::TryAgainCancel
         jsr     ShowAlertOption
-        .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
         beq     @retry          ; `kAlertResultTryAgain` = 0
         jmp     CloseFilesCancelDialogWithFailedResult
 
@@ -10378,6 +10376,32 @@ do_op_flag:
 
 eof:    return  #$FF
 .endproc ; ReadFileEntry
+
+;;; ============================================================
+
+;;; Input: Destination path in `path_buf4`
+;;; Output: `dst_is_appleshare_flag` is set
+.proc SetDstIsAppleShareFlag
+        copy8   #0, dst_is_appleshare_flag
+
+        ;; Issue a `GET_FILE_INFO` on destination to set `DEVNUM`
+@retry: param_call GetFileInfo, path_buf4
+        bcc     :+
+        jsr     ShowErrorAlertDst
+        jmp     @retry
+:
+        ;; Try to read a block off device; if AppleShare will fail.
+        copy8   DEVNUM, unit_number
+        MLI_CALL READ_BLOCK, block_params
+        cmp     #ERR_NETWORK_ERROR
+    IF_EQ
+        copy8   #$80, dst_is_appleshare_flag
+    END_IF
+ret:    rts
+
+        DEFINE_READ_BLOCK_PARAMS block_params, block_buffer, kVolumeDirKeyBlock
+        unit_number := block_params::unit_num
+.endproc ; SetDstIsAppleShareFlag
 
 ;;; ============================================================
 
@@ -10487,72 +10511,60 @@ ok:     clc
 ;;; `CopyFinishDirectory`
 ;;;  - if dir and op=move, deletes dir
 
-;;; Overlays for copy operation (`op_jt_addrs`)
-callbacks_for_copy:
+;;; Traversal callbacks for copy operation (`operation_traversal_callbacks`)
+operation_traversal_callbacks_for_copy:
         .addr   CopyProcessSelectedFile
         .addr   CopyProcessDirectoryEntry
         .addr   CopyFinishDirectory
-        ASSERT_TABLE_SIZE callbacks_for_copy, kOpJTAddrsSize
-
-;;; Also used for Download
-.params copy_dialog_params
-count:  .addr   0
-.endparams
+        ASSERT_TABLE_SIZE operation_traversal_callbacks_for_copy, kOpTraversalCallbacksSize
 
 .proc OpenCopyProgressDialog
-        copy16  #_CopyDialogEnumerationCallback, operations::operation_enumeration_callback
-        copy16  #CloseProgressDialog, operations::operation_complete_callback
+        COPY_BYTES kOpLifecycleCallbacksSize, operation_lifecycle_callbacks_for_copy, operation_lifecycle_callbacks
         jmp     OpenProgressDialog
 
 .proc _CopyDialogEnumerationCallback
-        stax    copy_dialog_params::count
-        jmp     UpdateCopyDialogCount
+        stax    file_count
+        stax    total_count
+        jsr     SetPortForProgressDialog
+        bit     move_flag
+      IF_NC
+        param_call DrawProgressDialogLabel, 0, aux::str_copy_copying
+      ELSE
+        param_call DrawProgressDialogLabel, 0, aux::str_move_moving
+      END_IF
+        jmp     DrawFileCountWithSuffix
 .endproc ; _CopyDialogEnumerationCallback
+
+;;; Lifecycle callbacks for copy operation (`operation_lifecycle_callbacks`)
+operation_lifecycle_callbacks_for_copy:
+        .addr   _CopyDialogEnumerationCallback
+        .addr   CloseProgressDialog
+        .addr   operations::DoNothing
+        .addr   PrepTraversalCallbacksForCopy
+        ASSERT_TABLE_SIZE operation_lifecycle_callbacks_for_copy, operations::kOpLifecycleCallbacksSize
+
 .endproc ; OpenCopyProgressDialog
 
 ;;; ============================================================
 
-.proc PrepCallbacksForCopy
-        ldy     #kOpJTAddrsSize-1
-:       copy8   callbacks_for_copy,y,  op_jt_addrs,y
-        dey
-        bpl     :-
+.proc PrepTraversalCallbacksForCopy
+        COPY_BYTES kOpTraversalCallbacksSize, operation_traversal_callbacks_for_copy, operation_traversal_callbacks
 
         copy8   #0, operations::all_flag
         copy8   #1, do_op_flag
         rts
-.endproc ; PrepCallbacksForCopy
+.endproc ; PrepTraversalCallbacksForCopy
 
 ;;; ============================================================
 ;;; "Download" - shares heavily with Copy
 
-.proc OpenDownloadProgressDialog
-        copy16  #_DownloadDialogEnumerationCallback, operations::operation_enumeration_callback
-        copy16  #CloseProgressDialog, operations::operation_complete_callback
-        jmp     OpenProgressDialog
-
-.proc _DownloadDialogEnumerationCallback
-        stax    copy_dialog_params::count
-        jmp     UpdateDownloadDialogCount
-.endproc ; _DownloadDialogEnumerationCallback
-.endproc ; OpenDownloadProgressDialog
-
-.proc PrepCallbacksForDownload
-        ldy     #kOpJTAddrsSize-1
-:       copy8   callbacks_for_copy,y, op_jt_addrs,y
-        dey
-        bpl     :-
+.proc PrepTraversalCallbacksForDownload
+        COPY_BYTES kOpTraversalCallbacksSize, operation_traversal_callbacks_for_copy, operation_traversal_callbacks
 
         copy8   #$80, operations::all_flag
-        copy16  #_DownloadDialogTooLargeCallback, operations::operation_toolarge_callback
         copy8   #1, do_op_flag
         rts
-
-.proc _DownloadDialogTooLargeCallback
-        param_call ShowAlertParams, AlertButtonOptions::OK, aux::str_ramcard_full
-        jmp     CloseFilesCancelDialogWithFailedResult
-.endproc ; _DownloadDialogTooLargeCallback
-.endproc ; PrepCallbacksForDownload
+.endproc ; PrepTraversalCallbacksForDownload
 
 ;;; ============================================================
 ;;; Handle copying of a file.
@@ -10601,7 +10613,7 @@ not_selected:
     END_IF
 
         ;; Paths are set up - update dialog and populate `src_file_info_params`
-        jsr     DecFileCountAndRunCopyDialogProc
+        jsr     DecFileCountAndUpdateCopyDialogProgress
 
 @retry: jsr     GetSrcFileInfo
         bcc     :+
@@ -10665,7 +10677,7 @@ done:
 .proc CopyProcessDirectoryEntry
         jsr     AppendFileEntryToDstPath
         jsr     AppendFileEntryToSrcPath
-        jsr     DecFileCountAndRunCopyDialogProc
+        jsr     DecFileCountAndUpdateCopyDialogProgress
 
         ;; Called with `src_file_info_params` pre-populated
         lda     src_file_info_params::storage_type
@@ -10729,11 +10741,21 @@ done:   rts
 
 ;;; ============================================================
 
-.proc DecFileCountAndRunCopyDialogProc
+.proc DecFileCountAndUpdateCopyDialogProgress
         jsr     DecrementOpFileCount
-        stax    copy_dialog_params::count
-        jmp     UpdateCopyDialogProgress
-.endproc ; DecFileCountAndRunCopyDialogProc
+        stax    file_count
+        jsr     SetPortForProgressDialog
+
+        param_call CopyToBuf0, src_path_buf
+        param_call DrawProgressDialogLabel, 1, aux::str_copy_from
+        jsr     DrawTargetFilePath
+
+        param_call CopyToBuf0, dst_path_buf
+        param_call DrawProgressDialogLabel, 2, aux::str_copy_to
+        jsr     DrawDestFilePath
+
+        jmp     DrawProgressDialogFilesRemaining
+.endproc ; DecFileCountAndUpdateCopyDialogProgress
 
 ;;; ============================================================
 ;;; Used before "Copy to RAMCard", to ensure everything will fit.
@@ -10746,7 +10768,10 @@ done:   rts
 
 :       sub16   dst_file_info_params::aux_type, dst_file_info_params::blocks_used, blocks_free
         cmp16   blocks_free, op_block_count
-        jcc     operations::InvokeOperationTooLargeCallback
+    IF_LT
+        param_call ShowAlertParams, AlertButtonOptions::OK, aux::str_ramcard_full
+        jmp     CloseFilesCancelDialogWithFailedResult
+    END_IF
 
         rts
 
@@ -10938,9 +10963,8 @@ cancel: jmp     CloseFilesCancelDialogWithFailedResult
         cmp     #ST_VOLUME_DIRECTORY
     IF_EQ
         ;; Volume
-        copy8   DEVNUM, block_params::unit_num
-        copy16  #kVolumeDirKeyBlock, block_params::block_num
-        MLI_CALL READ_BLOCK, block_params
+        copy8   DEVNUM, unit_number
+        MLI_CALL READ_BLOCK, vol_block_params
         bcs     ret
         copy16  block_buffer + VolumeDirectoryHeader::case_bits, case_bits
     ELSE
@@ -10955,6 +10979,9 @@ cancel: jmp     CloseFilesCancelDialogWithFailedResult
 
         clc                     ; success
 ret:    rts
+
+        DEFINE_READ_BLOCK_PARAMS vol_block_params, block_buffer, kVolumeDirKeyBlock
+        unit_number := vol_block_params::unit_num
 .endproc ; ReadSrcCaseBits
 
 .proc WriteDstCaseBits
@@ -11151,14 +11178,11 @@ Start:  lda     DEVNUM
         sta     mark_dst_params::position+2
 
         jsr     _OpenSrc
-        jsr     _CopySrcRefNum
         jsr     _OpenDst
-        beq     :+
-
+    IF_NOT_ZERO
         ;; Destination not available; note it, can prompt later
         copy8   #$FF, src_dst_exclusive_flag
-        bne     read            ; always
-:       jsr     _CopyDstRefNum
+    END_IF
 
         ;; Read
 read:   jsr     _ReadSrc
@@ -11167,7 +11191,6 @@ read:   jsr     _ReadSrc
         jsr     _CloseSrc       ; swap if necessary
 :       jsr     _OpenDst
         bne     :-
-        jsr     _CopyDstRefNum
         MLI_CALL SET_MARK, mark_dst_params
 
         ;; Write
@@ -11178,7 +11201,6 @@ write:  bit     src_eof_flag
         bpl     read
         jsr     _CloseDst       ; swap if necessary
         jsr     _OpenSrc
-        jsr     _CopySrcRefNum
 
         MLI_CALL SET_MARK, mark_src_params
         bcc     read
@@ -11197,16 +11219,13 @@ eof:    jsr     _CloseDst
         bcc     :+
         jsr     ShowErrorAlert
         jmp     @retry
-:       rts
-.endproc ; _OpenSrc
-
-.proc _CopySrcRefNum
+:
         lda     open_src_params::ref_num
         sta     read_src_params::ref_num
         sta     close_src_params::ref_num
         sta     mark_src_params::ref_num
-        rts
-.endproc ; _CopySrcRefNum
+        return  #0
+.endproc ; _OpenSrc
 
 .proc _OpenDst
 @retry: MLI_CALL OPEN, open_dst_params
@@ -11218,18 +11237,14 @@ eof:    jsr     _CloseDst
 
 not_found:
         jsr     ShowErrorAlertDst
-        lda     #ERR_VOL_NOT_FOUND
+        return  #ERR_VOL_NOT_FOUND
 
-done:   rts
-.endproc ; _OpenDst
-
-.proc _CopyDstRefNum
-        lda     open_dst_params::ref_num
+done:   lda     open_dst_params::ref_num
         sta     write_dst_params::ref_num
         sta     close_dst_params::ref_num
         sta     mark_dst_params::ref_num
-        rts
-.endproc ; _CopyDstRefNum
+        return  #0
+.endproc ; _OpenDst
 
 .proc _ReadSrc
         copy16  #kBufSize, read_src_params::request_count
@@ -11240,8 +11255,8 @@ done:   rts
         jsr     ShowErrorAlert
         jmp     @retry
 
-:       copy16  read_src_params::trans_count, write_dst_params::request_count
-        ora     read_src_params::trans_count
+:       lda     read_src_params::trans_count
+        ora     read_src_params::trans_count+1
         bne     :+
 eof:    copy8   #$FF, src_eof_flag
 :       MLI_CALL GET_MARK, mark_src_params
@@ -11249,6 +11264,80 @@ eof:    copy8   #$FF, src_eof_flag
 .endproc ; _ReadSrc
 
 .proc _WriteDst
+        ;; Always start off at start of copy buffer
+        copy16  read_src_params::data_buffer, write_dst_params::data_buffer
+loop:
+        ;; Assume we're going to write everything we read. We may
+        ;; later determine we need to write it out block-by-block.
+        copy16  read_src_params::trans_count, write_dst_params::request_count
+
+        ;; ProDOS Tech Note #30: AppleShare servers do not support
+        ;; sparse files. https://prodos8.com/docs/technote/30
+        bit     dst_is_appleshare_flag
+        bmi     do_write        ; ...and done!
+
+        ;; Is there less than a full block? If so, just write it.
+        lda     read_src_params::trans_count+1
+        cmp     #.hibyte(BLOCK_SIZE)
+        bcc     do_write        ; ...and done!
+
+        ;; Otherwise we'll go block-by-block, treating all zeros
+        ;; specially.
+        copy16  #BLOCK_SIZE, write_dst_params::request_count
+
+        ;; First two blocks are never made sparse. The first block is
+        ;; never sparsely allocated (P8 TRM B.3.6 - Sparse Files) and
+        ;; the transition from seedling to sapling is not handled
+        ;; correctly in all versions of ProDOS.
+        ;; https://prodos8.com/docs/technote/30
+        ;; Assert: mark low byte is $00
+        lda     mark_dst_params::position+1
+        and     #%11111100
+        ora     mark_dst_params::position+2
+        beq     not_sparse
+
+        ;; Is this block all zeros? Scan all $200 bytes
+        ;; (Note: coded for size, not speed, since we're I/O bound)
+        ptr := $06
+        copy16  write_dst_params::data_buffer, ptr ; first half
+        ldy     #0
+        tya
+:       ora     (ptr),y
+        iny
+        bne     :-
+        inc     ptr+1           ; second half
+:       ora     (ptr),y
+        iny
+        bne     :-
+        tay
+        bne     not_sparse
+
+        ;; Block is all zeros, skip over it
+        add16_8  mark_dst_params::position+1, #.hibyte(BLOCK_SIZE)
+        MLI_CALL SET_EOF, mark_dst_params
+        MLI_CALL SET_MARK, mark_dst_params
+        jmp     next_block
+
+        ;; Block is not sparse, write it
+not_sparse:
+        jsr     do_write
+        FALL_THROUGH_TO next_block
+
+        ;; Advance to next block
+next_block:
+        inc     write_dst_params::data_buffer+1
+        inc     write_dst_params::data_buffer+1
+        ;; Assert: `read_src_params::trans_count` >= `BLOCK_SIZE`
+        dec     read_src_params::trans_count+1
+        dec     read_src_params::trans_count+1
+
+        ;; Anything left to write?
+        lda     read_src_params::trans_count
+        ora     read_src_params::trans_count+1
+        bne     loop
+        rts
+
+do_write:
 @retry: MLI_CALL WRITE, write_dst_params
         bcc     :+
         jsr     ShowErrorAlertDst
@@ -11287,26 +11376,23 @@ src_eof_flag:
 ;;; `DeleteFinishDirectory`
 ;;;  - destroys dir via `DeleteFileCommon`
 
-;;; Overlays for delete operation (`op_jt_addrs`)
-callbacks_for_delete:
+;;; Traversal callbacks for delete operation (`operation_traversal_callbacks`)
+operation_traversal_callbacks_for_delete:
         .addr   DeleteProcessSelectedFile
         .addr   DeleteProcessDirectoryEntry
         .addr   DeleteFinishDirectory
-        ASSERT_TABLE_SIZE callbacks_for_delete, kOpJTAddrsSize
-
-.params delete_dialog_params
-count:  .word   0
-.endparams
+        ASSERT_TABLE_SIZE operation_traversal_callbacks_for_delete, kOpTraversalCallbacksSize
 
 .proc OpenDeleteProgressDialog
-        copy16  #_DeleteDialogConfirmCallback, operations::operation_confirm_callback
-        copy16  #_DeleteDialogEnumerationCallback, operations::operation_enumeration_callback
-        copy16  #CloseProgressDialog, operations::operation_complete_callback
+        COPY_BYTES kOpLifecycleCallbacksSize, operation_lifecycle_callbacks_for_delete, operation_lifecycle_callbacks
         jmp     OpenProgressDialog
 
 .proc _DeleteDialogEnumerationCallback
-        stax    delete_dialog_params::count
-        jmp     UpdateDeleteDialogCount
+        stax    file_count
+        stax    total_count
+        jsr     SetPortForProgressDialog
+        param_call DrawProgressDialogLabel, 0, aux::str_delete_count
+        jmp     DrawFileCountWithSuffix
 .endproc ; _DeleteDialogEnumerationCallback
 
 .proc _DeleteDialogConfirmCallback
@@ -11326,20 +11412,26 @@ count:  .word   0
         jmp     CloseFilesCancelDialogWithCanceledResult
 :       rts
 .endproc ; _DeleteDialogConfirmCallback
+
+;;; Lifecycle callbacks for delete operation (`operation_lifecycle_callbacks`)
+operation_lifecycle_callbacks_for_delete:
+        .addr   _DeleteDialogEnumerationCallback
+        .addr   CloseProgressDialog
+        .addr   _DeleteDialogConfirmCallback
+        .addr   PrepTraversalCallbacksForDelete
+        ASSERT_TABLE_SIZE operation_lifecycle_callbacks_for_delete, operations::kOpLifecycleCallbacksSize
+
 .endproc ; OpenDeleteProgressDialog
 
 ;;; ============================================================
 
-.proc PrepCallbacksForDelete
-        ldy     #kOpJTAddrsSize-1
-:       copy8   callbacks_for_delete,y, op_jt_addrs,y
-        dey
-        bpl     :-
+.proc PrepTraversalCallbacksForDelete
+        COPY_BYTES kOpTraversalCallbacksSize, operation_traversal_callbacks_for_delete, operation_traversal_callbacks
 
         copy8   #0, operations::all_flag
         copy8   #1, do_op_flag
         rts
-.endproc ; PrepCallbacksForDelete
+.endproc ; PrepTraversalCallbacksForDelete
 
 ;;; ============================================================
 ;;; Handle deletion of a selected file.
@@ -11459,9 +11551,19 @@ next_file:
 
 .proc DecFileCountAndUpdateDeleteDialogProgress
         jsr     DecrementOpFileCount
-        stax    delete_dialog_params::count
-        jmp     UpdateDeleteDialogProgress
+        stax    file_count
+        FALL_THROUGH_TO UpdateDeleteDialogProgress
 .endproc ; DecFileCountAndUpdateDeleteDialogProgress
+
+.proc UpdateDeleteDialogProgress
+        jsr     SetPortForProgressDialog
+
+        param_call CopyToBuf0, src_path_buf
+        param_call DrawProgressDialogLabel, 1, aux::str_file_colon
+        jsr     DrawTargetFilePath
+
+        jmp     DrawProgressDialogFilesRemaining
+.endproc ; UpdateDeleteDialogProgress
 
 ;;; ============================================================
 ;;; Most operations start by doing a traversal to just count
@@ -11473,18 +11575,15 @@ next_file:
 ;;;  - increments file count; if op=size, sums size
 ;;; (finishing a directory is a no-op)
 
-;;; Overlays for size operation (`op_jt_addrs`)
-callbacks_for_size_or_count:
+;;; Traversal callbacks for size operation (`operation_traversal_callbacks`)
+operation_traversal_callbacks_for_enumeration:
         .addr   EnumerationProcessSelectedFile
         .addr   EnumerationProcessDirectoryEntry
         .addr   DoNothing
-        ASSERT_TABLE_SIZE callbacks_for_size_or_count, kOpJTAddrsSize
+        ASSERT_TABLE_SIZE operation_traversal_callbacks_for_enumeration, kOpTraversalCallbacksSize
 
-.proc PrepCallbacksForEnumeration
-        ldy     #kOpJTAddrsSize-1
-:       copy8   callbacks_for_size_or_count,y, op_jt_addrs,y
-        dey
-        bpl     :-
+.proc PrepTraversalCallbacksForEnumeration
+        COPY_BYTES kOpTraversalCallbacksSize, operation_traversal_callbacks_for_enumeration, operation_traversal_callbacks
 
         lda     #0
         sta     op_file_count
@@ -11494,7 +11593,7 @@ callbacks_for_size_or_count:
         sta     do_op_flag
 
         rts
-.endproc ; PrepCallbacksForEnumeration
+.endproc ; PrepTraversalCallbacksForEnumeration
 
 ;;; ============================================================
 ;;; Handle sizing (or just counting) of a selected file.
@@ -11553,6 +11652,8 @@ do_sum_file_size:
         jmp     operations::InvokeOperationEnumerationCallback
 .endproc ; EnumerationProcessDirectoryEntry
 
+;;; Count of files - increases during enumeration, decreases as
+;;; files are processed.
 op_file_count:
         .word   0
 
@@ -11652,67 +11753,6 @@ map:    .byte   FileEntry::access
         .byte   FileEntry::creation_time+1
         kMapSize = * - map
 .endproc ; ConvertFileEntryToFileInfo
-
-;;; ============================================================
-;;; "Copy" progress dialog
-
-.proc UpdateCopyDialogCount
-        ldax    copy_dialog_params::count
-        stax    file_count
-        stax    total_count
-        jsr     SetPortForProgressDialog
-        bit     move_flag
-      IF_NC
-        param_call DrawProgressDialogLabel, 0, aux::str_copy_copying
-      ELSE
-        param_call DrawProgressDialogLabel, 0, aux::str_move_moving
-      END_IF
-        jmp     DrawFileCountWithSuffix
-.endproc ; UpdateCopyDialogCount
-
-.proc UpdateCopyDialogProgress
-        copy16  copy_dialog_params::count, file_count
-        jsr     SetPortForProgressDialog
-
-        param_call CopyToBuf0, src_path_buf
-        param_call DrawProgressDialogLabel, 1, aux::str_copy_from
-        jsr     DrawTargetFilePath
-
-        param_call CopyToBuf0, dst_path_buf
-        param_call DrawProgressDialogLabel, 2, aux::str_copy_to
-        jsr     DrawDestFilePath
-
-        jmp     DrawProgressDialogFilesRemaining
-.endproc ; UpdateCopyDialogProgress
-
-;;; ============================================================
-;;; "Download" progress dialog
-
-UpdateDownloadDialogCount := UpdateCopyDialogCount
-UpdateDownloadDialogProgress := UpdateCopyDialogProgress
-
-;;; ============================================================
-;;; "Delete" progress dialog
-
-.proc UpdateDeleteDialogCount
-        ldax    delete_dialog_params::count
-        stax    total_count
-        stax    file_count
-        jsr     SetPortForProgressDialog
-        param_call DrawProgressDialogLabel, 0, aux::str_delete_count
-        jmp     DrawFileCountWithSuffix
-.endproc ; UpdateDeleteDialogCount
-
-.proc UpdateDeleteDialogProgress
-        copy16  delete_dialog_params::count, file_count
-        jsr     SetPortForProgressDialog
-
-        param_call CopyToBuf0, src_path_buf
-        param_call DrawProgressDialogLabel, 1, aux::str_file_colon
-        jsr     DrawTargetFilePath
-
-        jmp     DrawProgressDialogFilesRemaining
-.endproc ; UpdateDeleteDialogProgress
 
 ;;; ============================================================
 
@@ -11967,7 +12007,7 @@ flag_clear:
         beq     not_found
 
         jsr     ShowAlert
-        .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
         bne     close           ; not kAlertResultTryAgain = 0
         jmp     SetCursorWatch  ; undone by `ClosePromptDialog` or `CloseProgressDialog`
 
@@ -11978,7 +12018,7 @@ not_found:
         ldax    #aux::str_alert_insert_destination
 :       ldy     #AlertButtonOptions::TryAgainCancel
         jsr     ShowAlertParams ; A,X = string, Y = AlertButtonOptions
-        .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
         bne     close           ; not kAlertResultTryAgain = 0
         jsr     SetCursorWatch  ; undone by `ClosePromptDialog` or `CloseProgressDialog`
 
@@ -12271,13 +12311,20 @@ append_size:
         copy16  #0, num_blocks
     END_IF
 
-        copy16  #_GetInfoProcessDirEntry, op_jt_addr1
-        copy16  #DoNothing, op_jt_addr3
+        COPY_BYTES kOpTraversalCallbacksSize, operation_traversal_callbacks_for_getinfo, operation_traversal_callbacks
+
         copy16  #DoNothing, operations::operation_complete_callback ; handle error
         tsx
         stx     operations::stack_stash
         jsr     ProcessDir
         jmp     _UpdateDirSizeDisplay ; in case 0 files were seen
+
+;;; Traversal callbacks for get info operation (`operation_traversal_callbacks`)
+operation_traversal_callbacks_for_getinfo:
+        .addr   DoNothing
+        .addr   _GetInfoProcessDirEntry
+        .addr   DoNothing
+        ASSERT_TABLE_SIZE operation_traversal_callbacks_for_getinfo, operations::kOpTraversalCallbacksSize
 
 .proc _GetInfoProcessDirEntry
         add16   num_blocks, src_file_info_params::blocks_used, num_blocks
@@ -12565,7 +12612,7 @@ no_change:
         bcc     finish
         ;; Failed, maybe retry
         jsr     ShowAlert       ; Alert options depend on specific ProDOS error
-        .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
         jeq     retry           ; `kAlertResultTryAgain` = 0
         jsr     _DialogClose
         jmp     fail
@@ -12610,7 +12657,7 @@ finish: jsr     _DialogClose
         bit     LCBANK2
 
         ;; Copy the new name in
-        .assert FileRecord::name = 0, error, "Name must be at start of FileRecord"
+        ASSERT_EQUALS FileRecord::name, 0, "Name must be at start of FileRecord"
         ldy     new_name_buf
 :       lda     new_name_buf,y
         sta     (file_record_ptr),y
@@ -12626,7 +12673,7 @@ finish: jsr     _DialogClose
 
         ;; Determine new icon type
         jsr     GetSelectionViewBy
-        .assert DeskTopSettings::kViewByIcon = 0, error, "enum mismatch"
+        ASSERT_EQUALS DeskTopSettings::kViewByIcon, 0
     IF_ZERO
         tmpy := $50
 
@@ -12879,7 +12926,7 @@ ignore:
 
         ;; Look up the FileRecord within the list.
         pla                     ; A = index
-        .assert .sizeof(FileRecord) = 32, error, "FileRecord size must be 2^5"
+        ASSERT_EQUALS .sizeof(FileRecord), 32
         jsr     ATimes32        ; A,X = index * 32
         addax   file_record_ptr, file_record_ptr
         rts
@@ -13320,7 +13367,7 @@ str_desktop:
 
 load:   pha
         copy8   #AlertButtonOptions::OKCancel, button_options
-        .assert AlertButtonOptions::OKCancel <> 0, error, "bne always assumption"
+        ASSERT_NOT_EQUALS AlertButtonOptions::OKCancel, 0
         bne     :+              ; always
 
 restore:
@@ -13667,7 +13714,7 @@ get_case_bits_per_option_and_adjust_string:
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
         MGTK_CALL MGTK::InRect, name_input_rect
-        .assert MGTK::inrect_outside = 0, error, "enum mismatch"
+        ASSERT_EQUALS MGTK::inrect_outside, 0
         beq     out
         jsr     SetCursorIBeamWithFlag ; toggling in prompt dialog
         jmp     PromptInputLoop
@@ -13786,7 +13833,7 @@ KeyHookRelay:
 
 .proc _HandleKeyOK
         bit     ok_button::state
-        .assert BTK::kButtonStateDisabled = $80, error, "const mismatch"
+        ASSERT_EQUALS BTK::kButtonStateDisabled, $80
         bmi     ret
         BTK_CALL BTK::Flash, ok_button
         lda     #PromptResult::ok
@@ -14100,7 +14147,7 @@ exit:   rts
         stax    path_ptr
 
         ;; Copy path in
-        .assert DeskTopFileItem::window_path = 0, error, "struct layout"
+        ASSERT_EQUALS DeskTopFileItem::window_path, 0
         ldy     #::kPathBufferSize-1
 :       lda     (path_ptr),y
         sta     (data_ptr),y
@@ -14311,7 +14358,7 @@ next_entry:
         cmp     filename
         bne     next_entry
         tay
-        .assert FileEntry::file_name = 1, error, "member offset"
+        ASSERT_EQUALS FileEntry::file_name, 1
 nloop:  lda     (entry_ptr),y
         cmp     filename,y
         bne     next_entry
@@ -15517,6 +15564,10 @@ str_device_type_appletalk:
         PASCAL_STRING res_string_volume_type_fileshare
 str_device_type_vdrive:
         PASCAL_STRING res_string_volume_type_vdrive
+str_new_folder:
+        PASCAL_STRING res_string_new_folder_default
+str_date_and_time:
+        PASCAL_STRING .concat(kFilenameDADir, "/", res_filename_control_panels, "/", res_filename_date_and_time)
 
 ;;; ============================================================
 

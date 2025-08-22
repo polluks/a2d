@@ -13,6 +13,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Option "Preserve uppercase and lowercase in names" now defaults to on.
 * Hide "invisible" files in file dialogs by default.
 * New localization: Bulgarian
+* ProDOS "sparse" files are now copied correctly. ([#878](https://github.com/a2stuff/a2d/issues/878))
 
 ### Launcher
 
@@ -53,6 +54,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Improve rendering of overlapping icons. ([#875](https://github.com/a2stuff/a2d/issues/875))
 * Improve the appearance of the Trash icon.
 * Ignore suffix when determining icon type for directories.
+* Improve mouse responsiveness while list views are drawn.
 
 ### Selector
 

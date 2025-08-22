@@ -37,7 +37,7 @@ skip:
 
         ;; 4 bytes is .sizeof(SubdirectoryHeader) - .sizeof(FileEntry)
         kBlockPointersSize = 4
-        .assert .sizeof(SubdirectoryHeader) - .sizeof(FileEntry) = kBlockPointersSize, error, "bad structs"
+        ASSERT_EQUALS .sizeof(SubdirectoryHeader) - .sizeof(FileEntry), kBlockPointersSize
         DEFINE_READ_PARAMS read_block_pointers_params, buf_block_pointers, kBlockPointersSize ; For skipping prev/next pointers in directory data
 buf_block_pointers:
         .res    kBlockPointersSize, 0
@@ -65,10 +65,12 @@ buf_padding_bytes:
         DEFINE_OPEN_PARAMS open_params_src, pathname_src, io_buf_src
         DEFINE_OPEN_PARAMS open_params_dst, pathname_dst, io_buf_dst
 
-        kDirCopyBufSize = $B00
+        kDirCopyBufSize = $A00
+        .assert (kDirCopyBufSize .mod BLOCK_SIZE) = 0, error, "integral number of blocks needed for sparse copies and performance"
 
         DEFINE_READ_PARAMS read_params_src, data_buf, kDirCopyBufSize
         DEFINE_WRITE_PARAMS write_params_dst, data_buf, kDirCopyBufSize
+        DEFINE_SET_MARK_PARAMS mark_params_dst, 0
 
         DEFINE_CREATE_PARAMS create_params2, pathname_dst, ACCESS_DEFAULT
 
@@ -567,9 +569,16 @@ CheckSpace2 := CheckSpace::ep2
         sta     close_params_src::ref_num
         lda     open_params_dst::ref_num
         sta     write_params_dst::ref_num
+        sta     mark_params_dst::ref_num
         sta     close_params_dst::ref_num
 
+        lda     #0
+        sta     mark_params_dst::position
+        sta     mark_params_dst::position+1
+        sta     mark_params_dst::position+2
+
 loop:
+        ;; Read a chunk
         copy16  #kDirCopyBufSize, read_params_src::request_count
         MLI_CALL READ, read_params_src
         bcc     :+
@@ -577,24 +586,102 @@ loop:
         beq     done
         jmp     HandleErrorCode
 :
-        copy16  read_params_src::trans_count, write_params_dst::request_count
-        ora     read_params_src::trans_count
+        ;; EOF?
+        lda     read_params_src::trans_count
+        ora     read_params_src::trans_count+1
         beq     done
-        MLI_CALL WRITE, write_params_dst
-        bcc     :+
-        jmp     HandleErrorCode
-:
-        lda     write_params_dst::trans_count
-        cmp     #<kDirCopyBufSize
-        bne     done
-        lda     write_params_dst::trans_count+1
-        cmp     #>kDirCopyBufSize
-        beq     loop
+
+        ;; Write the chunk
+        jsr     _WriteDst
+        jcs     HandleErrorCode
+        jmp     loop
 
 done:
         MLI_CALL CLOSE, close_params_dst
         MLI_CALL CLOSE, close_params_src
         rts
+
+;;; Write the buffer to the destination file, being mindful of sparse blocks.
+.proc _WriteDst
+        ;; Always start off at start of copy buffer
+        copy16  read_params_src::data_buffer, write_params_dst::data_buffer
+loop:
+        ;; Assume we're going to write everything we read. We may
+        ;; later determine we need to write it out block-by-block.
+        copy16  read_params_src::trans_count, write_params_dst::request_count
+
+        ;; Assert: We're only ever copying to a RAMDisk, not AppleShare.
+        ;; https://prodos8.com/docs/technote/30
+
+        ;; Is there less than a full block? If so, just write it.
+        lda     read_params_src::trans_count+1
+        cmp     #.hibyte(BLOCK_SIZE)
+        bcc     do_write        ; ...and done!
+
+        ;; Otherwise we'll go block-by-block, treating all zeros
+        ;; specially.
+        copy16  #BLOCK_SIZE, write_params_dst::request_count
+
+        ;; First two blocks are never made sparse. The first block is
+        ;; never sparsely allocated (P8 TRM B.3.6 - Sparse Files) and
+        ;; the transition from seedling to sapling is not handled
+        ;; correctly in all versions of ProDOS.
+        ;; https://prodos8.com/docs/technote/30
+        ;; Assert: mark low byte is $00
+        lda     mark_params_dst::position+1
+        and     #%11111100
+        ora     mark_params_dst::position+2
+        beq     not_sparse
+
+        ;; Is this block all zeros? Scan all $200 bytes
+        ;; (Note: coded for size, not speed, since we're I/O bound)
+        ptr := $06
+        copy16  write_params_dst::data_buffer, ptr ; first half
+        ldy     #0
+        tya
+:       ora     (ptr),y
+        iny
+        bne     :-
+        inc     ptr+1           ; second half
+:       ora     (ptr),y
+        iny
+        bne     :-
+        tay
+        bne     not_sparse
+
+        ;; Block is all zeros, skip over it
+        add16_8  mark_params_dst::position+1, #.hibyte(BLOCK_SIZE)
+        MLI_CALL SET_EOF, mark_params_dst
+        MLI_CALL SET_MARK, mark_params_dst
+        jmp     next_block
+
+        ;; Block is not sparse, write it
+not_sparse:
+        jsr     do_write
+        bcs     ret
+        FALL_THROUGH_TO next_block
+
+        ;; Advance to next block
+next_block:
+        inc     write_params_dst::data_buffer+1
+        inc     write_params_dst::data_buffer+1
+        ;; Assert: `read_params_src::trans_count` >= `BLOCK_SIZE`
+        dec     read_params_src::trans_count+1
+        dec     read_params_src::trans_count+1
+
+        ;; Anything left to write?
+        lda     read_params_src::trans_count
+        ora     read_params_src::trans_count+1
+        bne     loop
+        clc
+        rts
+
+do_write:
+        MLI_CALL WRITE, write_params_dst
+        bcs     ret
+        MLI_CALL GET_MARK, mark_params_dst
+ret:    rts
+.endproc ; _WriteDst
 .endproc ; CopyFile
 
 ;;; ============================================================
@@ -961,7 +1048,7 @@ progress_pattern:
         lda     #winfo::kWindowId
         jsr     app::GetWindowPort
 
-        MGTK_CALL MGTK::SetPenMode, notpencopy
+        MGTK_CALL MGTK::SetPenMode, app::notpencopy
         MGTK_CALL MGTK::SetPenSize, app::pensize_frame
         MGTK_CALL MGTK::FrameRect, rect_frame
         MGTK_CALL MGTK::SetPenSize, app::pensize_normal
@@ -986,7 +1073,7 @@ remainder:      .word   0                 ; (out)
         jsr     app::GetWindowPort
         MGTK_CALL MGTK::PaintRect, rect_clear_details
 
-        MGTK_CALL MGTK::SetPenMode, notpencopy
+        MGTK_CALL MGTK::SetPenMode, app::notpencopy
         MGTK_CALL MGTK::FrameRect, progress_frame
 
         copy16  file_count, total_count
@@ -1086,11 +1173,11 @@ ep2:    dec     file_count
 
 ;;; Output: Z=1 if Escape is down
 .proc CheckEscapeKeyDown
-        MGTK_CALL MGTK::GetEvent, event_params
-        lda     event_params::kind
+        MGTK_CALL MGTK::GetEvent, app::event_params
+        lda     app::event_params::kind
         cmp     #MGTK::EventKind::key_down
         bne     ret
-        lda     event_params::key
+        lda     app::event_params::key
         cmp     #CHAR_ESCAPE
 ret:    rts
 .endproc ; CheckEscapeKeyDown

@@ -181,7 +181,7 @@ key_handler_hook:
       IF_NS
         jsr     _MoveToWindowCoords
         MGTK_CALL MGTK::InRect, file_dialog_res::line_edit_rect
-        .assert MGTK::inrect_outside = 0, error, "enum mismatch"
+        ASSERT_EQUALS MGTK::inrect_outside, 0
         beq     out
         jsr     _SetCursorIBeam
         jmp     EventLoop
@@ -198,9 +198,9 @@ out:    jsr     _UnsetCursorIBeam
 
 .proc _MoveToWindowCoords
         lda     #file_dialog_res::kFilePickerDlgWindowID
-        sta     screentowindow_params::window_id
+        sta     screentowindow_params+MGTK::ScreenToWindowParams::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
-        MGTK_CALL MGTK::MoveTo, screentowindow_params::window
+        MGTK_CALL MGTK::MoveTo, screentowindow_params+MGTK::ScreenToWindowParams::window
         rts
 .endproc ; _MoveToWindowCoords
 
@@ -208,15 +208,15 @@ out:    jsr     _UnsetCursorIBeam
 
 .proc _HandleButtonDown
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::which_area
+        lda     findwindow_params+MGTK::FindWindowParams::which_area
         cmp     #MGTK::Area::content
         beq     :+
 ret:    rts
 :
-        lda     findwindow_params::window_id
+        lda     findwindow_params+MGTK::FindWindowParams::window_id
         cmp     #file_dialog_res::kFilePickerDlgWindowID
         beq     not_list
-        COPY_STRUCT MGTK::Point, event_params::coords, file_dialog_res::lb_params::coords
+        COPY_STRUCT MGTK::Point, event_params+MGTK::Event::coords, file_dialog_res::lb_params::coords
         LBTK_CALL LBTK::Click, file_dialog_res::lb_params
         bmi     ret
         jsr     DetectDoubleClick
@@ -299,7 +299,7 @@ not_list:
         ;; Text Edit
         MGTK_CALL MGTK::InRect, file_dialog_res::line_edit_rect
       IF_NOT_ZERO
-        COPY_STRUCT MGTK::Point, screentowindow_params::window, file_dialog_res::le_params::coords
+        COPY_STRUCT MGTK::Point, screentowindow_params+MGTK::ScreenToWindowParams::window, file_dialog_res::le_params::coords
         LETK_CALL LETK::Click, file_dialog_res::le_params
         rts
       END_IF
@@ -531,8 +531,8 @@ ret:    rts
 ;;; Key handler
 
 .proc _HandleKeyEvent
-        lda     event_params::key
-        ldx     event_params::modifiers
+        lda     event_params+MGTK::Event::key
+        ldx     event_params+MGTK::Event::modifiers
         sta     file_dialog_res::lb_params::key
         stx     file_dialog_res::lb_params::modifiers
 
@@ -553,8 +553,8 @@ ret:    rts
         jeq     exit
 
         copy8   #0, type_down_buf
-        ldx     event_params::modifiers
-        lda     event_params::key
+        ldx     event_params+MGTK::Event::modifiers
+        lda     event_params+MGTK::Event::key
 
 .ifdef FD_EXTENDED
         bit     extra_controls_flag
@@ -585,7 +585,7 @@ ret:    rts
 .endif
 
         copy8   #0, type_down_buf
-        lda     event_params::key
+        lda     event_params+MGTK::Event::key
 
         cmp     #CHAR_RETURN
       IF_EQ
@@ -632,8 +632,8 @@ ret:    rts
         bit     extra_controls_flag
       IF_NS
         ;; Edit control
-        copy8   event_params::key, file_dialog_res::le_params::key
-        copy8   event_params::modifiers, file_dialog_res::le_params::modifiers
+        copy8   event_params+MGTK::Event::key, file_dialog_res::le_params::key
+        copy8   event_params+MGTK::Event::modifiers, file_dialog_res::le_params::modifiers
         LETK_CALL LETK::Key, file_dialog_res::le_params
       END_IF
 .endif
@@ -644,7 +644,7 @@ exit:   rts
 ;;; ============================================================
 
 .proc _CheckTypeDown
-        lda     event_params::key
+        lda     event_params+MGTK::Event::key
         jsr     _ToUpperCase
         cmp     #'A'
         bcc     :+
@@ -773,7 +773,7 @@ found:  return  index
         jsr     _IsOKAllowed
         lda     #0
         ror                     ; C into high bit
-        .assert BTK::kButtonStateDisabled = $80, error, "const mismatch"
+        ASSERT_EQUALS BTK::kButtonStateDisabled, $80
         cmp     file_dialog_res::ok_button::state
         beq     :+              ; no change
 
@@ -785,7 +785,7 @@ found:  return  index
         jsr     _IsOpenAllowed
         lda     #0
         ror                     ; C into high bit
-        .assert BTK::kButtonStateDisabled = $80, error, "const mismatch"
+        ASSERT_EQUALS BTK::kButtonStateDisabled, $80
         cmp     file_dialog_res::open_button::state
         beq     :+              ; no change
 
@@ -797,7 +797,7 @@ found:  return  index
         jsr     _IsCloseAllowed
         lda     #0
         ror                     ; C into high bit
-        .assert BTK::kButtonStateDisabled = $80, error, "const mismatch"
+        ASSERT_EQUALS BTK::kButtonStateDisabled, $80
         cmp     file_dialog_res::close_button::state
         beq     :+              ; no change
 
@@ -874,7 +874,7 @@ found:  return  index
 
         jsr     _IsOKAllowed
         ror
-        .assert BTK::kButtonStateDisabled = $80, error, "const mismatch"
+        ASSERT_EQUALS BTK::kButtonStateDisabled, $80
         sta     file_dialog_res::ok_button::state
         BTK_CALL BTK::Draw, file_dialog_res::ok_button
 
@@ -883,13 +883,13 @@ found:  return  index
 
         jsr     _IsOpenAllowed
         ror
-        .assert BTK::kButtonStateDisabled = $80, error, "const mismatch"
+        ASSERT_EQUALS BTK::kButtonStateDisabled, $80
         sta     file_dialog_res::open_button::state
         BTK_CALL BTK::Draw, file_dialog_res::open_button
 
         jsr     _IsCloseAllowed
         ror
-        .assert BTK::kButtonStateDisabled = $80, error, "const mismatch"
+        ASSERT_EQUALS BTK::kButtonStateDisabled, $80
         sta     file_dialog_res::close_button::state
         BTK_CALL BTK::Draw, file_dialog_res::close_button
 
@@ -1498,7 +1498,7 @@ kJumpTableSize = 6
 jump_table:
 HandleOK:       jmp     0
 HandleCancel:   jmp     0
-        .assert * - jump_table = kJumpTableSize, error, "Table size mismatch"
+        ASSERT_EQUALS * - jump_table, kJumpTableSize
 
 .endif ; FD_EXTENDED
 
@@ -1506,7 +1506,7 @@ HandleCancel:   jmp     0
 ;;; List Box
 ;;; ============================================================
 
-.assert .sizeof(file_dialog_res::listbox_rec) = .sizeof(LBTK::ListBoxRecord), error, "mismatch"
+ASSERT_EQUALS .sizeof(file_dialog_res::listbox_rec), .sizeof(LBTK::ListBoxRecord)
 num_file_names := file_dialog_res::listbox_rec::num_items
 selected_index := file_dialog_res::listbox_rec::selected_index
 
