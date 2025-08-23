@@ -180,9 +180,16 @@ jump_table:
 
 .endproc ; Dispatch
 
+;;; ============================================================
+
 DrawEntryProc:  jmp     (lbr_copy + LBTK::ListBoxRecord::draw_entry_proc)
 OnSelChange:    jmp     (lbr_copy + LBTK::ListBoxRecord::on_sel_change)
 OnNoChange:     jmp     (lbr_copy + LBTK::ListBoxRecord::on_no_change)
+
+;;; ============================================================
+
+pencopy:        .byte   MGTK::pencopy
+penXOR:         .byte   MGTK::penXOR
 
 ;;; ============================================================
 ;;; Call to initialize (or reset) the list. The caller must set
@@ -620,7 +627,7 @@ activate:
 
 ;;; ============================================================
 ;;; Input: A = row to ensure visible; high bit = force redraw,
-;;;   even if no scrolling occured.
+;;;   even if no scrolling occurred.
 ;;; Assert: `LBTK::ListBoxRecord::winfo`'s `MGTK::Winfo::vthumbpos` is set.
 
 .proc _ScrollIntoView

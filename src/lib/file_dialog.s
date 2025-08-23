@@ -12,6 +12,7 @@
 ;;; * `MLI_CALL`
 ;;; * `MGTK_CALL`
 ;;; * `BTK_CALL`
+;;; * `LBTK_CALL`
 ;;;
 ;;; Requires the following proc definitions:
 ;;; * `SystemTask`
@@ -93,7 +94,7 @@ file_names      := $1800
         kDirReadSize = $200
 
         DEFINE_OPEN_PARAMS open_params, path_buf, io_buf
-        DEFINE_READ_PARAMS read_params, dir_read_buf, kDirReadSize
+        DEFINE_READWRITE_PARAMS read_params, dir_read_buf, kDirReadSize
         DEFINE_CLOSE_PARAMS close_params
 
 only_show_dirs_flag:            ; set when selecting copy destination
@@ -123,10 +124,8 @@ selection_requirement_flags:
 
         copy8   #$FF, selected_index
 
-        lda     #BTK::kButtonStateNormal
-        sta     file_dialog_res::open_button::state
-        sta     file_dialog_res::close_button::state
-        sta     file_dialog_res::drives_button::state
+        ;; Client must call `UpdateListFromPath` which will initialize
+        ;; the dynamic button states.
 
         rts
 .endproc ; Init
@@ -213,9 +212,11 @@ out:    jsr     _UnsetCursorIBeam
         beq     :+
 ret:    rts
 :
+        ;; Dialog window?
         lda     findwindow_params+MGTK::FindWindowParams::window_id
         cmp     #file_dialog_res::kFilePickerDlgWindowID
-        beq     not_list
+    IF_NE
+        ;; No, assume list box (will fail gracefully if not)
         COPY_STRUCT MGTK::Point, event_params+MGTK::Event::coords, file_dialog_res::lb_params::coords
         LBTK_CALL LBTK::Click, file_dialog_res::lb_params
         bmi     ret
@@ -223,16 +224,16 @@ ret:    rts
         bmi     ret
         ldx     selected_index
         lda     file_list_index,x
-    IF_NC
+      IF_NC
         ;; File - accept it.
         BTK_CALL BTK::Flash, file_dialog_res::ok_button
         jmp     HandleOK
-    END_IF
+      END_IF
         ;; Folder - open it.
         BTK_CALL BTK::Flash, file_dialog_res::open_button
         jmp     _DoOpen
+    END_IF
 
-not_list:
         jsr     _MoveToWindowCoords
 
         ;; --------------------------------------------------
@@ -241,9 +242,8 @@ not_list:
         MGTK_CALL MGTK::InRect, file_dialog_res::drives_button::rect
     IF_NOT_ZERO
         BTK_CALL BTK::Track, file_dialog_res::drives_button
-        bmi     :+
-        jsr     _DoDrives
-:       rts
+        RTS_IF_NS
+        jmp     _DoDrives
     END_IF
 
         ;; --------------------------------------------------
@@ -252,9 +252,8 @@ not_list:
         MGTK_CALL MGTK::InRect, file_dialog_res::open_button::rect
     IF_NOT_ZERO
         BTK_CALL BTK::Track, file_dialog_res::open_button
-        bmi     :+
-        jsr     _DoOpen
-:       rts
+        RTS_IF_NS
+        jmp     _DoOpen
     END_IF
 
         ;; --------------------------------------------------
@@ -263,9 +262,8 @@ not_list:
         MGTK_CALL MGTK::InRect, file_dialog_res::close_button::rect
     IF_NOT_ZERO
         BTK_CALL BTK::Track, file_dialog_res::close_button
-        bmi     :+
-        jsr     _DoClose
-:       rts
+        RTS_IF_NS
+        jmp     _DoClose
     END_IF
 
         ;; --------------------------------------------------
@@ -274,9 +272,8 @@ not_list:
         MGTK_CALL MGTK::InRect, file_dialog_res::ok_button::rect
     IF_NOT_ZERO
         BTK_CALL BTK::Track, file_dialog_res::ok_button
-        bmi     :+
-        jsr     HandleOK
-:       rts
+        RTS_IF_NS
+        jmp     HandleOK
     END_IF
 
         ;; --------------------------------------------------
@@ -285,9 +282,8 @@ not_list:
         MGTK_CALL MGTK::InRect, file_dialog_res::cancel_button::rect
     IF_NOT_ZERO
         BTK_CALL BTK::Track, file_dialog_res::cancel_button
-        bmi     :+
-        jsr     HandleCancel
-:       rts
+        RTS_IF_NS
+        jmp     HandleCancel
     END_IF
 
 
@@ -442,25 +438,29 @@ cursor_ibeam_flag:              ; high bit set when cursor is I-beam
 
 ;;; Output: C=0 if allowed, C=1 if not.
 .proc _IsOpenAllowed
-        lda     selected_index
-        bmi     no              ; no selection
-        tax
+        ldx     selected_index
+        bmi     _ReturnNotAllowed ; no selection
         lda     file_list_index,x
-        bpl     no              ; not a folder
-
-yes:    clc
-        rts
-
-no:     sec
-        rts
+        bpl     _ReturnNotAllowed ; not a folder
+        FALL_THROUGH_TO _ReturnAllowed
 .endproc ; _IsOpenAllowed
+
+.proc _ReturnAllowed
+        clc
+        rts
+.endproc ; _ReturnAllowed
+
+.proc _ReturnNotAllowed
+        sec
+        rts
+.endproc ; _ReturnNotAllowed
 
 ;;; ============================================================
 
 ;;; Output: C=0 if allowed, C=1 if not.
 .proc _IsCloseAllowed
         jsr     _IsRootPath
-        beq     _IsOpenAllowed::no
+        beq     _ReturnNotAllowed
 
         clc
         rts
@@ -470,9 +470,6 @@ no:     sec
 
 ;;; Output: C=0 if allowed, C=1 if not.
 .proc _IsOKAllowed
-        allowed     := _IsOpenAllowed::yes
-        not_allowed := _IsOpenAllowed::no
-
         .assert kSelectionOptional           & $80 = $00, error, "enum mismatch"
         .assert kSelectionOptionalUnlessRoot & $80 = $00, error, "enum mismatch"
         .assert kSelectionRequiredNoDirs     & $80 = $80, error, "enum mismatch"
@@ -482,17 +479,17 @@ no:     sec
     IF_NS
         ;; Selection required
         bit     selected_index
-        bmi     _IsOpenAllowed::no ; no selection
+        bmi     _ReturnNotAllowed ; no selection
 
         .assert kSelectionRequiredNoDirs & $40 = $00, error, "enum mismatch"
         .assert kSelectionRequiredDirsOK & $40 = $40, error, "enum mismatch"
 
         ;; bit6 = dirs ok?
         bit     selection_requirement_flags
-        bvs     allowed         ; dirs ok
+        bvs     _ReturnAllowed  ; dirs ok
         jsr     _IsOpenAllowed  ; C=0 if open allowed
-        bcc     not_allowed     ; but we want the inverse
-        bcs     allowed         ; always
+        bcc     _ReturnNotAllowed ; but we want the inverse
+        bcs     _ReturnAllowed    ; always
     END_IF
 
         ;; No selection required
@@ -500,12 +497,12 @@ no:     sec
         .assert kSelectionOptionalUnlessRoot & $40 = $40, error, "enum mismatch"
 
         ;; bit6 = root w/ no selection ok?
-        bvc     allowed
+        bvc     _ReturnAllowed
 
         ;; selection required if not root
         bit     selected_index
         bmi     _IsCloseAllowed ; no selection, so only if not root
-        bpl     allowed         ; always
+        bpl     _ReturnAllowed  ; always
 .endproc ; _IsOKAllowed
 
 ;;; ============================================================
@@ -589,40 +586,36 @@ ret:    rts
 
         cmp     #CHAR_RETURN
       IF_EQ
-        jsr     _IsOKAllowed
-        RTS_IF_CS
-
         BTK_CALL BTK::Flash, file_dialog_res::ok_button
+        RTS_IF_NS
         jmp     HandleOK
       END_IF
 
         cmp     #CHAR_ESCAPE
       IF_EQ
         BTK_CALL BTK::Flash, file_dialog_res::cancel_button
+        ;; always enabled
         jmp     HandleCancel
       END_IF
 
         cmp     #CHAR_CTRL_O
       IF_EQ
-        jsr     _IsOpenAllowed
-        RTS_IF_CS
-
         BTK_CALL BTK::Flash, file_dialog_res::open_button
+        RTS_IF_NS
         jmp     _DoOpen
       END_IF
 
         cmp     #CHAR_CTRL_D
       IF_EQ
         BTK_CALL BTK::Flash, file_dialog_res::drives_button
+        ;; always enabled
         jmp     _DoDrives
       END_IF
 
         cmp     #CHAR_CTRL_C
       IF_EQ
         jsr     _IsCloseAllowed
-        RTS_IF_CS
-
-        BTK_CALL BTK::Flash, file_dialog_res::close_button
+        RTS_IF_NS
         jmp     _DoClose
       END_IF
 

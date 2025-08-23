@@ -1758,7 +1758,7 @@ check_header:
 
         DEFINE_OPEN_PARAMS open_params, src_path_buf, $1C00
         open_params__ref_num := open_params::ref_num
-        DEFINE_READ_PARAMS read_params, read_buf, kLinkFileMaxSize
+        DEFINE_READWRITE_PARAMS read_params, read_buf, kLinkFileMaxSize
         read_params__ref_num := read_params::ref_num
         read_params__trans_count := read_params::trans_count
         DEFINE_CLOSE_PARAMS close_params
@@ -2362,10 +2362,10 @@ main_length:    .word   0
         open_ref_num := open_params::ref_num
         open_pathname := open_params::pathname
 
-        DEFINE_READ_PARAMS read_header_params, DAHeader, .sizeof(DAHeader)
+        DEFINE_READWRITE_PARAMS read_header_params, DAHeader, .sizeof(DAHeader)
         read_header_ref_num := read_header_params::ref_num
 
-        DEFINE_READ_PARAMS read_params, DA_LOAD_ADDRESS, kDAMaxSize
+        DEFINE_READWRITE_PARAMS read_params, DA_LOAD_ADDRESS, kDAMaxSize
         read_ref_num := read_params::ref_num
         read_request_count := read_params::request_count
 
@@ -2815,7 +2815,7 @@ done:   rts
 
 .proc CmdDiskCopyImpl
         DEFINE_OPEN_PARAMS open_params, str_disk_copy, IO_BUFFER
-        DEFINE_READ_PARAMS read_params, DISK_COPY_BOOTSTRAP, kDiskCopyBootstrapLength
+        DEFINE_READWRITE_PARAMS read_params, DISK_COPY_BOOTSTRAP, kDiskCopyBootstrapLength
         DEFINE_CLOSE_PARAMS close_params
 
 str_disk_copy:
@@ -3279,7 +3279,7 @@ eject_flag:
         quit_code_size := $400
 
         DEFINE_OPEN_PARAMS open_params, str_quit_code, quit_code_io
-        DEFINE_READ_PARAMS read_params, quit_code_addr, quit_code_size
+        DEFINE_READWRITE_PARAMS read_params, quit_code_addr, quit_code_size
         DEFINE_CLOSE_PARAMS close_params
         DEFINE_QUIT_PARAMS quit_params
 
@@ -5298,7 +5298,7 @@ suffix: .byte   kAliasSuffix
 
         DEFINE_CREATE_PARAMS create_params, dst_path_buf, ACCESS_DEFAULT, FT_LINK, kLinkFileAuxType
         DEFINE_OPEN_PARAMS open_params, dst_path_buf, IO_BUFFER
-        DEFINE_WRITE_PARAMS write_params, link_struct, 0
+        DEFINE_READWRITE_PARAMS write_params, link_struct, 0
         DEFINE_CLOSE_PARAMS close_params
 
         ;; --------------------------------------------------
@@ -6938,7 +6938,7 @@ found_windows_list:
 
         dir_buffer := $C00
 
-        DEFINE_READ_PARAMS read_params, dir_buffer, $200
+        DEFINE_READWRITE_PARAMS read_params, dir_buffer, $200
         DEFINE_CLOSE_PARAMS close_params
 
 ;;; Copy of data from directory header
@@ -9420,7 +9420,7 @@ f35:    ldax    #dib_buffer+SPDIB::ID_String_Length
         ldy     #IconType::floppy800
         rts
 
-        DEFINE_READ_BLOCK_PARAMS block_params, block_buffer, kVolumeDirKeyBlock
+        DEFINE_READWRITE_BLOCK_PARAMS block_params, block_buffer, kVolumeDirKeyBlock
         unit_number := block_params::unit_num
 
 blocks: .word   0
@@ -10184,13 +10184,13 @@ file_entry_buf          .tag    FileEntry
         file_entry_buf := dir_data::file_entry_buf
 
         DEFINE_OPEN_PARAMS open_src_dir_params, src_path_buf, $800
-        DEFINE_READ_PARAMS read_block_pointers_params, dir_data::buf_block_pointers, kBlockPointersSize ; For skipping prev/next pointers in directory data
+        DEFINE_READWRITE_PARAMS read_block_pointers_params, dir_data::buf_block_pointers, kBlockPointersSize ; For skipping prev/next pointers in directory data
 
         DEFINE_CLOSE_PARAMS close_src_dir_params
 
-        DEFINE_READ_PARAMS read_src_dir_entry_params, file_entry_buf, .sizeof(FileEntry)
+        DEFINE_READWRITE_PARAMS read_src_dir_entry_params, file_entry_buf, .sizeof(FileEntry)
 
-        DEFINE_READ_PARAMS read_padding_bytes_params, dir_data::buf_padding_bytes, kMaxPaddingBytes
+        DEFINE_READWRITE_PARAMS read_padding_bytes_params, dir_data::buf_padding_bytes, kMaxPaddingBytes
 
         file_data_buffer := $1500
         kBufSize = $A00
@@ -10203,8 +10203,8 @@ file_entry_buf          .tag    FileEntry
         DEFINE_DESTROY_PARAMS destroy_dst_params, dst_path_buf
         DEFINE_OPEN_PARAMS open_src_params, src_path_buf, $0D00
         DEFINE_OPEN_PARAMS open_dst_params, dst_path_buf, $1100
-        DEFINE_READ_PARAMS read_src_params, file_data_buffer, kBufSize
-        DEFINE_WRITE_PARAMS write_dst_params, file_data_buffer, kBufSize
+        DEFINE_READWRITE_PARAMS read_src_params, file_data_buffer, kBufSize
+        DEFINE_READWRITE_PARAMS write_dst_params, file_data_buffer, kBufSize
         DEFINE_CREATE_PARAMS create_params3, dst_path_buf, ACCESS_DEFAULT
 
         DEFINE_SET_MARK_PARAMS mark_src_params, 0
@@ -10212,7 +10212,8 @@ file_entry_buf          .tag    FileEntry
         DEFINE_ON_LINE_PARAMS on_line_params2,, $800
 
         block_buffer := file_data_buffer
-        DEFINE_READ_BLOCK_PARAMS block_params, block_buffer, SELF_MODIFIED
+        DEFINE_READWRITE_BLOCK_PARAMS block_params, block_buffer, SELF_MODIFIED
+        DEFINE_READWRITE_BLOCK_PARAMS vol_key_block_params, block_buffer, kVolumeDirKeyBlock
 
 ;;; ============================================================
 ;;; Callbacks used during operations. There are two sets:
@@ -10391,16 +10392,13 @@ eof:    return  #$FF
         jmp     @retry
 :
         ;; Try to read a block off device; if AppleShare will fail.
-        copy8   DEVNUM, unit_number
-        MLI_CALL READ_BLOCK, block_params
+        copy8   DEVNUM, vol_key_block_params::unit_num
+        MLI_CALL READ_BLOCK, vol_key_block_params
         cmp     #ERR_NETWORK_ERROR
     IF_EQ
         copy8   #$80, dst_is_appleshare_flag
     END_IF
 ret:    rts
-
-        DEFINE_READ_BLOCK_PARAMS block_params, block_buffer, kVolumeDirKeyBlock
-        unit_number := block_params::unit_num
 .endproc ; SetDstIsAppleShareFlag
 
 ;;; ============================================================
@@ -10963,8 +10961,8 @@ cancel: jmp     CloseFilesCancelDialogWithFailedResult
         cmp     #ST_VOLUME_DIRECTORY
     IF_EQ
         ;; Volume
-        copy8   DEVNUM, unit_number
-        MLI_CALL READ_BLOCK, vol_block_params
+        copy8   DEVNUM, vol_key_block_params::unit_num
+        MLI_CALL READ_BLOCK, vol_key_block_params
         bcs     ret
         copy16  block_buffer + VolumeDirectoryHeader::case_bits, case_bits
     ELSE
@@ -10979,9 +10977,6 @@ cancel: jmp     CloseFilesCancelDialogWithFailedResult
 
         clc                     ; success
 ret:    rts
-
-        DEFINE_READ_BLOCK_PARAMS vol_block_params, block_buffer, kVolumeDirKeyBlock
-        unit_number := vol_block_params::unit_num
 .endproc ; ReadSrcCaseBits
 
 .proc WriteDstCaseBits
@@ -11014,8 +11009,8 @@ ret:    rts
         src_block := $800
         dst_block := $A00
 
-        DEFINE_READ_BLOCK_PARAMS src_block_params, src_block, 0
-        DEFINE_READ_BLOCK_PARAMS dst_block_params, dst_block, 0
+        DEFINE_READWRITE_BLOCK_PARAMS src_block_params, src_block, 0
+        DEFINE_READWRITE_BLOCK_PARAMS dst_block_params, dst_block, 0
 src_entry_num:  .byte   0
 dst_entry_num:  .byte   0
 
@@ -11874,7 +11869,6 @@ CloseFilesCancelDialogWithCanceledResult := CloseFilesCancelDialogImpl::canceled
 .proc CheckMoveOrCopy
         src_ptr := $08
         dst_buf := path_buf4
-        block_buffer := $800
 
         stax    src_ptr
 
@@ -11941,16 +11935,12 @@ match:  lda     flag
         jsr     ShowErrorAlert
         jmp     @retry
 :
-        lda     DEVNUM
-        sta     block_params__unit_num
-        MLI_CALL READ_BLOCK, block_params
+        copy8   DEVNUM, vol_key_block_params
+        MLI_CALL READ_BLOCK, vol_key_block_params
         lda     #$80            ; bit 7 = move
         bcs     :+
         eor     #$40            ; bit 6 = relink supported
 :       rts
-
-        DEFINE_READ_BLOCK_PARAMS block_params, block_buffer, kVolumeDirKeyBlock
-        block_params__unit_num := block_params::unit_num
 .endproc ; CheckMoveOrCopy
 
 ;;; ============================================================
@@ -12043,7 +12033,7 @@ ShowErrorAlertDst       := ShowErrorAlertImpl::flag_set
 
 .scope get_info
 
-        DEFINE_READ_BLOCK_PARAMS getinfo_block_params, $800, $A
+        DEFINE_READWRITE_BLOCK_PARAMS getinfo_block_params, $800, $A
 
 ;;; ============================================================
 ;;; Get Info
@@ -13360,7 +13350,7 @@ str_desktop:
 
         DEFINE_SET_MARK_PARAMS set_mark_params, 0
 
-        DEFINE_READ_PARAMS read_params, 0, 0
+        DEFINE_READWRITE_PARAMS read_params, 0, 0
         DEFINE_CLOSE_PARAMS close_params
 
         ;; Called with routine # in A
@@ -13645,7 +13635,7 @@ get_case_bits_per_option_and_adjust_string:
 
         ;; --------------------------------------------------
         block_buffer := $800
-        DEFINE_READ_BLOCK_PARAMS block_params, block_buffer, SELF_MODIFIED
+        DEFINE_READWRITE_BLOCK_PARAMS block_params, block_buffer, SELF_MODIFIED
         unit_number := block_params::unit_num
         block_number := block_params::block_num
 .endproc ; ApplyCaseBits
@@ -13832,12 +13822,11 @@ KeyHookRelay:
         jmp     (PromptDialogKeyHandlerHook)
 
 .proc _HandleKeyOK
-        bit     ok_button::state
-        ASSERT_EQUALS BTK::kButtonStateDisabled, $80
-        bmi     ret
         BTK_CALL BTK::Flash, ok_button
-        lda     #PromptResult::ok
-ret:    rts
+     IF_NS
+        return  #$FF            ; ignore
+     END_IF
+        return  #PromptResult::ok
 .endproc ; _HandleKeyOK
 
 .proc _HandleKeyCancel
@@ -14040,8 +14029,7 @@ cursor_ibeam_flag:          ; high bit set if I-beam, clear if pointer
 
         DEFINE_CREATE_PARAMS create_params, str_desktop_file, ACCESS_DEFAULT, $F1
         DEFINE_OPEN_PARAMS open_params, str_desktop_file, desktop_file_io_buf
-        DEFINE_READ_PARAMS read_params, desktop_file_data_buf, kFileSize
-        DEFINE_READ_PARAMS write_params, desktop_file_data_buf, kFileSize
+        DEFINE_READWRITE_PARAMS rw_params, desktop_file_data_buf, kFileSize
         DEFINE_CLOSE_PARAMS close_params
 str_desktop_file:
         PASCAL_STRING kPathnameDeskTopState
@@ -14126,12 +14114,9 @@ finish: ldy     #0              ; Write sentinel
         sty     tmp_path_buf
 
         ;; Write the file
-        lda     #<tmp_path_buf
-        sta     create_params::pathname
-        sta     open_params::pathname
-        lda     #>tmp_path_buf
-        sta     create_params::pathname+1
-        sta     open_params::pathname+1
+        ldax    #tmp_path_buf
+        stax    create_params::pathname
+        stax    open_params::pathname
         jsr     WriteOutFile
 
 exit:   rts
@@ -14218,9 +14203,9 @@ window_id := findwindow_params::window_id
         jsr     Open
         bcs     :+
         lda     open_params::ref_num
-        sta     write_params::ref_num
+        sta     rw_params::ref_num
         sta     close_params::ref_num
-        MLI_CALL WRITE, write_params
+        MLI_CALL WRITE, rw_params
         jsr     Close
 :       rts
 .endproc ; WriteOutFile
@@ -14378,7 +14363,7 @@ exit:
         rts
 
         DEFINE_OPEN_PARAMS open_params, path_buf, io_buf
-        DEFINE_READ_PARAMS read_params, block_buf, BLOCK_SIZE
+        DEFINE_READWRITE_PARAMS read_params, block_buf, BLOCK_SIZE
         DEFINE_CLOSE_PARAMS close_params
         open_params_ref_num := open_params::ref_num
         read_params_ref_num := read_params::ref_num

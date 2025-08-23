@@ -396,7 +396,7 @@ count:  .byte   0
 str_selector_list:
         PASCAL_STRING kPathnameSelectorList
 
-        DEFINE_READ_PARAMS read_params, selector_list_data_buf, kSelectorListShortSize
+        DEFINE_READWRITE_PARAMS read_params, selector_list_data_buf, kSelectorListShortSize
         DEFINE_CLOSE_PARAMS close_params
 
 .proc _ReadSelectorList
@@ -411,7 +411,7 @@ str_selector_list:
 .endproc ; _ReadSelectorList
 
         DEFINE_CREATE_PARAMS create_params, str_selector_list, ACCESS_DEFAULT, $F1
-        DEFINE_WRITE_PARAMS write_params, selector_list_data_buf, kSelectorListShortSize
+        DEFINE_READWRITE_PARAMS write_params, selector_list_data_buf, kSelectorListShortSize
 
 .proc _WriteSelectorList
         ptr := $06
@@ -618,7 +618,7 @@ close_dir:
         open_ref_num := open_params::ref_num
 
         .assert BLOCK_SIZE <= kDataBufferSize, error, "Buffer size error"
-        DEFINE_READ_PARAMS read_params, read_dir_buffer, BLOCK_SIZE
+        DEFINE_READWRITE_PARAMS read_params, read_dir_buffer, BLOCK_SIZE
         read_ref_num := read_params::ref_num
 
         DEFINE_GET_FILE_INFO_PARAMS get_file_info_params, str_desk_acc
@@ -804,6 +804,13 @@ cvi_result:
         cpx     DEVCNT
         bne     :-
         dec     DEVCNT
+
+        ;; ProDOS requires an ON_LINE call after a device is
+        ;; disconnected in order to clean up the VCB entry. However,
+        ;; we only remove devices here if the device already failed an
+        ;; ON_LINE call with `ERR_DEVICE_NOT_CONNECTED` so it should
+        ;; not be necessary.
+
         rts
 .endproc ; RemoveDevice
 
@@ -1037,9 +1044,9 @@ iloop:  cpx     cached_window_entry_count
         jsr     main::save_restore_windows::Open
         jcs     exit
         lda     main::save_restore_windows::open_params::ref_num
-        sta     main::save_restore_windows::read_params::ref_num
+        sta     main::save_restore_windows::rw_params::ref_num
         sta     main::save_restore_windows::close_params::ref_num
-        MLI_CALL READ, main::save_restore_windows::read_params
+        MLI_CALL READ, main::save_restore_windows::rw_params
         jsr     main::save_restore_windows::Close
 
         ;; Validate file format version byte
@@ -1144,6 +1151,7 @@ trash_name:  PASCAL_STRING res_string_trash_icon_name
         .include "../lib/clear_dhr.s"
         saved_ram_unitnum := main::saved_ram_unitnum
         saved_ram_drvec   := main::saved_ram_drvec
+        saved_ram_buffer  := IO_BUFFER
         .include "../lib/disconnect_ram.s"
 
 ;;; ============================================================

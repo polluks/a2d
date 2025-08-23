@@ -544,12 +544,11 @@ ret:    rts
 ;;; ============================================================
 
 .proc HandleKeyReturn
-        bit     entry_picker_ok_button::state
-        ASSERT_EQUALS BTK::kButtonStateDisabled, $80
-        bmi     ret
         BTK_CALL BTK::Flash, entry_picker_ok_button
-        lda     #0
-ret:    rts
+    IF_NS
+        return #$FF             ; ignore
+    END_IF
+        return  #0
 .endproc ; HandleKeyReturn
 
 ;;; ============================================================
@@ -983,8 +982,8 @@ filename_buffer := $1C00
 filename:
         PASCAL_STRING kPathnameSelectorList
 
-        DEFINE_READ_PARAMS read_params, selector_list, kSelectorListBufSize
-        DEFINE_WRITE_PARAMS write_params, selector_list, kSelectorListBufSize
+        DEFINE_READWRITE_PARAMS read_params, selector_list, kSelectorListBufSize
+        DEFINE_READWRITE_PARAMS write_params, selector_list, kSelectorListBufSize
         DEFINE_CLOSE_PARAMS close_params
 
 .proc WriteFileToOriginalPrefix

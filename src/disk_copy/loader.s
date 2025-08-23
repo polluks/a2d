@@ -19,7 +19,7 @@ load_buf := $4000
         DEFINE_OPEN_PARAMS open_params, filename, io_buf
 filename:   PASCAL_STRING kPathnameDiskCopy
 
-        DEFINE_READ_PARAMS read_params, 0, 0
+        DEFINE_READWRITE_PARAMS read_params, 0, 0
         DEFINE_SET_MARK_PARAMS set_mark_params, 0
         DEFINE_CLOSE_PARAMS close_params
 
@@ -28,6 +28,8 @@ filename:   PASCAL_STRING kPathnameDiskCopy
 ;;; ============================================================
 
 start:
+        jsr     DisconnectRAM
+
         ;; Set stack pointers to arbitrarily low values for use when
         ;; interrupts occur. DeskTop does not utilize this convention,
         ;; so the values are set low so that interrupts which do (for
@@ -116,6 +118,13 @@ loop:   lda     (src),y
         bit     ROMIN2
         rts
 .endproc ; CopyToLc
+
+;;; ============================================================
+
+        saved_ram_unitnum := main__saved_ram_unitnum
+        saved_ram_drvec   := main__saved_ram_drvec
+        saved_ram_buffer: .res 16
+        .include "../lib/disconnect_ram.s"
 
 ;;; ============================================================
 
