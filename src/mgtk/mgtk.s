@@ -6238,7 +6238,7 @@ event_loop:
         cmp     #MGTK::EventKind::key_down
     IF_EQ
         ;; Set up `sel_menu_*`
-        lda     menu_index      ; TODO: Verify this is valid
+        lda     menu_index    ; TODO: Verify this is valid
         sta     sel_menu_index
         sta     last_menu_index
         lda     cur_hilited_menu_item
@@ -6551,7 +6551,7 @@ finish: rts
         and     #MGTK::MenuOpt::disable_flag | MGTK::MenuOpt::item_is_filler
         bne     fail
 
-        lda     menu_index
+        lda     z:menu_index
         sta     sel_menu_index
         sec
         .byte   OPC_BCC         ; mask next byte (clc)

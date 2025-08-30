@@ -1,18 +1,31 @@
 ;;; ============================================================
-;;; Entry point for "Icon ToolKit"
+;;; Icon ToolKit
 ;;; ============================================================
 
-.scope icon_toolkit
+.scope icontk
         ITKEntry := *
 
-        ;; Zero Page usage (saved/restored around calls)
+;;; ============================================================
+;;; Zero Page usage (saved/restored around calls)
 
-PARAM_BLOCK, $06
-generic_ptr1    .addr
-generic_ptr2    .addr
+        zp_start := $06
+        kMaxZPAddress = $50
+        kMaxCommandDataSize = 9
+
+PARAM_BLOCK, zp_start
+;;; Initially points at the call site, then at passed params
+params_addr     .addr
+
+;;; Copy of the passed params
+command_data    .res    kMaxCommandDataSize
+
+;;; Other ZP usage
+generic_ptr     .addr
+
+icon_ptr        .addr           ; Set by `SetIconPtr`, used everywhere
+res_ptr         .addr           ; Set by `GetIconResource`
 
 poly_coords     .tag    MGTK::Point ; used in `DragHighlighted`
-initial_coords  .tag    MGTK::Point ; used in `DragHighlighted`
 last_coords     .tag    MGTK::Point ; used in `DragHighlighted`
 
 clip_coords     .tag    MGTK::Point ; Used for clipped drawing
@@ -22,103 +35,130 @@ bitmap_rect     .tag    MGTK::Rect  ; populated by `CalcIconRects`
 label_rect      .tag    MGTK::Rect  ; populated by `CalcIconRects`
 bounding_rect   .tag    MGTK::Rect  ; populated by `CalcIconRects`
 rename_rect     .tag    MGTK::Rect  ; populated by `CalcIconRects`
+
+;;; For size calculation, not actually used
+zp_end          .byte
 END_PARAM_BLOCK
-        ASSERT_EQUALS rename_rect + .sizeof(MGTK::Rect), $42
-        kBytesToSave = $42 - $06
+
+        .assert zp_end <= kMaxZPAddress, error, "too big"
+        kBytesToSave = zp_end - zp_start
+
+;;; ============================================================
 
         .assert ITKEntry = Dispatch, error, "dispatch addr"
 .proc Dispatch
-        ;; Stash return value from stack, adjust by 3
-        ;; (command byte, params addr)
+        ;; Adjust stack/stash
         pla
-        sta     call_params
+        sta     params_lo
         clc
         adc     #<3
         tax
         pla
-        sta     call_params+1
+        sta     params_hi
         adc     #>3
         pha
         txa
         pha
 
-
-        ;; Save $06... on the stack
+        ;; Save ZP
         ldx     #AS_BYTE(-kBytesToSave)
-:       lda     $06 + kBytesToSave,x
+:       lda     zp_start + kBytesToSave,x
         pha
         inx
         bne     :-
 
-        ;; Point ($06) at call command
-        copy16  call_params, $06
+        ;; Point `params_addr` at the call site
+        params_lo := *+1
+        lda     #SELF_MODIFIED_BYTE
+        sta     params_addr
+        params_hi := *+1
+        lda     #SELF_MODIFIED_BYTE
+        sta     params_addr+1
 
-        ldy     #1              ; Note: RTS address is off-by-one
-        lda     ($06),y         ; command number
+        ;; Grab command number
+        ldy     #1              ; Note: rts address is off-by-one
+        lda     (params_addr),y
         tax
-        copylohi jump_table_low,x, jump_table_high,x, dispatch
-        iny
-        lda     ($06),y         ; params address
-        tax
-        iny
-        lda     ($06),y
-        sta     $07             ; point $06 at params
-        stx     $06
+        copylohi jump_table_lo,x, jump_table_hi,x, dispatch
 
+        ;; Point `params_addr` at actual params
+        iny
+        lda     (params_addr),y
+        tax
+        iny
+        lda     (params_addr),y
+        sta     params_addr+1
+        stx     params_addr
+
+.ifdef DEBUG
+        ;; Bad if param block overlaps our zero page useage
+        cmp16   params_addr, #zp_end
+    IF_LT
+        brk
+    END_IF
+.endif ; DEBUG
+
+        ;; Copy param data to `command_data`
+        ldy     #kMaxCommandDataSize-1
+:       copy8   (params_addr),y, command_data,y
+        dey
+        bpl     :-
+
+        ;; Invoke the command
         dispatch := *+1
         jsr     SELF_MODIFIED
         tay                     ; A = result
 
-        ;; Restore $06...
+        ;; Restore ZP
         ldx     #kBytesToSave-1
 :       pla
-        sta     $06,x
+        sta     zp_start,x
         dex
         bpl     :-
 
         tya                     ; A = result
         rts
 
-call_params:  .addr     0
+jump_table_lo:
+        .lobytes   InitToolKitImpl
+        .lobytes   AllocIconImpl
+        .lobytes   HighlightIconImpl
+        .lobytes   DrawIconRawImpl
+        .lobytes   FreeIconImpl
+        .lobytes   FreeAllImpl
+        .lobytes   FindIconImpl
+        .lobytes   DragHighlightedImpl
+        .lobytes   UnhighlightIconImpl
+        .lobytes   DrawAllImpl
+        .lobytes   IconInRectImpl
+        .lobytes   EraseIconImpl
+        .lobytes   GetIconBoundsImpl
+        .lobytes   DrawIconImpl
+        .lobytes   GetIconEntryImpl
+        .lobytes   GetRenameRectImpl
+        .lobytes   GetBitmapRectImpl
+
+jump_table_hi:
+        .hibytes   InitToolKitImpl
+        .hibytes   AllocIconImpl
+        .hibytes   HighlightIconImpl
+        .hibytes   DrawIconRawImpl
+        .hibytes   FreeIconImpl
+        .hibytes   FreeAllImpl
+        .hibytes   FindIconImpl
+        .hibytes   DragHighlightedImpl
+        .hibytes   UnhighlightIconImpl
+        .hibytes   DrawAllImpl
+        .hibytes   IconInRectImpl
+        .hibytes   EraseIconImpl
+        .hibytes   GetIconBoundsImpl
+        .hibytes   DrawIconImpl
+        .hibytes   GetIconEntryImpl
+        .hibytes   GetRenameRectImpl
+        .hibytes   GetBitmapRectImpl
+
+        ASSERT_EQUALS *-jump_table_hi, jump_table_hi-jump_table_lo
 .endproc ; Dispatch
-
-jump_table_low:
-        .byte   <InitToolKitImpl
-        .byte   <AllocIconImpl
-        .byte   <HighlightIconImpl
-        .byte   <DrawIconRawImpl
-        .byte   <FreeIconImpl
-        .byte   <FreeAllImpl
-        .byte   <FindIconImpl
-        .byte   <DragHighlightedImpl
-        .byte   <UnhighlightIconImpl
-        .byte   <DrawAllImpl
-        .byte   <IconInRectImpl
-        .byte   <EraseIconImpl
-        .byte   <GetIconBoundsImpl
-        .byte   <DrawIconImpl
-        .byte   <GetIconEntryImpl
-        .byte   <GetRenameRectImpl
-        .byte   <GetBitmapRectImpl
-
-jump_table_high:
-        .byte   >InitToolKitImpl
-        .byte   >AllocIconImpl
-        .byte   >HighlightIconImpl
-        .byte   >DrawIconRawImpl
-        .byte   >FreeIconImpl
-        .byte   >FreeAllImpl
-        .byte   >FindIconImpl
-        .byte   >DragHighlightedImpl
-        .byte   >UnhighlightIconImpl
-        .byte   >DrawAllImpl
-        .byte   >IconInRectImpl
-        .byte   >EraseIconImpl
-        .byte   >GetIconBoundsImpl
-        .byte   >DrawIconImpl
-        .byte   >GetIconEntryImpl
-        .byte   >GetRenameRectImpl
-        .byte   >GetBitmapRectImpl
 
 ;;; ============================================================
 
@@ -220,13 +260,14 @@ icon_ptrs_low:  .res    (::kMaxIconCount+1), 0 ; addresses of icon details (inde
 icon_ptrs_high: .res    (::kMaxIconCount+1), 0 ; addresses of icon details (index 0 not used)
 
 ;;; Input: A = icon number
-;;; Output: A,X = address of IconEntry
-.proc GetIconPtr
+;;; Output: `icon_ptr` = A,X = address of IconEntry
+.proc SetIconPtr
         tay
         ldx     icon_ptrs_high,y
         lda     icon_ptrs_low,y
+        stax    icon_ptr
         rts
-.endproc ; GetIconPtr
+.endproc ; SetIconPtr
 
 
 ;;; ============================================================
@@ -309,27 +350,21 @@ icon_grafport:  .tag    MGTK::GrafPort
 ;;; InitToolKit
 
 .proc InitToolKitImpl
-        params := $06
-.struct InitToolKitParams
+PARAM_BLOCK params, icontk::command_data
 headersize      .byte
 a_polybuf       .addr
 bufsize         .word
 a_typemap       .addr
 a_heap          .addr
-.endstruct
+END_PARAM_BLOCK
 
-        table_ptr := $08
+        table_ptr := generic_ptr
 
-        ldy     #InitToolKitParams::headersize
-        copy8   (params),y, header_height
-        iny                     ; Y = InitToolKitParams::a_polybuf
-        copy16in (params),y, polybuf_addr
-        iny                     ; Y = InitToolKitParams::bufsize
-        copy16in (params),y, bufsize
-        iny                     ; Y = InitToolKitParams::a_typemap
-        copy16in (params),y, typemap_addr
-        iny                     ; Y = InitToolKitParams::a_heap
-        copy16in (params),y, table_ptr
+        copy8   params::headersize, header_height
+        copy16  params::a_polybuf, polybuf_addr
+        copy16  params::bufsize, bufsize
+        copy16  params::a_typemap, typemap_addr
+        copy16  params::a_heap, table_ptr
 
         ;; --------------------------------------------------
         ;; Populate `icon_ptrs_low/high` table
@@ -369,7 +404,6 @@ bufsize:
 ;;; AllocIcon
 
 .proc AllocIconImpl
-        params := $06
 .struct AllocIconParams
         icon    .byte           ; out
         entry   .addr           ; out
@@ -377,7 +411,7 @@ bufsize:
 
         jsr     AllocateIcon
         ldy     #AllocIconParams::icon
-        sta     (params),y
+        sta     (params_addr),y
 
         ;; Add it to `icon_list`
         ldx     num_icons
@@ -385,21 +419,19 @@ bufsize:
         inc     num_icons
 
         ;; Grab the `IconEntry`, to return it and update it
-        ptr_icon := $08
-        jsr     GetIconPtr
-        stax    ptr_icon
+        jsr     SetIconPtr
         ldy     #AllocIconParams::entry
-        sta     (params),y
+        sta     (params_addr),y
         txa
         iny
-        sta     (params),y
+        sta     (params_addr),y
 
         ;; Initialize IconEntry::state
         lda     #0
         ;; ldy     #IconEntry::state
         ASSERT_EQUALS IconEntry::state, 0
         tay
-        sta     (ptr_icon),y
+        sta     (icon_ptr),y
 
         rts
 .endproc ; AllocIconImpl
@@ -427,21 +459,18 @@ done:   rts
 ;;; param is pointer to icon id
 
 .proc HighlightIconImpl
-        params := $06
-.struct HighlightIconParams
-        icon    .byte
-.endstruct
+PARAM_BLOCK params, icontk::command_data
+icon    .byte
+END_PARAM_BLOCK
 
         ;; Pointer to IconEntry
-        ldy     #HighlightIconParams::icon
-        lda     (params),y
+        lda     params::icon
         pha                     ; A = icon
-        ptr := $06              ; Overwrites params
-        jsr     GetIconState    ; sets `ptr`/$06 too
 
         ;; Mark highlighted
+        jsr     GetIconState    ; A = state, sets `icon_ptr` too
         ora     #kIconEntryStateHighlighted
-        sta     (ptr),y
+        sta     (icon_ptr),y
 
         pla                     ; A = icon
         jmp     MaybeMoveIconToTop
@@ -453,13 +482,11 @@ done:   rts
 ;;; param is pointer to icon number
 
 .proc FreeIconImpl
-        params := $06
-.struct FreeIconParams
-        icon    .byte
-.endstruct
+PARAM_BLOCK params, icontk::command_data
+icon    .byte
+END_PARAM_BLOCK
 
-        ldy     #FreeIconParams::icon
-        lda     (params),y
+        lda     params::icon
 
 .ifdef DEBUG
         ;; Is it in `icon_list`?
@@ -517,12 +544,10 @@ done:   rts
 
 ;;; Input: A = icon
 ;;; Output: Z=0 if fixed, Z=1 if not fixed
-;;; Trashes $06
 .proc IsIconFixed
-        jsr     GetIconPtr
-        stax    $06
+        jsr     SetIconPtr
         ldy     #IconEntry::win_flags
-        lda     ($06),y
+        lda     (icon_ptr),y
         and     #kIconEntryFlagsFixed
         rts
 .endproc ; IsIconFixed
@@ -532,7 +557,7 @@ done:   rts
 ;;; Move icon to end of `icon_list`, i.e. top of z-order, unless
 ;;; it has `kIconEntryFlagsFixed`.
 ;;; Input: A = icon
-;;; Trashes $06
+;;; Trashes `icon_ptr`
 ;;; Assert: icon is in `icon_list`
 .proc MaybeMoveIconToTop
         pha                     ; A = icon
@@ -552,14 +577,12 @@ done:   rts
 ;;; EraseIcon
 
 .proc EraseIconImpl
-        params := $06
-.struct EraseIconParams
-        icon    .byte
-.endstruct
+PARAM_BLOCK params, icontk::command_data
+icon    .byte
+END_PARAM_BLOCK
 
         ;; Pointer to IconEntry
-        ldy     #EraseIconParams::icon
-        lda     (params),y
+        lda     params::icon
         ldx     #$80            ; do clip
         sec                     ; do redraw highlighted
         jmp     EraseIconCommon ; A = icon id, X = clip flag, C = redraw flag
@@ -571,15 +594,12 @@ done:   rts
 ;;; param is window id (0 = desktop)
 
 .proc FreeAllImpl
-        params := $06
-.struct FreeAllParams
-        window_id       .byte
-.endstruct
+PARAM_BLOCK params, icontk::command_data
+window_id       .byte
+icon            .byte
+END_PARAM_BLOCK
 
-        ldy     #FreeAllParams::window_id
-        lda     (params),y
-        sta     window_id
-
+        ;; TODO: Shave this
         lda     num_icons
         sta     count
 count := * + 1
@@ -592,9 +612,8 @@ loop:   ldx     #SELF_MODIFIED_BYTE
         dex
 
         lda     icon_list,x
-        jsr     GetIconWin
-        window_id := *+1
-        cmp     #SELF_MODIFIED_BYTE
+        jsr     GetIconWin      ; A = window_id
+        cmp     params::window_id
         bne     loop                 ; nope
 
         ldx     count
@@ -608,26 +627,13 @@ loop:   ldx     #SELF_MODIFIED_BYTE
 ;;; FindIcon
 
 .proc FindIconImpl
-        params := $06
-.struct FindIconParams
-        coords  .tag MGTK::Point
-        result  .byte
-        window_id       .byte
-.endstruct
+PARAM_BLOCK params, icontk::command_data
+coords          .tag MGTK::Point
+result          .byte           ; out
+window_id       .byte
+END_PARAM_BLOCK
 
-        icon_ptr   := $06       ; for `CalcIconPoly` call
-        out_params := $08
-
-        ldax    params
-        stax    out_params
-        ASSERT_EQUALS FindIconParams::coords, 0, "coords must be first"
-        stax    moveto_params_addr
-
-        ldy     #FindIconParams::window_id
-        lda     (params),y
-        sta     window_id
-
-        MGTK_CALL MGTK::MoveTo, SELF_MODIFIED, moveto_params_addr
+        MGTK_CALL MGTK::MoveTo, params::coords
 
         ldx     num_icons
         beq     failed
@@ -637,11 +643,10 @@ loop:   dex
 
         ;; Check the icon
         lda     icon_list,x
-        jsr     GetIconWin      ; sets `icon_ptr`/$06 too
+        jsr     GetIconWin      ; A = window_id, sets `icon_ptr` too
 
         ;; Matching window?
-        window_id := * + 1
-        cmp     #SELF_MODIFIED_BYTE
+        cmp     params::window_id
         bne     next            ; nope, ignore
 
         ;; In poly?
@@ -660,17 +665,17 @@ next:
 
 failed:
         ;; Nothing found
-        ldy     #FindIconParams::result
         lda     #0
-        sta     (out_params),y
-        rts
+        beq     finish          ; always
 
         ;; Found one!
 inside: pla
         tax
         lda     icon_list,x
-        ldy     #FindIconParams::result
-        sta     (out_params),y
+
+finish:
+        ldy     #params::result - params
+        sta     (params_addr),y
         rts
 .endproc ; FindIconImpl
 
@@ -678,40 +683,25 @@ inside: pla
 ;;; DragHighlighted
 
 .proc DragHighlightedImpl
-        params := $06
-.struct DragHighlightedParams
-        icon    .byte
-        coords  .tag    MGTK::Point
-.endstruct
+PARAM_BLOCK params, icontk::command_data
+icon    .byte                   ; in/out
+coords  .tag    MGTK::Point
+END_PARAM_BLOCK
+
+        initial_coords := params::coords
 
         poly_dx := poly_coords + MGTK::Point::xcoord
         poly_dy := poly_coords + MGTK::Point::ycoord
 
-        ldy     #DragHighlightedParams::icon
-        lda     (params),y
-        sta     icon_id
-        ASSERT_EQUALS DragHighlightedParams::icon, 0
-        tya
-        sta     (params),y
-
-        ;; Copy initial coords to `initial_coords` and `last_coords`
-        ldy     #DragHighlightedParams::coords + .sizeof(MGTK::Point)-1
-:       lda     (params),y
-        sta     initial_coords-1,y
-        sta     last_coords-1,y
-        dey
-        ;;cpy     #DragHighlightedParams::coords-1
-        ASSERT_EQUALS DragHighlightedParams::coords, 1
-        bne     :-
-
-        jsr     PushPointers    ; save `params`
+        ;; Copy initial coords to `last_coords`
+        COPY_STRUCT MGTK::Point, initial_coords, last_coords
 
         lda     #0
         sta     highlight_icon_id
         sta     trash_flag
 
 ;;; Determine if it's a drag or just a click
-.proc _DragDetectImpl
+.scope _DragDetectImpl
 
 peek:   MGTK_CALL MGTK::PeekEvent, peekevent_params
         lda     peekevent_params::kind
@@ -727,10 +717,10 @@ peek:   MGTK_CALL MGTK::PeekEvent, peekevent_params
         ldx     #2              ; loop over dimensions
 loop:   lda     findwindow_params,x
         sec
-        sbc     last_coords,x
+        sbc     z:last_coords,x
         tay
         lda     findwindow_params+1,x
-        sbc     last_coords+1,x
+        sbc     z:last_coords+1,x
     IF_NEG
         cpy     #AS_BYTE(-kDragDelta)
         bcc     is_drag         ; above threshold, so drag
@@ -743,7 +733,7 @@ next:   dex
         dex
         bpl     loop
         bmi     peek            ; always
-.endproc ; _DragDetectImpl
+.endscope ; _DragDetectImpl
 
         ;; --------------------------------------------------
         ;; Meets the threshold - it is a drag, not just a click.
@@ -781,29 +771,30 @@ is_drag:
         ;; --------------------------------------------------
         ;; Build drag polygon
 
-        copy16  polybuf_addr, $08
+        poly_ptr := generic_ptr
+        copy16  polybuf_addr, poly_ptr
         copy8   #$80, poly::lastpoly  ; more to follow
 
         INVOKE_WITH_LAMBDA _IterateHighlightedIcons
 
-        jsr     CalcIconPoly
+        jsr     CalcIconPoly    ; sets `res_ptr`
 
         ;; Copy poly into place
         ldy     #kIconPolySize-1
 :       lda     poly,y
-        sta     ($08),y
+        sta     (poly_ptr),y
         dey
         bpl     :-
 
-        add16_8 $08, #kIconPolySize
+        add16_8 poly_ptr, #kIconPolySize
         rts
         END_OF_LAMBDA
 
         ;; Mark last icon
-        sub16_8 $08, #kIconPolySize
+        sub16_8 poly_ptr, #kIconPolySize
         ldy     #1              ; MGTK Polygon "not last" flag
         lda     #0              ; last polygon
-        sta     ($08),y
+        sta     (poly_ptr),y
 
         copy8   #0, poly::lastpoly ; restore default
 
@@ -868,7 +859,6 @@ update_poly:
         bpl     :-
         COPY_STRUCT MGTK::Point, findwindow_params, last_coords
 
-        poly_ptr := $08
         copy16  polybuf_addr, poly_ptr
 ploop:  ldy     #2              ; offset in poly to first vertex
 vloop:  add16in (poly_ptr),y, poly_dx, (poly_ptr),y
@@ -975,13 +965,12 @@ move_ok:
         bpl     :-
 
         INVOKE_WITH_LAMBDA _IterateHighlightedIcons
-        jsr     GetIconPtr
-        stax    $06
+        jsr     SetIconPtr
 
         ldy     #IconEntry::iconx
-        add16in ($06),y, poly_dx, ($06),y
+        add16in (icon_ptr),y, poly_dx, (icon_ptr),y
         iny
-        add16in ($06),y, poly_dy, ($06),y
+        add16in (icon_ptr),y, poly_dy, (icon_ptr),y
         rts
         END_OF_LAMBDA
 
@@ -991,13 +980,10 @@ move_ok:
         ;; --------------------------------------------------
 
 exit_with_a:
-        tay                     ; A = return value
-        jsr     PopPointers     ; restore `params`
-        tya                     ; A = return value
         tax                     ; A = return value
-        ldy     #0
+        ldy     #params::icon - params
         lda     highlight_icon_id
-        sta     (params),y
+        sta     (params_addr),y
         txa                     ; A = return value
         rts
 
@@ -1013,9 +999,6 @@ exit_canceled:
 
 
 ;;; ============================================================
-
-icon_id:
-        .byte   0
 
         ;; IconTK::HighlightIcon params
         ;; also used as the return value
@@ -1064,7 +1047,7 @@ next:   inc     index
 ;;;
 ;;; Inputs: `findwindow_params` mouse coords populated
 ;;; Outputs: A = icon (0 if none found), `findwindow_params::window_id` populated
-;;; Trashes $06
+;;; Trashes `generic_ptr`
 
 .proc _FindIconValidateWindow
         MGTK_CALL MGTK::FindWindow, findwindow_params
@@ -1099,7 +1082,7 @@ find_icon:
 ;;; Input: `findwindow_params` populated
 ;;; Output: C=0 if content, C=1 if non-content
 ;;; Assert: `FindWindow` was called and returned `Area::content`
-;;; Trashes $06
+;;; Trashes `generic_ptr`
 .proc _CheckRealContentArea
         COPY_STRUCT MGTK::Point, findwindow_params::mousex, findcontrol_params::mousex
         copy8   findwindow_params::window_id, findcontrol_params::window_id
@@ -1111,8 +1094,8 @@ find_icon:
 
         ;; Ignore if y coord < window's header height
         MGTK_CALL MGTK::GetWinPtr, findwindow_params::window_id
-        win_ptr := $06
-        copy16  window_ptr, win_ptr
+        win_ptr := generic_ptr
+        copy16  window_ptr, z:win_ptr
         ldy     #MGTK::Winfo::port + MGTK::GrafPort::viewloc + MGTK::Point::ycoord
         lda     (win_ptr),y
         copy16in (win_ptr),y, headery
@@ -1130,13 +1113,11 @@ headery:
         .word   0
 .endproc ; _CheckRealContentArea
 
-;;; Trashes $06
 .proc _ValidateTargetAndHighlight
         ;; Over an icon
         sta     icon_num
 
-        ptr := $06
-        jsr     GetIconState    ; sets `ptr`/$06 too
+        jsr     GetIconState    ; A = state, sets `icon_ptr` too
 
         ;; Highlighted?
         ;;and     #kIconEntryStateHighlighted
@@ -1148,7 +1129,7 @@ headery:
         ;;ldy     #IconEntry::win_flags
         ASSERT_EQUALS (IconEntry::win_flags - IconEntry::state), 1
         iny
-        lda     (ptr),y
+        lda     (icon_ptr),y
         ;;and     #kIconEntryFlagsDropTarget
         ASSERT_EQUALS ::kIconEntryFlagsDropTarget, $40
         asl
@@ -1187,7 +1168,7 @@ done:   rts
 ;;; ============================================================
 
 ;;; Input: A = icon number
-;;; Output: A = window id (0=desktop), $06 = icon ptr
+;;; Output: A = window id (0=desktop), `icon_ptr` set
 .proc GetIconWin
         jsr     GetIconFlags
         and     #kIconEntryWinIdMask
@@ -1195,26 +1176,20 @@ done:   rts
 .endproc ; GetIconWin
 
 ;;; Input: A = icon number
-;;; Output: A = flags (including window), Y = IconEntry::win_flags, $06 = icon ptr
+;;; Output: A = flags (including window), Y = IconEntry::win_flags, `icon_ptr` set
 .proc GetIconFlags
-        ptr := $06
-
-        jsr     GetIconPtr
-        stax    ptr
+        jsr     SetIconPtr
         ldy     #IconEntry::win_flags
-        lda     (ptr),y
+        lda     (icon_ptr),y
         rts
 .endproc ; GetIconFlags
 
 ;;; Input: A = icon number
-;;; Output: A = state, Y = IconEntry::state, $06 icon ptr
+;;; Output: A = state, Y = IconEntry::state, `icon_ptr` set
 .proc GetIconState
-        ptr := $06
-
-        jsr     GetIconPtr
-        stax    ptr
+        jsr     SetIconPtr
         ldy     #IconEntry::state
-        lda     (ptr),y
+        lda     (icon_ptr),y
         rts
 .endproc ; GetIconState
 
@@ -1224,21 +1199,18 @@ done:   rts
 ;;; param is pointer to IconEntry
 
 .proc UnhighlightIconImpl
-        params := $06
-.struct UnhighlightIconParams
-        icon    .byte
-.endstruct
+PARAM_BLOCK params, icontk::command_data
+icon    .byte
+END_PARAM_BLOCK
 
         ;; Pointer to IconEntry
-        ldy     #UnhighlightIconParams::icon
-        lda     (params),y
+        lda     params::icon
         pha                     ; A = icon
-        ptr := $06              ; Overwrites params
-        jsr     GetIconState    ; sets `ptr`/$06 too
 
         ;; Mark not highlighted
+        jsr     GetIconState    ; A = state, sets `icon_ptr` too
         and     #AS_BYTE(~kIconEntryStateHighlighted)
-        sta     (ptr),y
+        sta     (icon_ptr),y
 
         pla                     ; A = icon
         jmp     MaybeMoveIconToTop
@@ -1248,31 +1220,14 @@ done:   rts
 ;;; IconInRect
 
 .proc IconInRectImplImpl
-        params := $06
-.struct IconInRectParams
-        icon    .byte
-        rect    .tag    MGTK::Rect
-.endstruct
+PARAM_BLOCK params, icontk::command_data
+icon    .byte
+rect    .tag    MGTK::Rect
+END_PARAM_BLOCK
 
-        ptr := $06
-
-icon:   .byte   0
-        DEFINE_RECT rect, 0, 0, 0, 0
-
-        ;; Copy params to local data
-start:  ldy     #IconInRectParams::icon
-        lda     (params),y
-        sta     icon
-
-        ldy     #IconInRectParams::rect + .sizeof(MGTK::Rect)-1
-:       lda     (params),y
-        sta     rect-1,y
-        dey
-        bne     :-
-
-        lda     icon
-        jsr     GetIconPtr
-        stax    ptr
+start:
+        lda     params::icon
+        jsr     SetIconPtr
         jsr     CalcIconRects
 
         ;; Compare the rect against both the bitmap and label rects
@@ -1282,11 +1237,11 @@ start:  ldy     #IconInRectParams::icon
         ldx     #2              ; loop over dimensions
 :
         ;; top/left of bitmap > bottom/right of rect --> outside
-        scmp16  rect::bottomright,x, bitmap_rect+MGTK::Rect::topleft,x
+        scmp16  params::rect+MGTK::Rect::bottomright,x, bitmap_rect+MGTK::Rect::topleft,x
         bmi     :+
 
         ;; bottom/right of bitmap < top/left of rect --> outside
-        scmp16  bitmap_rect+MGTK::Rect::bottomright,x, rect::topleft,x
+        scmp16  bitmap_rect+MGTK::Rect::bottomright,x, params::rect+MGTK::Rect::topleft,x
         bmi     :+
 
         dex                     ; next dimension
@@ -1300,11 +1255,11 @@ start:  ldy     #IconInRectParams::icon
         ldx     #2              ; loop over dimensions
 :
         ;; top/left of text > bottom/right of rect --> outside
-        scmp16  rect::bottomright,x, label_rect+MGTK::Rect::topleft,x
+        scmp16  params::rect+MGTK::Rect::bottomright,x, label_rect+MGTK::Rect::topleft,x
         bmi     outside
 
         ;; bottom/right of text < top/left of rect --> outside
-        scmp16  label_rect+MGTK::Rect::bottomright,x, rect::topleft,x
+        scmp16  label_rect+MGTK::Rect::bottomright,x, params::rect+MGTK::Rect::topleft,x
         bmi     outside
 
         dex                     ; next dimension
@@ -1323,27 +1278,21 @@ IconInRectImpl := IconInRectImplImpl::start
 ;;; GetIconBounds
 
 .proc GetIconBoundsImpl
-        params := $06
-.struct GetIconBoundsParams
-        icon    .byte
-        rect    .tag    MGTK::Rect ; out
-.endstruct
+PARAM_BLOCK params, icontk::command_data
+icon    .byte
+rect    .tag    MGTK::Rect ; out
+END_PARAM_BLOCK
 
         ;; Calc icon bounds
-        jsr     PushPointers
-        ptr := $06
-        ldy     #GetIconBoundsParams::icon
-        lda     (params),y
-        jsr     GetIconPtr
-        stax    ptr
+        lda     params::icon
+        jsr     SetIconPtr
         jsr     CalcIconBoundingRect
-        jsr     PopPointers
 
         ;; Copy rect into out params
         ldx     #.sizeof(MGTK::Rect)-1
-        ldy     #GetIconBoundsParams::rect + .sizeof(MGTK::Rect)-1
+        ldy     #(params::rect - params) + .sizeof(MGTK::Rect)-1
 :       lda     bounding_rect,x
-        sta     (params),y
+        sta     (params_addr),y
         dey
         dex
         bpl     :-
@@ -1355,22 +1304,20 @@ IconInRectImpl := IconInRectImplImpl::start
 ;;; GetRenameRect
 
 .proc GetRenameRectImpl
-        params := $06
-.struct GetRenameRectParams
-        icon    .byte
-        rect    .tag    MGTK::Rect ; out
-.endstruct
+PARAM_BLOCK params, icontk::command_data
+icon    .byte
+rect    .tag    MGTK::Rect ; out
+END_PARAM_BLOCK
 
         ;; Calc icon bounds
-        ASSERT_EQUALS params, $06
-        ASSERT_EQUALS GetRenameRectParams::icon, 0
+        ASSERT_EQUALS params::icon, icontk::command_data
         jsr     GetXYZRectImplHelper
 
         ;; Copy rect into out params
         ldx     #.sizeof(MGTK::Rect)-1
-        ldy     #GetRenameRectParams::rect + .sizeof(MGTK::Rect)-1
+        ldy     #(params::rect - params) + .sizeof(MGTK::Rect)-1
 :       lda     rename_rect,x
-        sta     (params),y
+        sta     (params_addr),y
         dey
         dex
         bpl     :-
@@ -1382,22 +1329,20 @@ IconInRectImpl := IconInRectImplImpl::start
 ;;; GetBitmapRect
 
 .proc GetBitmapRectImpl
-        params := $06
-.struct GetBitmapRectParams
-        icon    .byte
-        rect    .tag    MGTK::Rect ; out
-.endstruct
+PARAM_BLOCK params, icontk::command_data
+icon    .byte
+rect    .tag    MGTK::Rect ; out
+END_PARAM_BLOCK
 
         ;; Calc icon bounds
-        ASSERT_EQUALS params, $06
-        ASSERT_EQUALS GetBitmapRectParams::icon, 0
+        ASSERT_EQUALS params::icon, icontk::command_data
         jsr     GetXYZRectImplHelper
 
         ;; Copy rect into out params
         ldx     #.sizeof(MGTK::Rect)-1
-        ldy     #GetBitmapRectParams::rect + .sizeof(MGTK::Rect)-1
+        ldy     #(params::rect - params) + .sizeof(MGTK::Rect)-1
 :       lda     bitmap_rect,x
-        sta     (params),y
+        sta     (params_addr),y
         dey
         dex
         bpl     :-
@@ -1406,19 +1351,9 @@ IconInRectImpl := IconInRectImplImpl::start
 .endproc ; GetBitmapRectImpl
 
 .proc GetXYZRectImplHelper
-        params := $06
-        params_icon_offset = 0
-
-        ;; Calc icon bounds
-        jsr     PushPointers
-        ptr := $06
-        ldy     #params_icon_offset
-        lda     (params),y
-        jsr     GetIconPtr
-        stax    ptr
-        jsr     CalcIconRects
-        jsr     PopPointers     ; do not tail-call optimise!
-        rts
+        lda     command_data    ; a.k.a. `params::icon`
+        jsr     SetIconPtr
+        jmp     CalcIconRects
 .endproc ; GetXYZRectImplHelper
 
 ;;; ============================================================
@@ -1465,45 +1400,39 @@ clip_window_id:
 ;;; ============================================================
 
 .proc DrawIconCommon
-        params := $06
-.struct DrawIconParams
+PARAM_BLOCK params, icontk::command_data
         icon    .byte
-.endstruct
-        sta     clip_icons_flag
+END_PARAM_BLOCK
 
-        ptr := $06              ; Overwrites params
+        sta     clip_icons_flag
 
         ;; Slow enough that events should be checked; this allows
         ;; double-clicks during icon repaints (e.g. deselects)
         MGTK_CALL MGTK::CheckEvents
 
         ;; Pointer to IconEntry
-        ldy     #DrawIconParams::icon
-        lda     (params),y
-        jsr     GetIconPtr
-        stax    ptr
+        lda     params::icon
+        jsr     SetIconPtr
 
         jsr     CalcIconRects
 
         ;; Stash some flags
         ldy     #IconEntry::state
-        lda     (ptr),y
+        lda     (icon_ptr),y
         sta     state
         ASSERT_EQUALS IconEntry::win_flags, IconEntry::state + 1
         iny
-        lda     ($06),y
+        lda     (icon_ptr),y
         sta     win_flags
 
         ;; For quick access
         and     #kIconEntryWinIdMask
         sta     clip_window_id
 
-        jsr     PushPointers
-
         ;; copy icon definition bits
-        jsr     GetIconResource
+        jsr     GetIconResource ; sets `res_ptr` based on `icon_ptr`
         ldy     #.sizeof(MGTK::MapInfo) - .sizeof(MGTK::Point) - 1
-:       lda     ($08),y
+:       lda     (res_ptr),y
         sta     icon_paintbits_params::mapbits,y
         sta     mask_paintbits_params::mapbits,y
         dey
@@ -1511,8 +1440,7 @@ clip_window_id:
 
         ;; Icon definition is followed by pointer to mask address.
         ldy     #.sizeof(MGTK::MapInfo) - .sizeof(MGTK::Point)
-        copy16in ($08),y, mask_paintbits_params::mapbits
-        jsr     PopPointers
+        copy16in (res_ptr),y, mask_paintbits_params::mapbits
 
         ;; Determine if we want clipping, based on icon type and flags.
 
@@ -1543,7 +1471,7 @@ ret:    rts
 
 
 .proc _DoPaint
-        label_pos := $06
+        label_pos := generic_ptr
 
         ;; Prep coords
         copy16  label_rect+MGTK::Rect::x1, label_pos+MGTK::Point::xcoord
@@ -1634,24 +1562,23 @@ win_flags:                      ; copy of IconEntry::win_flags
 
 ;;; ============================================================
 
-;;; Inputs: $06 = IconEntry
-;;; Output: $08 = IconResource
+;;; Inputs: `icon_ptr` = `IconEntry`
+;;; Output: `res_ptr` = `IconResource`
 .proc GetIconResource
-        icon_ptr := $06
-        res_ptr := $08
-
         ldy     #IconEntry::type
         lda     (icon_ptr),y         ; A = type
-        asl                     ; *= 2
-        tay
-        copy16  typemap_addr, $08
-        lda     ($08),y
-        pha
+        asl                          ; *= 2
+        tay                          ; Y = table offset
+
+        ;; Re-use `res_ptr` temporarily
+        copy16  typemap_addr, res_ptr
+
+        lda     (res_ptr),y
+        tax
         iny
-        lda     ($08),y
+        lda     (res_ptr),y
         sta     res_ptr+1
-        pla
-        sta     res_ptr
+        stx     res_ptr
         rts
 .endproc ; GetIconResource
 
@@ -1659,24 +1586,19 @@ win_flags:                      ; copy of IconEntry::win_flags
 
 kIconLabelGapV = 2
 
-;;; Input: $06 points at icon
+;;; Input: `icon_ptr` points at icon
 ;;; Output: Populates `bitmap_rect` and `label_rect` and `text_buffer`
-;;; Preserves $06/$08
+;;; Sets `res_ptr`
 .proc CalcIconRects
-        entry_ptr := $6
-        bitmap_ptr := $8
-
-        jsr     PushPointers
-
         ;; Copy, pad, and measure name
         jsr     PrepareName
 
-        jsr     GetIconResource ; sets $08 based on $06
+        jsr     GetIconResource ; sets `res_ptr` based on `icon_ptr`
 
         ;; Bitmap top/left - copy from icon entry
         ldy     #IconEntry::iconx+3
         ldx     #3
-:       lda     (entry_ptr),y
+:       lda     (icon_ptr),y
         sta     bitmap_rect+MGTK::Rect::topleft,x
         dey
         dex
@@ -1684,12 +1606,12 @@ kIconLabelGapV = 2
 
         ;; Bitmap bottom/right
         ldy     #IconResource::maprect + MGTK::Rect::x2
-        add16in bitmap_rect+MGTK::Rect::x1, (bitmap_ptr),y, bitmap_rect+MGTK::Rect::x2
+        add16in bitmap_rect+MGTK::Rect::x1, (res_ptr),y, bitmap_rect+MGTK::Rect::x2
         iny
-        add16in bitmap_rect+MGTK::Rect::y1, (bitmap_ptr),y, bitmap_rect+MGTK::Rect::y2
+        add16in bitmap_rect+MGTK::Rect::y1, (res_ptr),y, bitmap_rect+MGTK::Rect::y2
 
         ldy     #IconEntry::win_flags
-        lda     (entry_ptr),y
+        lda     (icon_ptr),y
         and     #kIconEntryFlagsSmall
     IF_NOT_ZERO
         ;; ----------------------------------------
@@ -1727,7 +1649,7 @@ kIconLabelGapV = 2
         copy16  bitmap_rect+MGTK::Rect::x1, label_rect+MGTK::Rect::x1
         asl16   label_rect+MGTK::Rect::x1
         ldy     #IconResource::maprect + MGTK::Rect::x2
-        add16in label_rect+MGTK::Rect::x1, (bitmap_ptr),y, label_rect+MGTK::Rect::x1
+        add16in label_rect+MGTK::Rect::x1, (res_ptr),y, label_rect+MGTK::Rect::x1
         jsr     stash_rename_rect
         sub16   label_rect+MGTK::Rect::x1, textwidth_params::result, label_rect+MGTK::Rect::x1
         asr16   label_rect+MGTK::Rect::x1 ; signed
@@ -1743,7 +1665,6 @@ kIconLabelGapV = 2
         add16_8 rename_rect+MGTK::Rect::x1, #kIconRenameLineEditWidth, rename_rect+MGTK::Rect::x2
         dec16   rename_rect+MGTK::Rect::y1
 
-        jsr     PopPointers     ; do not tail-call optimise!
         rts
 
 stash_rename_rect:
@@ -1751,12 +1672,10 @@ stash_rename_rect:
         rts
 .endproc ; CalcIconRects
 
-;;; Input: $06 points at icon
+;;; Input: `icon_ptr` points at icon
 ;;; Output: Populates `bitmap_rect` and `label_rect` and `bounding_rect`
-;;; Preserves $06/$08
+;;; Sets `res_ptr`
 .proc CalcIconBoundingRect
-        jsr     PushPointers
-
         jsr     CalcIconRects
 
         COPY_BLOCK bitmap_rect, bounding_rect
@@ -1764,7 +1683,6 @@ stash_rename_rect:
         ;; Union of rectangles (expand `bounding_rect` to encompass `label_rect`)
         MGTK_CALL MGTK::UnionRects, unionrects_label_bounding
 
-        jsr     PopPointers     ; do not tail-call optimise!
         rts
 .endproc ; CalcIconBoundingRect
 
@@ -1775,19 +1693,14 @@ stash_rename_rect:
 
 kIconPolySize = (8 * .sizeof(MGTK::Point)) + 2
 
-;;; Input: $06 points at icon
+;;; Input: `icon_ptr` points at icon
 ;;; Output: Populates `bitmap_rect` and `label_rect` and `bounding_rect`
 ;;;         and (of course) `poly`
-;;; Preserves $06/$08
 .proc CalcIconPoly
-        entry_ptr := $6
-
-        jsr     PushPointers
-
         jsr     CalcIconBoundingRect
 
         ldy     #IconEntry::win_flags
-        lda     (entry_ptr),y
+        lda     (icon_ptr),y
         and     #kIconEntryFlagsSmall
     IF_NOT_ZERO
         ;; ----------------------------------------
@@ -1801,16 +1714,16 @@ kIconPolySize = (8 * .sizeof(MGTK::Point)) + 2
         ;;      v7                         v6
 
         ;; Start off making all (except v6) the same
-        ldy     #.sizeof(MGTK::Point)-1
-:       lda     bitmap_rect+MGTK::Rect::topleft,y
-        sta     poly::v0,y
-        sta     poly::v1,y
-        sta     poly::v2,y
-        sta     poly::v3,y
-        sta     poly::v4,y
-        sta     poly::v5,y
-        sta     poly::v7,y
-        dey
+        ldx     #.sizeof(MGTK::Point)-1
+:       lda     bitmap_rect+MGTK::Rect::topleft,x
+        sta     poly::v0,x
+        sta     poly::v1,x
+        sta     poly::v2,x
+        sta     poly::v3,x
+        sta     poly::v4,x
+        sta     poly::v5,x
+        sta     poly::v7,x
+        dex
         bpl     :-
 
         ;; Then tweak remaining vertices on right/bottom
@@ -1870,22 +1783,20 @@ kIconPolySize = (8 * .sizeof(MGTK::Point)) + 2
 
     END_IF
 
-        jsr     PopPointers     ; do not tail-call optimise!
         rts
 .endproc ; CalcIconPoly
 
-;;; Copy name from IconEntry (ptr $06) to text_buffer,
+;;; Copy name from IconEntry (`icon_ptr`) to text_buffer,
 ;;; with leading/trailing spaces, and measure it.
 
 .proc PrepareName
         .assert text_buffer - 1 = drawtext_params::textlen, error, "location mismatch"
 
         dest := drawtext_params::textlen
-        ptr := $06
 
         ldy     #.sizeof(IconEntry)
         ldx     #.sizeof(IconEntry) - IconEntry::name
-:       lda     (ptr),y
+:       lda     (icon_ptr),y
         sta     dest + 1,x
         dey
         dex
@@ -1910,17 +1821,12 @@ kIconPolySize = (8 * .sizeof(MGTK::Point)) + 2
 ;;; DrawAll
 
 .proc DrawAllImpl
-        params := $06
-.struct DrawAllParams
-        window_id       .byte
-.endstruct
-
-        ldy     #DrawAllParams::window_id
-        lda     (params),y
-        sta     window_id
+PARAM_BLOCK params, icontk::command_data
+window_id       .byte
+END_PARAM_BLOCK
 
         ;; Get current clip rect
-        port_ptr := $06
+        port_ptr := generic_ptr
         MGTK_CALL MGTK::GetPort, port_ptr
         ldx     #.sizeof(MGTK::Rect)-1
         ldy     #MGTK::MapInfo::maprect + .sizeof(MGTK::Rect)-1
@@ -1940,12 +1846,10 @@ loop:   inx
 
         lda     icon_list,x
         sta     icon_in_rect_params::icon
-        ptr := $06
-        jsr     GetIconWin      ; sets `ptr`/$06 too
+        jsr     GetIconWin      ; A = window_id, sets `icon_ptr` too
 
         ;; Is it in the target window?
-        window_id := *+1
-        cmp     #SELF_MODIFIED_BYTE
+        cmp     params::window_id
         bne     next            ; no, skip it
 
         ;; In maprect?
@@ -1959,29 +1863,25 @@ next:   pla
         bpl     loop            ; always
 
 done:   rts
-
-
 .endproc ; DrawAllImpl
 
 ;;; ============================================================
 ;;; GetIconEntry
 
 .proc GetIconEntryImpl
-        params := $06
-.struct GetIconEntryParams
-        icon    .byte           ; in
-        entry   .addr           ; out
-.endstruct
+PARAM_BLOCK params, icontk::command_data
+icon    .byte           ; in
+entry   .addr           ; out
+END_PARAM_BLOCK
 
-        ldy     #GetIconEntryParams::icon
-        lda     (params),y      ; A = icon id
+        lda     params::icon
+        jsr     SetIconPtr
 
-        jsr     GetIconPtr
-        ldy     #GetIconEntryParams::entry
-        sta     (params),y
+        ldy     #params::entry - params
+        sta     (params_addr),y
         txa
         iny
-        sta     (params),y
+        sta     (params_addr),y
 
         rts
 .endproc ; GetIconEntryImpl
@@ -1994,15 +1894,13 @@ done:   rts
         stx     clip_icons_flag
         ror     redraw_highlighted_flag ; shift C into high bit
 
-        ptr := $06
-        jsr     GetIconPtr
-        stax    ptr
+        jsr     SetIconPtr
         jsr     CalcIconPoly
 
         jsr     InitSetIconPort
 
         ldy     #IconEntry::win_flags
-        lda     (ptr),y
+        lda     (icon_ptr),y
         and     #kIconEntryWinIdMask
         sta     clip_window_id
         sta     getwinport_params::window_id
@@ -2036,12 +1934,10 @@ done:   rts
 .proc _RedrawIconsAfterErase
         COPY_BLOCK bounding_rect, icon_in_rect_params::rect
 
-        jsr     PushPointers
         ldx     num_icons
 loop:   dex                     ; any icons to draw?
         bpl     :+
 
-        jsr     PopPointers     ; do not tail-call optimise!
         rts
 
 :       txa
@@ -2051,8 +1947,7 @@ loop:   dex                     ; any icons to draw?
         beq     next
 
         sta     icon_in_rect_params::icon
-        ptr := $06
-        jsr     GetIconWin      ; sets `ptr`/$06 too
+        jsr     GetIconWin      ; A = window_id, sets `icon_ptr` too
 
         ;; Same window?
         cmp     clip_window_id
@@ -2061,7 +1956,7 @@ loop:   dex                     ; any icons to draw?
         bit     redraw_highlighted_flag
     IF_NC
         ldy     #IconEntry::state
-        lda     (ptr),y
+        lda     (icon_ptr),y
         and     #kIconEntryStateHighlighted
         bne     next
     END_IF
@@ -2128,8 +2023,9 @@ reserved:       .byte   0
 
 ;;; ============================================================
 
+;;; Sets `res_ptr`
 .proc SetPortForVolIcon
-        jsr     CalcIconPoly    ; also populates `bounding_rect` (needed in erase case)
+        jsr     CalcIconBoundingRect
 
         ;; Will need to clip to screen bounds
         COPY_STRUCT MGTK::Rect, desktop_bounds, portbits::maprect
@@ -2139,6 +2035,7 @@ reserved:       .byte   0
 
 ;;; ============================================================
 
+;;; Sets `res_ptr`
 .proc SetPortForWinIcon
         jsr     CalcIconBoundingRect
 
@@ -2217,6 +2114,13 @@ empty:  return #$FF
 ;;; if another call to this proc is needed after the paint. Returns
 ;;; C=1 if no clipping rect remains, so no drawing is needed.
 .proc CalcWindowIntersectionsImpl
+
+.params cwi_findwindow_params
+mousex:         .word   0
+mousey:         .word   0
+which_area:     .byte   0
+window_id:      .byte   0
+.endparams
 
 pt_num: .byte   0
 
@@ -2349,15 +2253,15 @@ do_pt:  lda     pt_num
         ;; Look up window at Nth point
         ldy     #0
 :       lda     pt1::xcoord,x
-        sta     findwindow_params,y
+        sta     cwi_findwindow_params,y
         iny
         inx
         cpy     #4
         bne     :-
 
         inc     pt_num
-        MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::window_id
+        MGTK_CALL MGTK::FindWindow, cwi_findwindow_params
+        lda     cwi_findwindow_params::window_id
         cmp     clip_window_id
         beq     next_pt
 
@@ -2369,7 +2273,7 @@ do_pt:  lda     pt_num
         win_r := getwinframerect_params::rect::x2
         win_b := getwinframerect_params::rect::y2
 
-        copy8   findwindow_params::window_id, getwinframerect_params::window_id
+        copy8   cwi_findwindow_params::window_id, getwinframerect_params::window_id
         MGTK_CALL MGTK::GetWinFrameRect, getwinframerect_params
 
         ;; ==================================================
@@ -2584,59 +2488,5 @@ free_icon_map:
 .endproc ; InitSetIconPort
 
 ;;; ============================================================
-;;; Pushes two words from $6/$8 to stack; preserves Y only
 
-.proc PushPointers
-        ;; Stash return address
-        pla
-        sta     lo
-        pla
-        sta     hi
-
-        ;; Copy 4 bytes from $8 to stack
-        ldx     #AS_BYTE(-4)
-:       lda     $06 + 4,x
-        pha
-        inx
-        bne     :-
-
-        ;; Restore return address
-        hi := *+1
-        lda     #SELF_MODIFIED_BYTE
-        pha
-        lo := *+1
-        lda     #SELF_MODIFIED_BYTE
-        pha
-
-        rts
-.endproc ; PushPointers
-
-;;; ============================================================
-;;; Pops two words from stack to $6/$8; preserves Y only
-
-.proc PopPointers
-        ;; Stash return address
-        pla
-        sta     lo
-        pla
-        sta     hi
-
-        ;; Copy 4 bytes from stack to $6
-        ldx     #3
-:       pla
-        sta     $06,x
-        dex
-        bpl     :-
-
-        ;; Restore return address to stack
-        hi := *+1
-        lda     #SELF_MODIFIED_BYTE
-        pha
-        lo := *+1
-        lda     #SELF_MODIFIED_BYTE
-        pha
-
-        rts
-.endproc ; PopPointers
-
-.endscope ; icon_toolkit
+.endscope ; icontk

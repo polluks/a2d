@@ -2,25 +2,46 @@
 ;;; List Box ToolKit
 ;;; ============================================================
 
-;;; Routines dirty $50...$6F
-;;; TODO: Spill to stack?
-
 .scope lbtk
         LBTKEntry := *
 
+;;; ============================================================
+;;; Zero Page usage (saved/restored around calls)
+
+        zp_start := $50
         kMaxCommandDataSize = 6
+        kMaxTmpSpace = .sizeof(MGTK::Point) + .sizeof(MGTK::Rect)
 
-        params_addr     := $50
-        command_data    := $52
-        lbr_ptr         := $52  ; always first element of `command_data`
+PARAM_BLOCK, zp_start
+;;; Initially points at the call site, then at passed params
+params_addr     .addr
 
-        lbr_copy        := command_data + kMaxCommandDataSize
+;;; Copy of the passed params
+command_data    .res kMaxCommandDataSize
+
+;;; A temporary copy of the control record is placed here:
+lbr_copy        .tag    LBTK::ListBoxRecord
+
+;;; Other ZP usage
+.union
+tmp_space       .res    kMaxTmpSpace
+.struct
+tmp_point       .tag    MGTK::Point ; used by `_Draw`
+tmp_rect        .tag    MGTK::Rect  ; used by `_Draw`
+.endstruct
+.endunion
+
+;;; For size calculation, not actually used
+zp_end          .byte
+END_PARAM_BLOCK
+
+        .assert zp_end <= $78, error, "too big"
+        kBytesToSave = zp_end - zp_start
+
+        a_record        := command_data ; always first element of `command_data`
+
+        ;; Aliases for the copy's members:
         winfo_ptr       := lbr_copy + LBTK::ListBoxRecord::winfo
-
-        tmp_space       := $63
-        tmp_point       := $63  ; used by `_Draw`
-        tmp_rect        := $67  ; used by `_Draw`
-        .assert tmp_space >= lbr_copy + .sizeof(LBTK::ListBoxRecord), error, "collision"
 
 ;;; ============================================================
 
@@ -124,38 +145,48 @@ UNSUPPRESS_SHADOW_WARNING
 
         .assert LBTKEntry = Dispatch, error, "dispatch addr"
 .proc Dispatch
-
-        jump_addr := tmp_space
-
-        ;; Adjust stack/stash at `params_addr`
+        ;; Adjust stack/stash
         pla
-        sta     params_addr
+        sta     params_lo
         clc
         adc     #<3
         tax
         pla
-        sta     params_addr+1
+        sta     params_hi
         adc     #>3
         pha
         txa
         pha
 
+        ;; Save ZP
+        ldx     #AS_BYTE(-kBytesToSave)
+:       lda     zp_start + kBytesToSave,x
+        pha
+        inx
+        bne     :-
+
+        ;; Point `params_addr` at the call site
+        params_lo := *+1
+        lda     #SELF_MODIFIED_BYTE
+        sta     params_addr
+        params_hi := *+1
+        lda     #SELF_MODIFIED_BYTE
+        sta     params_addr+1
+
         ;; Grab command number
         ldy     #1              ; Note: rts address is off-by-one
         lda     (params_addr),y
-        asl     a
         tax
-        copy16  jump_table,x, jump_addr
+        copylohi jump_table_lo,x, jump_table_hi,x, dispatch
 
         ;; Point `params_addr` at actual params
         iny
         lda     (params_addr),y
-        pha
+        tax
         iny
         lda     (params_addr),y
         sta     params_addr+1
-        pla
-        sta     params_addr
+        stx     params_addr
 
         ;; Copy param data to `command_data`
         ldy     #kMaxCommandDataSize-1
@@ -163,22 +194,42 @@ UNSUPPRESS_SHADOW_WARNING
         dey
         bpl     :-
 
-        ;; Cache static of the record in `lbr_copy`, for convenience
+        ;; Cache static copy of the record in `lbr_copy`, for convenience
         ldy     #.sizeof(LBTK::ListBoxRecord)-1
-:       lda     (lbr_ptr),y
-        sta     lbr_copy,y
+:       copy8   (a_record),y, lbr_copy,y
         dey
         bpl     :-
 
-        jmp     (jump_addr)
+        ;; Invoke the command
+        dispatch := *+1
+        jsr     SELF_MODIFIED
+        tay                     ; A = result
 
-jump_table:
-        .addr   InitImpl
-        .addr   ClickImpl
-        .addr   KeyImpl
-        .addr   SetSelectionImpl
-        .addr   SetSizeImpl
+        ;; Restore ZP
+        ldx     #kBytesToSave-1
+:       pla
+        sta     zp_start,x
+        dex
+        bpl     :-
 
+        tya                     ; A = result
+        rts
+
+jump_table_lo:
+        .lobytes   InitImpl
+        .lobytes   ClickImpl
+        .lobytes   KeyImpl
+        .lobytes   SetSelectionImpl
+        .lobytes   SetSizeImpl
+
+jump_table_hi:
+        .hibytes   InitImpl
+        .hibytes   ClickImpl
+        .hibytes   KeyImpl
+        .hibytes   SetSelectionImpl
+        .hibytes   SetSizeImpl
+
+        ASSERT_EQUALS *-jump_table_hi, jump_table_hi-jump_table_lo
 .endproc ; Dispatch
 
 ;;; ============================================================
@@ -301,7 +352,7 @@ ret:    rts
 
         cmp     #MGTK::Part::up_arrow
     IF_EQ
-repeat:
+@repeat:
         ldy     #MGTK::Winfo::vthumbpos
         lda     (winfo_ptr),y
         beq     ret
@@ -311,14 +362,14 @@ repeat:
         jsr     update
         lda     #MGTK::Part::up_arrow
         jsr     _CheckControlRepeat
-        beq     repeat          ; always
+        beq     @repeat         ; always
     END_IF
 
         ;; --------------------------------------------------
 
         cmp     #MGTK::Part::down_arrow
     IF_EQ
-repeat:
+@repeat:
         ldy     #MGTK::Winfo::vthumbpos
         lda     (winfo_ptr),y
         ASSERT_EQUALS MGTK::Winfo::vthumbmax, MGTK::Winfo::vthumbpos - 1
@@ -331,7 +382,7 @@ repeat:
         jsr     update
         lda     #MGTK::Part::down_arrow
         jsr     _CheckControlRepeat
-        beq     repeat          ; always
+        beq     @repeat         ; always
     END_IF
 
         ;; --------------------------------------------------
@@ -347,7 +398,7 @@ repeat:
         SKIP_NEXT_2_BYTE_INSTRUCTION
         ASSERT_NOT_EQUALS lbr_copy + LBTK::ListBoxRecord::num_rows, $C0, "bad BIT skip"
 :       sbc     lbr_copy + LBTK::ListBoxRecord::num_rows
-do:     jsr     update
+        jsr     update
         lda     #MGTK::Part::page_up
         jsr     _CheckControlRepeat
         beq     repeat          ; always
@@ -357,7 +408,7 @@ do:     jsr     update
 
         cmp     #MGTK::Part::page_down
     IF_EQ
-repeat:
+@repeat:
         ldy     #MGTK::Winfo::vthumbpos
         lda     (winfo_ptr),y
         clc
@@ -365,13 +416,13 @@ repeat:
         ASSERT_EQUALS MGTK::Winfo::vthumbmax, MGTK::Winfo::vthumbpos - 1
         dey                     ; Y = MGTK::Winfo::vthumbmax
         cmp     (winfo_ptr),y
-        bcc     do
+        bcc     @do
         ;; Assert: Y = MGTK::Winfo::vthumbmax
         lda     (winfo_ptr),y
-do:     jsr     update
+@do:    jsr     update
         lda     #MGTK::Part::page_down
         jsr     _CheckControlRepeat
-        beq     repeat          ; always
+        beq     @repeat         ; always
     END_IF
 
         ;; --------------------------------------------------
@@ -541,7 +592,7 @@ new_selection   .byte
         jsr     _HighlightIndex
         ldy     #LBTK::ListBoxRecord::selected_index
         pla                     ; A = new selection
-        sta     (lbr_ptr),y
+        sta     (a_record),y
         sta     lbr_copy + LBTK::ListBoxRecord::selected_index ; keep copy in sync
         bmi     :+
         jmp     _ScrollIntoView
@@ -585,7 +636,7 @@ new_size        .byte
 
         lda     params::new_size
         ldy     #LBTK::ListBoxRecord::num_items
-        sta     (lbr_ptr),y
+        sta     (a_record),y
         sta     lbr_copy + LBTK::ListBoxRecord::num_items ; keep copy in sync
         FALL_THROUGH_TO _EnableScrollbar
 .endproc ; SetSizeImpl
@@ -784,7 +835,7 @@ rows:   .byte   0
 
 ;;; ============================================================
 
-        ;; TODO: Move into `tmp_space`
+;;; Not in `tmp_space` because denominator and numerator hi are const
 .params multiply_params
 number:         .word   0       ; (in) populated dynamically
 numerator:      .word   0       ; (in) populated dynamically
