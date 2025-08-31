@@ -1138,26 +1138,38 @@ __shadow_warning_suppress_count__ .set 0
 ;;; Flow Control
 ;;; ============================================================
 ;;; Usage:
-;;;     lda foo
-;;;     cmp bar
-;;;     IF_EQ
+;;;     bit foo
+;;;     IF_NS
+;;;     ...
+;;;     ELSE_IF_VS ; optional
 ;;;     ...
 ;;;     ELSE ; optional
 ;;;     ...
 ;;;     END_IF
 ;;;
+;;;     lda     foo
+;;;     IF_A_EQ bar
+;;;     ...
+;;;     END_IF
+;;;
 ;;; Macros:
-;;;     IF_EQ           aliases: IF_ZERO
-;;;     IF_NE           aliases: IF_NOT_ZERO
+;;;     IF_ZS           aliases: IF_ZERO, IF_EQ
+;;;     IF_ZC           aliases: IF_NOT_ZERO, IF_NE
 ;;;     IF_CC           aliases: IF_LT
 ;;;     IF_CS           aliases: IF_GE
 ;;;     IF_VC
 ;;;     IF_VS
 ;;;     IF_NC           aliases: IF_POS, IF_PLUS
 ;;;     IF_NS           aliases: IF_NEG, IF_MINUS
+;;; ... and ditto for ELSE_IF_*
+;;;
+;;;     IF_A_EQ / ELSE_IF_A_EQ
+;;;     IF_A_NE / ELSE_IF_A_NE
+;;;     IF_A_LT / ELSE_IF_A_LT
+;;;     IF_A_GE / ELSE_IF_A_GE
 
-__depth__ .set 0
-
+;;; --------------------------------------------------
+;;; Flow control infrastructure
 
 ;;; Increment a numeric variable; if not initialized, treated as 0
 .macro __INC_IDENT__ ident
@@ -1173,109 +1185,177 @@ __depth__ .set 0
 .endmacro
 
 ;;; Change to 1 to enable logging
-.define __block_debug__ 0
+.define __flow_debug__ 0
 
-;;; Easier way to reference the `__depth__` numeric variable in the right scope
-.define __block_depth__ ::__depth__
+;;; A numeric variable for the current nesting depth of flow control
+;;; structures. Incremented when entering a structure, decremented
+;;; when leaving.
+.define __flow_depth__ ::__depth__
 
-;;; Produce an identifier, the "Nth" block at depth D. Used to mint
-;;; identifiers unique to this block, without using scopes.
-.define __block_count_at_depth__ ::.ident(.sprintf("__block_cad_%d__", __block_depth__))
+;;; A numeric variable for the "Nth" flow control structure (if,
+;;; do/while, etc) at depth D. Used to mint various identifiers unique
+;;; to each, without using scopes. Incremented when entering a
+;;; structure.
+.define __flow_count_at_depth__ ::.ident(.sprintf("__flow_cad_%d__", __flow_depth__))
 
-;;; Produce a unique identifier for this block, e.g. `__block_ident__
-;;; {"else"}`
-.define __block_ident__(prefix) ::.ident(.sprintf("__block_id_%s_%d_%d__", prefix, __block_depth__, __block_count_at_depth__))
+;;; Produce a unique identifier within this flow control structure.
+;;; Usage: `__flow_ident__ {"else"}`
+.define __flow_ident__(prefix) ::.ident(.sprintf("__flow_id_%s_%d_%d__", prefix, __flow_depth__, __flow_count_at_depth__))
+
+;;; Produce unique identifierers for the end of each block
+.define __flow_ident_counter__ __flow_ident__ {"counter"}
+.define __flow_ident_block__ __flow_ident__ {.sprintf("eob%d", __flow_ident_counter__)}
 
 ;;; If debugging enabled, log a message with block details
-.macro __BLOCK_LOG__ msg
-    .if __block_debug__
-        .out .sprintf("%s, depth: %d, bcad: %d", msg, __block_depth__, __block_count_at_depth__)
+.macro __FLOW_LOG__ msg
+    .if __flow_debug__
+        .out .sprintf("%s, depth: %d, bcad: %d", msg, __flow_depth__, __flow_count_at_depth__)
     .endif
 .endmacro
 
-.macro _IF_FOR_OP_ branchOp
-        __INC_IDENT__ __block_depth__
-        __INC_IDENT__ __block_count_at_depth__
-        __BLOCK_LOG__ "if"
-        branchOp __block_ident__ {"else"}
-.endmacro
-
-.macro IF_EQ
-        _IF_FOR_OP_ bne
-.endmacro
-
-.macro IF_NE
-        _IF_FOR_OP_ beq
-.endmacro
-
-.macro IF_CC
-        _IF_FOR_OP_ bcs
-.endmacro
-
-.macro IF_CS
-        _IF_FOR_OP_ bcc
-.endmacro
-
-.macro IF_NC
-        _IF_FOR_OP_ bmi
-.endmacro
-
-.macro IF_NS
-        _IF_FOR_OP_ bpl
-.endmacro
-
-.macro IF_VC
-        _IF_FOR_OP_ bvs
-.endmacro
-
-.macro IF_VS
-        _IF_FOR_OP_ bvc
-.endmacro
-
-        .define IF_ZERO IF_EQ
-        .define IF_NOT_ZERO IF_NE
-        .define IF_GE IF_CS
-        .define IF_LT IF_CC
-        .define IF_PLUS IF_NC
-        .define IF_MINUS IF_NS
-        .define IF_POS IF_NC
-        .define IF_NEG IF_NS
-
 ;;; --------------------------------------------------
+;;; IF/ELSE_IF/ELSE/END_IF
+
+.macro _IF_BOP_ branchOp
+        __INC_IDENT__ __flow_depth__
+        __INC_IDENT__ __flow_count_at_depth__
+        __INC_IDENT__ __flow_ident_counter__
+        __FLOW_LOG__ "if"
+        branchOp __flow_ident_block__
+.endmacro
+
+.macro _IF_COP_BOP_ compareOp, branchOp, arg1, arg2
+        __INC_IDENT__ __flow_depth__
+        __INC_IDENT__ __flow_count_at_depth__
+        __INC_IDENT__ __flow_ident_counter__
+        __FLOW_LOG__ "if"
+.ifblank arg2
+        compareOp arg1
+        branchOp __flow_ident_block__
+.else
+        compareOp arg1,arg2
+        branchOp __flow_ident_block__
+.endif
+.endmacro
+
+.macro _ELSE_IF_BOP_ branchOp
+        __FLOW_LOG__ "else_if"
+        jmp     __flow_ident__ {"endif"}
+        __flow_ident_block__ := *
+        __INC_IDENT__ __flow_ident_counter__
+        branchOp __flow_ident_block__
+.endmacro
+
+.macro _ELSE_IF_COP_BOP_ compareOp, branchOp, arg1, arg2
+        __FLOW_LOG__ "else_if"
+        jmp     __flow_ident__ {"endif"}
+        __flow_ident_block__ := *
+        __INC_IDENT__ __flow_ident_counter__
+.ifblank arg2
+        compareOp arg1
+        branchOp __flow_ident_block__
+.else
+        compareOp arg1,arg2
+        branchOp __flow_ident_block__
+.endif
+.endmacro
 
 .macro ELSE
-        __BLOCK_LOG__ "else"
-        jmp     __block_ident__ {"endif"}
-        __block_ident__ {"else"} := *
+        __FLOW_LOG__ "else"
+        jmp     __flow_ident__ {"endif"}
+        __flow_ident_block__ := *
+        __INC_IDENT__ __flow_ident_counter__
 .endmacro
-
-.macro ELSE_IF
-        .error "ELSE_IF not supported"
-.endmacro
-
-.macro ELSEIF
-        .error "ELSEIF not supported"
-.endmacro
-
-;;; --------------------------------------------------
 
 .macro END_IF
-    .ifndef __block_ident__ {"else"}
-        __BLOCK_LOG__ "no else"
-        __block_ident__ {"else"} := *
-    .endif
+        .ifndef __flow_ident_block__
+        __FLOW_LOG__ "no else"
+        __flow_ident_block__ := *
+        .endif
 
-        __BLOCK_LOG__ "endif"
-        __block_ident__ {"endif"} := *
+        __FLOW_LOG__ "endif"
+        __flow_ident__ {"endif"} := *
 
-        .refto __block_ident__ {"endif"}
-        __DEC_IDENT__ __block_depth__
+        .refto __flow_ident__ {"endif"}
+        __DEC_IDENT__ __flow_depth__
 .endmacro
 
 .macro ENDIF
         .error "Do you mean END_IF ?"
 .endmacro
 
+;;; --------------------------------------------------
+;;; User-friendly IF/ELSE_IF macros
+
+.define IF_ZS _IF_BOP_ bne
+.define IF_ZC _IF_BOP_ beq
+.define IF_CC _IF_BOP_ bcs
+.define IF_CS _IF_BOP_ bcc
+.define IF_NC _IF_BOP_ bmi
+.define IF_NS _IF_BOP_ bpl
+.define IF_VC _IF_BOP_ bvs
+.define IF_VS _IF_BOP_ bvc
+
+.define IF_ZERO     IF_ZS
+.define IF_NOT_ZERO IF_ZC
+.define IF_EQ       IF_ZS
+.define IF_NE       IF_ZC
+.define IF_GE       IF_CS
+.define IF_LT       IF_CC
+.define IF_PLUS     IF_NC
+.define IF_MINUS    IF_NS
+.define IF_POS      IF_NC
+.define IF_NEG      IF_NS
+
+.define IF_A_EQ _IF_COP_BOP_ cmp,bne,
+.define IF_A_NE _IF_COP_BOP_ cmp,beq,
+.define IF_A_LT _IF_COP_BOP_ cmp,bcs,
+.define IF_A_GE _IF_COP_BOP_ cmp,bcc,
+
+.define IF_X_EQ _IF_COP_BOP_ cpx,bne,
+.define IF_X_NE _IF_COP_BOP_ cpx,beq,
+.define IF_X_LT _IF_COP_BOP_ cpx,bcs,
+.define IF_X_GE _IF_COP_BOP_ cpx,bcc,
+
+.define IF_Y_EQ _IF_COP_BOP_ cpy,bne,
+.define IF_Y_NE _IF_COP_BOP_ cpy,beq,
+.define IF_Y_LT _IF_COP_BOP_ cpy,bcs,
+.define IF_Y_GE _IF_COP_BOP_ cpy,bcc,
+
+.define ELSE_IF_ZS _ELSE_IF_BOP_ bne
+.define ELSE_IF_ZC _ELSE_IF_BOP_ beq
+.define ELSE_IF_CC _ELSE_IF_BOP_ bcs
+.define ELSE_IF_CS _ELSE_IF_BOP_ bcc
+.define ELSE_IF_NC _ELSE_IF_BOP_ bmi
+.define ELSE_IF_NS _ELSE_IF_BOP_ bpl
+.define ELSE_IF_VC _ELSE_IF_BOP_ bvs
+.define ELSE_IF_VS _ELSE_IF_BOP_ bvc
+
+.define ELSE_IF_ZERO     ELSE_IF_ZS
+.define ELSE_IF_NOT_ZERO ELSE_IF_ZC
+.define ELSE_IF_EQ       ELSE_IF_ZS
+.define ELSE_IF_NE       ELSE_IF_ZC
+.define ELSE_IF_GE       ELSE_IF_CS
+.define ELSE_IF_LT       ELSE_IF_CC
+.define ELSE_IF_PLUS     ELSE_IF_NC
+.define ELSE_IF_MINUS    ELSE_IF_NS
+.define ELSE_IF_POS      ELSE_IF_NC
+.define ELSE_IF_NEG      ELSE_IF_NS
+
+.define ELSE_IF_A_EQ _ELSE_IF_COP_BOP cmp,bne,
+.define ELSE_IF_A_NE _ELSE_IF_COP_BOP cmp,beq,
+.define ELSE_IF_A_LT _ELSE_IF_COP_BOP cmp,bcs,
+.define ELSE_IF_A_GE _ELSE_IF_COP_BOP cmp,bcc,
+
+.define ELSE_IF_X_EQ _ELSE_IF_COP_BOP cpx,bne,
+.define ELSE_IF_X_NE _ELSE_IF_COP_BOP cpx,beq,
+.define ELSE_IF_X_LT _ELSE_IF_COP_BOP cpx,bcs,
+.define ELSE_IF_X_GE _ELSE_IF_COP_BOP cpx,bcc,
+
+.define ELSE_IF_Y_EQ _ELSE_IF_COP_BOP cpy,bne,
+.define ELSE_IF_Y_NE _ELSE_IF_COP_BOP cpy,beq,
+.define ELSE_IF_Y_LT _ELSE_IF_COP_BOP cpy,bcs,
+.define ELSE_IF_Y_GE _ELSE_IF_COP_BOP cpy,bcc,
 
 ;;; --------------------------------------------------
 
@@ -1297,61 +1377,38 @@ __depth__ .set 0
 ;;;     WHILE_NS           aliases: WHILE_NEG, WHILE_MINUS
 
 .macro DO
-        __INC_IDENT__ __block_depth__
-        __INC_IDENT__ __block_count_at_depth__
+        __INC_IDENT__ __flow_depth__
+        __INC_IDENT__ __flow_count_at_depth__
 
-        __BLOCK_LOG__ "do"
-        __block_ident__ {"do_while"} := *
+        __FLOW_LOG__ "do"
+        __flow_ident__ {"do_while"} := *
 .endmacro
 
-.macro _WHILE_FOR_OP_ branchOp
-        __BLOCK_LOG__ "while"
-        branchOp __block_ident__ {"do_while"}
-        __DEC_IDENT__ __block_depth__
+.macro _WHILE_BOP_ branchOp
+        __FLOW_LOG__ "while"
+        branchOp __flow_ident__ {"do_while"}
+        __DEC_IDENT__ __flow_depth__
 .endmacro
 
-.macro WHILE_ZC
-        _WHILE_FOR_OP_ bne
-.endmacro
+.define WHILE_ZC _WHILE_BOP_ bne
+.define WHILE_ZS _WHILE_BOP_ beq
+.define WHILE_CC _WHILE_BOP_ bcc
+.define WHILE_CS _WHILE_BOP_ bcs
+.define WHILE_VC _WHILE_BOP_ bvc
+.define WHILE_VS _WHILE_BOP_ bvs
+.define WHILE_NC _WHILE_BOP_ bpl
+.define WHILE_NS _WHILE_BOP_ bmi
 
-.macro WHILE_ZS
-        _WHILE_FOR_OP_ beq
-.endmacro
-
-.macro WHILE_CC
-        _WHILE_FOR_OP_ bcc
-.endmacro
-
-.macro WHILE_CS
-        _WHILE_FOR_OP_ bcs
-.endmacro
-
-.macro WHILE_VC
-        _WHILE_FOR_OP_ bvc
-.endmacro
-
-.macro WHILE_VS
-        _WHILE_FOR_OP_ bvs
-.endmacro
-
-.macro WHILE_NC
-        _WHILE_FOR_OP_ bpl
-.endmacro
-
-.macro WHILE_CNS
-        _WHILE_FOR_OP_ bmi
-.endmacro
-
-        .define WHILE_EQ WHILE_ZS
-        .define WHILE_NE WHILE_ZC
-        .define WHILE_ZERO WHILE_EQ
-        .define WHILE_NOT_ZERO WHILE_NE
-        .define WHILE_GE WHILE_CS
-        .define WHILE_LT WHILE_CC
-        .define WHILE_PLUS WHILE_NC
-        .define WHILE_MINUS WHILE_NS
-        .define WHILE_POS WHILE_NC
-        .define WHILE_NEG WHILE_NS
+.define WHILE_EQ WHILE_ZS
+.define WHILE_NE WHILE_ZC
+.define WHILE_ZERO WHILE_EQ
+.define WHILE_NOT_ZERO WHILE_NE
+.define WHILE_GE WHILE_CS
+.define WHILE_LT WHILE_CC
+.define WHILE_PLUS WHILE_NC
+.define WHILE_MINUS WHILE_NS
+.define WHILE_POS WHILE_NC
+.define WHILE_NEG WHILE_NS
 
 ;;; --------------------------------------------------
 

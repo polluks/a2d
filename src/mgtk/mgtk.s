@@ -6224,8 +6224,7 @@ event_loop:
 
         ;; --------------------
 
-        cmp     #MGTK::EventKind::button_up
-    IF_EQ
+    IF_A_EQ     #MGTK::EventKind::button_up
         bit     was_in_menu_flag
         jmi     handle_click
         lda     cur_open_menu_id
@@ -6235,8 +6234,7 @@ event_loop:
 
         ;; --------------------
 
-        cmp     #MGTK::EventKind::key_down
-    IF_EQ
+    IF_A_EQ     #MGTK::EventKind::key_down
         ;; Set up `sel_menu_*`
         lda     menu_index    ; TODO: Verify this is valid
         sta     sel_menu_index
@@ -6283,8 +6281,7 @@ event_loop:
 
         ;; Did `sel_menu_index` change?
         ldx     sel_menu_index
-        cpx     last_menu_index
-      IF_NE
+      IF_X_NE   last_menu_index
         lda     #0
         sta     cur_hilited_menu_item
         jsr     GetMenu         ; X = index
@@ -6294,8 +6291,7 @@ event_loop:
 
         ;; Did `sel_menu_item_index` change?
         ldx     sel_menu_item_index
-        cpx     cur_hilited_menu_item
-      IF_NE
+      IF_X_NE   cur_hilited_menu_item
         jmp     imi_change
       END_IF
 

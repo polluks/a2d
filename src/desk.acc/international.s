@@ -281,26 +281,22 @@ ret:    rts
 .proc OnKeyChar
         ldx     selected_field
 
-        cpx     #Field::date
-    IF_EQ
+    IF_X_EQ     #Field::date
         ldx     #DeskTopSettings::intl_date_sep
         bne     update          ; always
     END_IF
 
-        cpx     #Field::time
-    IF_EQ
+    IF_X_EQ     #Field::time
         ldx     #DeskTopSettings::intl_time_sep
         bne     update          ; always
     END_IF
 
-        cpx     #Field::deci
-    IF_EQ
+    IF_X_EQ     #Field::deci
         ldx     #DeskTopSettings::intl_deci_sep
         bne     update          ; always
     END_IF
 
-        cpx     #Field::thou
-    IF_EQ
+    IF_X_EQ     #Field::thou
         ldx     #DeskTopSettings::intl_thou_sep
         bne     update          ; always
     END_IF
@@ -612,8 +608,7 @@ char:   .byte   SELF_MODIFIED_BYTE
 ;;; A = field
 .proc DrawField
         pha
-        cmp     selected_field
-    IF_EQ
+    IF_A_EQ     selected_field
         MGTK_CALL MGTK::SetTextBG, settextbg_black_params
         MGTK_CALL MGTK::SetPenMode, notpencopy
     ELSE
@@ -622,8 +617,7 @@ char:   .byte   SELF_MODIFIED_BYTE
     END_IF
         pla
 
-        cmp     #Field::date
-    IF_EQ
+    IF_A_EQ     #Field::date
         ldx     #DeskTopSettings::intl_date_sep
         jsr     ReadSetting
         sta     drawchar_params::char
@@ -637,8 +631,7 @@ char:   .byte   SELF_MODIFIED_BYTE
         param_jump DrawString, date_sample_label_str
     END_IF
 
-        cmp     #Field::time
-    IF_EQ
+    IF_A_EQ     #Field::time
         ldx     #DeskTopSettings::intl_time_sep
         jsr     ReadSetting
         sta     drawchar_params::char
@@ -651,8 +644,7 @@ char:   .byte   SELF_MODIFIED_BYTE
         param_jump DrawString, time_sample_label_str
     END_IF
 
-        cmp     #Field::deci
-    IF_EQ
+    IF_A_EQ     #Field::deci
         ldx     #DeskTopSettings::intl_deci_sep
         jsr     ReadSetting
         sta     drawchar_params::char
@@ -665,8 +657,7 @@ char:   .byte   SELF_MODIFIED_BYTE
         param_jump DrawString, deci_sample_label_str
     END_IF
 
-        cmp     #Field::thou
-    IF_EQ
+    IF_A_EQ     #Field::thou
         ldx     #DeskTopSettings::intl_thou_sep
         jsr     ReadSetting
         sta     drawchar_params::char

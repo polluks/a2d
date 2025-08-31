@@ -247,8 +247,7 @@ num_entries := listbox_rec::num_items
         jmp     InputLoop
     END_IF
 
-        cpx     #0
-    IF_NOT_ZERO
+    IF_X_NE     #0
         ;; Modified
         lda     event_params::key
         jsr     ToUpperCase
@@ -256,8 +255,7 @@ num_entries := listbox_rec::num_items
         cmp     #kShortcutCloseWindow
         jeq     Exit
 
-        cmp     #'O'
-      IF_EQ
+      IF_A_EQ   #'O'
         lda     selected_index
         bmi     InputLoop
         sta     show_index
@@ -269,17 +267,15 @@ num_entries := listbox_rec::num_items
     END_IF
 
         ;; Not modified
-        cmp     #CHAR_ESCAPE
-      IF_EQ
+    IF_A_EQ     #CHAR_ESCAPE
         BTK_CALL BTK::Flash, cancel_button
         jmp     Exit
-      END_IF
+    END_IF
 
-        cmp     #CHAR_RETURN
-      IF_EQ
+    IF_A_EQ     #CHAR_RETURN
         BTK_CALL BTK::Flash, search_button
         jmp     DoSearch
-      END_IF
+    END_IF
 
         jsr     IsControlChar
         bcc     allow
@@ -379,8 +375,7 @@ path_length:
         jsr     PrepDrawIncrementalResults
 
         lda     path_length
-        cmp     #1
-    IF_EQ
+    IF_A_EQ     #1
         JSR_TO_MAIN main__InitVolumes
         JSR_TO_MAIN main__NextVolume
         bcs     finish
@@ -414,8 +409,7 @@ endloop:
         LBTK_CALL LBTK::SetSize, lb_params ; update scrollbar
 
         lda     path_length
-        cmp     #1
-    IF_EQ
+    IF_A_EQ     #1
         lda     num_entries
         cmp     #kMaxFilePaths
         beq     finish
@@ -444,8 +438,7 @@ finish:
         jne     done
 
         lda     findwindow_params::window_id
-        cmp     #kResultsWindowId
-    IF_EQ
+    IF_A_EQ     #kResultsWindowId
         COPY_STRUCT MGTK::Point, event_params::coords, lb_params::coords
         LBTK_CALL LBTK::Click, lb_params
         bmi     :+
@@ -977,7 +970,7 @@ hitDirEnd:
 
         copy8   block_buffer+SubdirectoryHeader::entry_length, entryLen ; init 'entryLen'
 
-        copy16  #(block_buffer+4), entPtr ; init ptr to first entry
+        copy16  #(block_buffer+4), z:entPtr ; init ptr to first entry
 
         lda     block_buffer+SubdirectoryHeader::entries_per_block ; init these values based on
         sta     ThisBEntry      ; values in the dir header
@@ -1093,9 +1086,9 @@ exit:   rts
 ;;; Save everything we can think of (the women,
 ;;; the children, the beer, etc.).
 ;;;
-        lda     entPtr+1
+        lda     z:entPtr+1
         pha
-        lda     entPtr
+        lda     z:entPtr
         pha
         lda     ThisBEntry
         pha
@@ -1141,9 +1134,9 @@ reOpened:
         pla
         sta     ThisBEntry
         pla
-        sta     entPtr
+        sta     z:entPtr
         pla
-        sta     entPtr+1
+        sta     z:entPtr+1
 
         lda     #0
         sta     SetMParms::position
@@ -1246,12 +1239,12 @@ ChopLoop:
         beq     ReadNext        ; done w/this block, get next one
 
         clc                     ; else bump up index
-        lda     entPtr
+        lda     z:entPtr
         adc     entryLen
-        sta     entPtr
-        lda     entPtr+1
+        sta     z:entPtr
+        lda     z:entPtr+1
         adc     #0
-        sta     entPtr+1
+        sta     z:entPtr+1
         clc                     ; say that the buffer's good
         rts
 
@@ -1261,7 +1254,7 @@ ReadNext:
 
         inc     ThisBlock
 
-        copy16  #(block_buffer+4),entPtr ; set entry pointer to beginning
+        copy16  #(block_buffer+4),z:entPtr ; set entry pointer to beginning
                                    ; of first entry in block
 
         copy8   entPerBlk, ThisBEntry ; re-init 'entries in this block'
