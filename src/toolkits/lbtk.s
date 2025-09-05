@@ -159,12 +159,7 @@ UNSUPPRESS_SHADOW_WARNING
         pha
 
         ;; Save ZP
-        ldx     #AS_BYTE(-kBytesToSave)
-    DO
-        lda     zp_start + kBytesToSave,x
-        pha
-        inx
-    WHILE_NOT_ZERO
+        PUSH_BYTES kBytesToSave, zp_start
 
         ;; Point `params_addr` at the call site
         params_lo := *+1
@@ -209,12 +204,7 @@ UNSUPPRESS_SHADOW_WARNING
         tay                     ; A = result
 
         ;; Restore ZP
-        ldx     #kBytesToSave-1
-    DO
-        pla
-        sta     zp_start,x
-        dex
-    WHILE_POS
+        POP_BYTES kBytesToSave, zp_start
 
         tya                     ; A = result
         rts
@@ -304,8 +294,7 @@ coords          .tag MGTK::Point
     END_IF
 
         ldy     #MGTK::Winfo::window_id
-        lda     (winfo_ptr),y
-        sta     screentowindow_params::window_id
+        copy8   (winfo_ptr),y, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         ldy     #MGTK::Winfo::port+MGTK::GrafPort::maprect+MGTK::Rect::y1
         add16in (winfo_ptr),y, screentowindow_params::windowy, screentowindow_params::windowy
@@ -738,8 +727,7 @@ update:
         ldy     #MGTK::Winfo::port+MGTK::GrafPort::maprect+.sizeof(MGTK::Rect)-1
         ldx     #.sizeof(MGTK::Rect)-1
     DO
-        lda     (winfo_ptr),y
-        sta     tmp_rect,x
+        copy8   (winfo_ptr),y, tmp_rect,x
         dey
         dex
     WHILE_POS
@@ -760,8 +748,7 @@ update:
         ldy     #MGTK::Winfo::port+MGTK::GrafPort::maprect+.sizeof(MGTK::Rect)-1
         ldx     #.sizeof(MGTK::Rect)-1
     DO
-        lda     tmp_rect,x
-        sta     (winfo_ptr),y
+        copy8   tmp_rect,x, (winfo_ptr),y
         dey
         dex
     WHILE_POS
@@ -792,11 +779,9 @@ update:
         lda     lbr_copy + LBTK::ListBoxRecord::num_items
         beq     finish
 
-        lda     lbr_copy + LBTK::ListBoxRecord::num_rows
-        sta     rows
+        copy8   lbr_copy + LBTK::ListBoxRecord::num_rows, rows
         ldy     #MGTK::Winfo::vthumbpos
-        lda     (winfo_ptr),y
-        sta     index
+        copy8   (winfo_ptr),y, index
 
         copy16  #kListItemTextOffsetX, tmp_point+MGTK::Point::xcoord
         ldy     #MGTK::Winfo::port+MGTK::GrafPort::maprect+MGTK::Rect::y1

@@ -127,11 +127,9 @@ entry_index_in_block:   .byte   0
 
 .proc PushIndexToStack
         ldx     stack_index
-        lda     target_index
-        sta     index_stack,x
+        copy8   target_index, index_stack,x
         inx
-        lda     target_index+1
-        sta     index_stack,x
+        copy8   target_index+1, index_stack,x
         inx
         stx     stack_index
         rts
@@ -142,11 +140,9 @@ entry_index_in_block:   .byte   0
 .proc PopIndexFromStack
         ldx     stack_index
         dex
-        lda     index_stack,x
-        sta     target_index+1
+        copy8   index_stack,x, target_index+1
         dex
-        lda     index_stack,x
-        sta     target_index
+        copy8   index_stack,x, target_index
         stx     stack_index
         rts
 .endproc ; PopIndexFromStack
@@ -159,16 +155,14 @@ entry_index_in_block:   .byte   0
         sta     entry_index_in_dir+1
         sta     entry_index_in_block
         MLI_CALL OPEN, open_params
-        bcc     :+
-        jmp     HandleErrorCode
-:
+        jcs     HandleErrorCode
+
         lda     open_params::ref_num
         sta     ref_num
         sta     read_block_pointers_params::ref_num
         MLI_CALL READ, read_block_pointers_params
-        bcc     :+
-        jmp     HandleErrorCode
-:
+        jcs     HandleErrorCode
+
         copy8   #13, entries_per_block ; so ReadFileEntry doesn't immediately advance
         jsr     ReadFileEntry          ; read the rest of the header
 
@@ -183,9 +177,8 @@ entry_index_in_block:   .byte   0
         lda     ref_num
         sta     close_params::ref_num
         MLI_CALL CLOSE, close_params
-        bcc     :+
-        jmp     HandleErrorCode
-:
+        jcs     HandleErrorCode
+
         rts
 .endproc ; DoCloseFile
 
@@ -198,25 +191,23 @@ entry_index_in_block:   .byte   0
         lda     ref_num
         sta     read_fileentry_params::ref_num
         MLI_CALL READ, read_fileentry_params
-        bcc     :+
+    IF_CS
         cmp     #ERR_END_OF_FILE
         beq     eof
         jmp     HandleErrorCode
-:
+    END_IF
+
         inc     entry_index_in_block
         lda     entry_index_in_block
         cmp     entries_per_block
         bcc     done
 
         ;; Advance to first entry in next "block"
-        lda     #0
-        sta     entry_index_in_block
+        copy8   #0, entry_index_in_block
         lda     ref_num
         sta     read_padding_bytes_params::ref_num
         MLI_CALL READ, read_padding_bytes_params
-        bcc     :+
-        jmp     HandleErrorCode
-:
+        jcs     HandleErrorCode
 
 done:   return  #0
 
@@ -245,47 +236,48 @@ eof:    return  #$FF
 
 .proc AdvanceToTargetEntry
 :       cmp16   entry_index_in_dir, target_index
-        bcs     :+
+    IF_LT
         jsr     ReadFileEntry
         jmp     :-
+    END_IF
 
-:       rts
+        rts
 .endproc ; AdvanceToTargetEntry
 
 ;;; ============================================================
 
 .proc HandleDirectory
-        lda     #$00
-        sta     recursion_depth
+        copy8   #0, recursion_depth
         jsr     OpenSrcDir
-l1:     jsr     ReadFileEntry
-        bne     l2
-
+loop:
+        jsr     ReadFileEntry
+    IF_ZERO
         param_call app::AdjustFileEntryCase, file_entry
 
         lda     file_entry+FileEntry::storage_type_name_length
-        beq     l1
+        beq     loop
         and     #NAME_LENGTH_MASK
         sta     file_entry+FileEntry::storage_type_name_length
-        lda     #$00
-        sta     copy_err_flag
+        copy8   #0, copy_err_flag
         jsr     op_jt1
         lda     copy_err_flag
-        bne     l1
+        bne     loop
         lda     file_entry+FileEntry::file_type
         cmp     #FT_DIRECTORY
-        bne     l1
+        bne     loop
         jsr     DescendDirectory
         inc     recursion_depth
-        jmp     l1
+        jmp     loop
+    END_IF
 
-l2:     lda     recursion_depth
-        beq     l3
+        lda     recursion_depth
+    IF_NOT_ZERO
         jsr     AscendDirectory
         dec     recursion_depth
-        jmp     l1
+        jmp     loop
+    END_IF
 
-l3:     jmp     DoCloseFile
+        jmp     DoCloseFile
 .endproc ; HandleDirectory
 
 ;;; ============================================================
@@ -311,40 +303,37 @@ copy_jt:
 .proc CopyFiles
         ;; Prepare jump table
         ldy     #5
-:       lda     copy_jt,y
-        sta     op_jt_addrs,y
+    DO
+        copy8   copy_jt,y, op_jt_addrs,y
         dey
-        bpl     :-
+    WHILE_POS
 
         tsx
         stx     saved_stack
 
-        lda     #$FF
-        sta     LA4F9
+        copy8   #$FF, LA4F9
         jsr     CopyPathsFromBufsToSrcAndDst
         MLI_CALL GET_FILE_INFO, get_dst_file_info_params
-        bcc     :+
-        jmp     HandleErrorCode
-:
+        jcs     HandleErrorCode
+
         ;; Is there enough space?
         sub16   get_dst_file_info_params::aux_type, get_dst_file_info_params::blocks_used, blocks
         cmp16   blocks, blocks_total
-        bcs     :+
+    IF_LT
         jmp     ShowDiskFullError
-:
+    END_IF
+
         ;; Append `filename` to `pathname_dst`
         ldx     pathname_dst
-        lda     #'/'
-        sta     pathname_dst+1,x
+        copy8   #'/', pathname_dst+1,x
         inc     pathname_dst
         ldy     #0
         ldx     pathname_dst
-:       iny
+    DO
+        iny
         inx
-        lda     filename,y
-        sta     pathname_dst,x
-        cpy     filename
-        bne     :-
+        copy8   filename,y, pathname_dst,x
+    WHILE_Y_NE filename
         stx     pathname_dst
 
         MLI_CALL GET_FILE_INFO, get_dst_file_info_params
@@ -380,14 +369,12 @@ is_dir: lda     #$FF
 LA4A2:  sta     is_dir_flag
 
         ldy     #$07
-:       lda     get_src_file_info_params,y
-        sta     create_params,y
+    DO
+        copy8   get_src_file_info_params,y, create_params,y
         dey
-        cpy     #$02
-        bne     :-
+    WHILE_Y_NE  #$02
 
-        lda     #ACCESS_DEFAULT
-        sta     create_params::access
+        copy8   #ACCESS_DEFAULT, create_params::access
         jsr     CheckSpace2
         bcc     LA4BF
         jmp     ShowDiskFullError
@@ -395,24 +382,24 @@ LA4A2:  sta     is_dir_flag
         ;; Copy creation date/time
 LA4BF:  ldy     #(get_src_file_info_params::create_time+1 - get_src_file_info_params)
         ldx     #(create_params::create_time+1 - create_params)
-:       lda     get_src_file_info_params,y
-        sta     create_params,x
+    DO
+        copy8   get_src_file_info_params,y, create_params,x
         dex
         dey
-        cpy     #(get_src_file_info_params::create_date-1 - get_src_file_info_params)
-        bne     :-
+    WHILE_Y_NE  #(get_src_file_info_params::create_date-1 - get_src_file_info_params)
 
         lda     create_params::storage_type
-        cmp     #ST_VOLUME_DIRECTORY
-        bne     :+
-        lda     #ST_LINKED_DIRECTORY
-        sta     create_params::storage_type
-:       MLI_CALL CREATE, create_params
-        bcc     :+
-        cmp     #ERR_DUPLICATE_FILENAME
-        beq     :+
+    IF_A_EQ     #ST_VOLUME_DIRECTORY
+        copy8   #ST_LINKED_DIRECTORY, create_params::storage_type
+    END_IF
+
+        MLI_CALL CREATE, create_params
+    IF_CS
+      IF_A_NE   #ERR_DUPLICATE_FILENAME
         jmp     HandleErrorCode
-:
+      END_IF
+    END_IF
+
         lda     is_dir_flag
         beq     do_file
         jmp     HandleDirectory
@@ -459,8 +446,7 @@ PopDstSegment:
 
 err:    jsr     RemoveSegmentFromDstPathname
         jsr     RemoveSegmentFromSrcPathname
-        lda     #$FF
-        sta     copy_err_flag
+        copy8   #$FF, copy_err_flag
         rts
 
 LA528:  jsr     AppendFilenameToDstPathname
@@ -475,13 +461,11 @@ is_file:
         jsr     AppendFilenameToSrcPathname
         jsr     draw_window_content_ep2
         MLI_CALL GET_FILE_INFO, get_src_file_info_params
-        bcc     :+
-        jmp     HandleErrorCode
-:
+        jcs     HandleErrorCode
+
         jsr     CheckSpace2
-        bcc     :+
-        jmp     ShowDiskFullError
-:
+        jcs     ShowDiskFullError
+
         jsr     RemoveSegmentFromSrcPathname
         jsr     CreateDstFile
         bcs     CheckSpace
@@ -499,9 +483,8 @@ is_file:
         jsr     RemoveSegmentFromDstPathname
 
 ep2:    MLI_CALL GET_FILE_INFO, get_src_file_info_params
-        bcc     :+
-        jmp     HandleErrorCode
-:
+        jcs     HandleErrorCode
+
         copy16  #0, existing_blocks
         MLI_CALL GET_FILE_INFO, get_dst_file_info_params
         bcc     exists
@@ -514,20 +497,19 @@ exists: copy16  get_dst_file_info_params::blocks_used, existing_blocks
 LA5A1:  copy8   pathname_dst, saved_length
         ;; Strip to vol name - either end of string or next slash
         ldy     #1
-:       iny
+    DO
+        iny
         cpy     pathname_dst
         bcs     has_room
         lda     pathname_dst,y
-        cmp     #'/'
-        bne     :-
+    WHILE_A_NE  #'/'
         tya
         sta     pathname_dst
 
         ;; Total blocks/used blocks on destination volume
         MLI_CALL GET_FILE_INFO, get_dst_file_info_params
-        bcc     :+
-        jmp     HandleErrorCode
-:
+        jcs     HandleErrorCode
+
         ;; aux = total blocks
         sub16   get_dst_file_info_params::aux_type, get_dst_file_info_params::blocks_used, blocks_free
         add16   blocks_free, existing_blocks, blocks_free
@@ -540,8 +522,7 @@ LA5A1:  copy8   pathname_dst, saved_length
 has_room:
         clc
 
-LA603:  lda     saved_length
-        sta     pathname_dst
+LA603:  copy8   saved_length, pathname_dst
         rts
 
 blocks_free:              ; Blocks free on volume
@@ -557,13 +538,11 @@ CheckSpace2 := CheckSpace::ep2
 
 .proc CopyFile
         MLI_CALL OPEN, open_src_params
-        bcc     :+
-        jsr     HandleErrorCode
-:
+        jcs     HandleErrorCode
+
         MLI_CALL OPEN, open_dst_params
-        bcc     :+
-        jmp     HandleErrorCode
-:
+        jcs     HandleErrorCode
+
         lda     open_src_params::ref_num
         sta     read_src_params::ref_num
         sta     close_src_params::ref_num
@@ -581,11 +560,12 @@ loop:
         ;; Read a chunk
         copy16  #kDirCopyBufSize, read_src_params::request_count
         MLI_CALL READ, read_src_params
-        bcc     :+
+    IF_CS
         cmp     #ERR_END_OF_FILE
         beq     done
         jmp     HandleErrorCode
-:
+    END_IF
+
         ;; EOF?
         lda     read_src_params::trans_count
         ora     read_src_params::trans_count+1
@@ -639,13 +619,16 @@ loop:
         copy16  write_dst_params::data_buffer, ptr ; first half
         ldy     #0
         tya
-:       ora     (ptr),y
+    DO
+        ora     (ptr),y
         iny
-        bne     :-
+    WHILE_NOT_ZERO
+
         inc     ptr+1           ; second half
-:       ora     (ptr),y
+    DO
+        ora     (ptr),y
         iny
-        bne     :-
+    WHILE_NOT_ZERO
         tay
         bne     not_sparse
 
@@ -689,17 +672,18 @@ ret:    rts
 .proc CreateDstFile
         ;; Copy `file_type`, `aux_type`, and `storage_type`
         ldx     #(get_src_file_info_params::storage_type - get_src_file_info_params)
-:       lda     get_src_file_info_params,x
-        sta     create_params2,x
+   DO
+        copy8   get_src_file_info_params,x, create_params2,x
         dex
-        cpx     #(get_src_file_info_params::file_type - get_src_file_info_params) - 1
-        bne     :-
+   WHILE_X_NE   #(get_src_file_info_params::file_type - get_src_file_info_params) - 1
 
         MLI_CALL CREATE, create_params2
-        bcc     :+
-        cmp     #ERR_DUPLICATE_FILENAME
-        jne     HandleErrorCode
-:       clc                     ; treated as success
+   IF_CS
+     IF_A_NE    #ERR_DUPLICATE_FILENAME
+        jmp     HandleErrorCode
+     END_IF
+   END_IF
+        clc                     ; treated as success
         rts
 .endproc ; CreateDstFile
 
@@ -716,10 +700,10 @@ enum_jt:
 .proc EnumerateFiles
         ;; Prepare jump table
         ldy     #5
-:       lda     enum_jt,y
-        sta     addr_table,y
+    DO
+        copy8   enum_jt,y, addr_table,y
         dey
-        bpl     :-
+    WHILE_POS
 
         tsx
         stx     saved_stack
@@ -731,19 +715,19 @@ enum_jt:
         sta     blocks_total+1
 
         jsr     CopyPathsFromBufsToSrcAndDst
-LA6E3:  MLI_CALL GET_FILE_INFO, get_src_file_info_params
-        bcc     LA6FF
+retry:  MLI_CALL GET_FILE_INFO, get_src_file_info_params
+    IF_CS
         cmp     #ERR_VOL_NOT_FOUND
-        beq     LA6F6
+        beq     :+
         cmp     #ERR_FILE_NOT_FOUND
-        bne     LA6FC
-LA6F6:  jsr     ShowInsertSourceDiskAlert
-        jmp     LA6E3           ; retry
+        bne     err
+:       jsr     ShowInsertSourceDiskAlert
+        jmp     retry
 
-LA6FC:  jmp     HandleErrorCode
+err:    jmp     HandleErrorCode
+    END_IF
 
-LA6FF:  lda     get_src_file_info_params::storage_type
-        sta     storage_type
+        copy8   get_src_file_info_params::storage_type, storage_type
         cmp     #ST_VOLUME_DIRECTORY
         beq     is_dir
         cmp     #ST_LINKED_DIRECTORY
@@ -790,9 +774,10 @@ visit:  jsr     EnumerateVisitFile
 
         jsr     AppendFilenameToSrcPathname
         MLI_CALL GET_FILE_INFO, get_src_file_info_params
-        bcs     :+
+    IF_CC
         add16   blocks_total, get_src_file_info_params::blocks_used, blocks_total
-:       inc16   file_count
+    END_IF
+        inc16   file_count
         jsr     RemoveSegmentFromSrcPathname
         jmp     UpdateFileCountDisplay
 .endproc ; EnumerateVisitFile
@@ -814,18 +799,16 @@ blocks_total:
 
         ldx     #$00
         ldy     pathname_src
-        lda     #'/'
-        sta     pathname_src+1,y
+        copy8   #'/', pathname_src+1,y
         iny
-l2:     cpx     file_entry+FileEntry::storage_type_name_length
-        bcs     l3
-        lda     file_entry+FileEntry::file_name,x
-        sta     pathname_src+1,y
+:       cpx     file_entry+FileEntry::storage_type_name_length
+        bcs     :+
+        copy8   file_entry+FileEntry::file_name,x, pathname_src+1,y
         inx
         iny
-        jmp     l2
-
-l3:     sty     pathname_src
+        jmp     :-
+:
+        sty     pathname_src
         rts
 .endproc ; AppendFilenameToSrcPathname
 
@@ -835,15 +818,16 @@ l3:     sty     pathname_src
         ldx     pathname_src
         RTS_IF_ZERO
 
-:       lda     pathname_src,x
+    DO
+        lda     pathname_src,x
         cmp     #'/'
         beq     :+
         dex
-        bne     :-
+    WHILE_NOT_ZERO
         stx     pathname_src
         rts
-
-:       dex
+:
+        dex
         stx     pathname_src
         rts
 .endproc ; RemoveSegmentFromSrcPathname
@@ -856,18 +840,16 @@ l3:     sty     pathname_src
 
         ldx     #$00
         ldy     pathname_dst
-        lda     #'/'
-        sta     pathname_dst+1,y
+        copy8   #'/', pathname_dst+1,y
         iny
-l2:     cpx     file_entry+FileEntry::storage_type_name_length
-        bcs     l3
-        lda     file_entry+FileEntry::file_name,x
-        sta     pathname_dst+1,y
+:       cpx     file_entry+FileEntry::storage_type_name_length
+        bcs     :+
+        copy8   file_entry+FileEntry::file_name,x, pathname_dst+1,y
         inx
         iny
-        jmp     l2
-
-l3:     sty     pathname_dst
+        jmp     :-
+:
+        sty     pathname_dst
         rts
 .endproc ; AppendFilenameToDstPathname
 
@@ -877,15 +859,16 @@ l3:     sty     pathname_dst
         ldx     pathname_dst
         RTS_IF_ZERO
 
-l1:     lda     pathname_dst,x
+    DO
+        lda     pathname_dst,x
         cmp     #'/'
-        beq     l2
+        beq     :+
         dex
-        bne     l1
+    WHILE_NOT_ZERO
         stx     pathname_dst
         rts
-
-l2:     dex
+:
+        dex
         stx     pathname_dst
         rts
 .endproc ; RemoveSegmentFromDstPathname
@@ -901,21 +884,21 @@ l2:     dex
 
         ;; Copy `src_path` to `pathname_src`
         ;; ... but record index of last '/'
-loop:   iny
+    DO
+        iny
         lda     src_path,y
-        cmp     #'/'
-        bne     :+
+      IF_A_EQ   #'/'
         sty     src_path_slash_index
-:       sta     pathname_src,y
-        cpy     src_path
-        bne     loop
+      END_IF
+        sta     pathname_src,y
+    WHILE_Y_NE  src_path
 
         ;; Copy `dst_path` to `pathname_dst`
         ldy     dst_path
-:       lda     dst_path,y
-        sta     pathname_dst,y
+    DO
+        copy8   dst_path,y, pathname_dst,y
         dey
-        bpl     :-
+    WHILE_POS
 
         rts
 .endproc ; CopyPathsFromBufsToSrcAndDst
@@ -927,27 +910,26 @@ loop:   iny
         COPY_STRING INVOKER_PREFIX, src_path
 
         ldy     src_path
-l2:     lda     src_path,y
-        cmp     #'/'
-        beq     l3
+    DO
+        lda     src_path,y
+        BREAK_IF_A_EQ #'/'
         dey
-        bne     l2
-l3:     dey
+    WHILE_NOT_ZERO
+        dey
         sty     src_path
 
-l4:     lda     src_path,y
-        cmp     #'/'
-        beq     l5
-        dey
-        bpl     l4
-l5:
-        ldx     #0
-l6:     iny
-        inx
+    DO
         lda     src_path,y
-        sta     filename,x
-        cpy     src_path
-        bne     l6
+        BREAK_IF_A_EQ #'/'
+        dey
+    WHILE_POS
+
+        ldx     #0
+    DO
+        iny
+        inx
+        copy8   src_path,y, filename,x
+    WHILE_Y_NE  src_path
         stx     filename
 
         param_call app::CopyRAMCardPrefix, dst_path
@@ -1080,10 +1062,9 @@ remainder:      .word   0                 ; (out)
 
 ep2:    dec     file_count
         lda     file_count
-        cmp     #$FF
-        bne     :+
+    IF_A_EQ     #$FF
         dec     file_count+1
-:
+    END_IF
 
         lda     #winfo::kWindowId
         jsr     app::GetWindowPort
@@ -1131,10 +1112,10 @@ ep2:    dec     file_count
         lda     #AlertID::insert_source_disk
         jsr     app::ShowAlert
         .assert kAlertResultCancel <> 0, error, "Branch assumes enum value"
-        bne     :+              ; `kAlertResultCancel` = 1
+    IF_ZERO                         ; `kAlertResultCancel` = 1
         jmp     app::SetCursorWatch ; try again
-
-:       jmp     RestoreStackAndReturn
+    END_IF
+        jmp     RestoreStackAndReturn
 .endproc ; ShowInsertSourceDiskAlert
 
 ;;; ============================================================

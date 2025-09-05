@@ -56,11 +56,7 @@ END_PARAM_BLOCK
         pha
 
         ;; Save ZP
-        ldx     #AS_BYTE(-kBytesToSave)
-:       lda     zp_start + kBytesToSave,x
-        pha
-        inx
-        bne     :-
+        PUSH_BYTES kBytesToSave, zp_start
 
         ;; Point `params_addr` at the call site
         params_lo := *+1
@@ -97,11 +93,7 @@ END_PARAM_BLOCK
         tay                     ; A = result
 
         ;; Restore ZP
-        ldx     #kBytesToSave-1
-:       pla
-        sta     zp_start,x
-        dex
-        bpl     :-
+        POP_BYTES kBytesToSave, zp_start
 
         tya                     ; A = result
         rts
@@ -634,8 +626,7 @@ unchecked_cb_bitmap:
         ldx     #.sizeof(MGTK::Rect)-1
         ldy     #BTK::ButtonRecord::rect + .sizeof(MGTK::Rect)-1
     DO
-        lda     rect,x
-        sta     (params_addr),y
+        copy8   rect,x, (params_addr),y
         dey
         dex
     WHILE_POS

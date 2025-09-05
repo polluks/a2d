@@ -341,16 +341,14 @@ entry:
 
 quick_run_desktop:
         param_call GetFileInfo, str_desktop_2
-        bcc     :+
-        jmp     done_keys
-:       jmp     RunDesktop
+        jcs     done_keys
+        jmp     RunDesktop
 
         ;; --------------------------------------------------
         ;; Check for key down
 
 check_key_down:
-        lda     #0
-        sta     quick_boot_slot
+        copy8   #0, quick_boot_slot
 
         lda     KBD
         bpl     done_keys
@@ -415,8 +413,7 @@ done_keys:
 .scope
         slot_ptr := $06         ; pointed at $Cn00
 
-        lda     #0
-        sta     slot_ptr
+        copy8   #0, slot_ptr
         ldx     #7              ; slot
 
 loop:   txa
@@ -454,15 +451,15 @@ next:   dex
         lda     quick_boot_slot
         beq     set_startup_menu_items
         ldy     slot_table
-:       cmp     slot_table,y
+    DO
+        cmp     slot_table,y
         jeq     StartupSlot
         dey
-        bne     :-
+    WHILE_NOT_ZERO
         jmp     set_startup_menu_items
 
 set_startup_menu_items:
-        lda     slot_table
-        sta     startup_menu
+        copy8   slot_table, startup_menu
 
         lda     slot_x1
         ora     #$30            ; number to ASCII digit
@@ -509,11 +506,11 @@ set_startup_menu_items:
         ;; Copy pattern from settings
         tmp_pattern := $00
         ldx     #DeskTopSettings::pattern + .sizeof(MGTK::Pattern)-1
-:       jsr     ReadSetting
+   DO
+        jsr     ReadSetting
         sta     tmp_pattern - DeskTopSettings::pattern,x
         dex
-        cpx     #AS_BYTE(DeskTopSettings::pattern-1)
-        bne     :-
+   WHILE_X_NE   #AS_BYTE(DeskTopSettings::pattern-1)
 
         MGTK_CALL MGTK::SetDeskPat, tmp_pattern
 
@@ -560,9 +557,10 @@ set_startup_menu_items:
 
         ;; Is DeskTop available?
         param_call GetFileInfo, str_desktop_2
-        bcc     :+
+    IF_CS
         lda     #$80
-:       sta     desktop_available_flag
+    END_IF
+        sta     desktop_available_flag
 
         ;; --------------------------------------------------
         ;; Open the window
@@ -607,13 +605,14 @@ quick_boot_slot:
 
         BTK_CALL BTK::Flash, desktop_button
 retry:  param_call GetFileInfo, str_desktop_2
-        bcc     :+
+       IF_CS
         lda     #AlertID::insert_system_disk
         jsr     ShowAlert
         ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
         bne     EventLoop       ; `kAlertResultCancel` = 1
         beq     retry           ; `kAlertResultTryAgain` = 0
-:       jmp     RunDesktop
+       END_IF
+        jmp     RunDesktop
       END_IF
     END_IF
 
@@ -726,8 +725,7 @@ has_modifiers:
 
 menukey:
         sta     menu_params::which_key
-        lda     event_params::modifiers
-        sta     menu_params::key_mods
+        copy8   event_params::modifiers, menu_params::key_mods
         MGTK_CALL MGTK::MenuKey, menu_params::menu_id
         FALL_THROUGH_TO HandleMenu
 .endproc ; HandleKey
@@ -824,8 +822,7 @@ L9443:  lda     #AlertID::insert_system_disk
 
         lda     #winfo::kDialogId
         jsr     GetWindowPort
-        lda     #winfo::kDialogId
-        sta     screentowindow_params::window_id
+        copy8   #winfo::kDialogId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
 
@@ -848,14 +845,15 @@ check_desktop_btn:
         BTK_CALL BTK::Track, desktop_button
         bmi     done
 
-@retry: param_call GetFileInfo, str_desktop_2
-        bcc     :+
+retry:  param_call GetFileInfo, str_desktop_2
+       IF_CS
         lda     #AlertID::insert_system_disk
         jsr     ShowAlert
         ASSERT_NOT_EQUALS kAlertResultCancel, 0
         bne     done            ; `kAlertResultCancel` = 1
-        beq     @retry          ; `kAlertResultTryAgain` = 0
-:       jmp     RunDesktop
+        beq     retry           ; `kAlertResultTryAgain` = 0
+       END_IF
+        jmp     RunDesktop
       END_IF
     END_IF
 
@@ -876,14 +874,16 @@ ret:    rts
 .proc UpdateOKButton
         lda     #BTK::kButtonStateNormal
         bit     op_record::selected_index
-        bpl     :+
+    IF_NS
         lda     #BTK::kButtonStateDisabled
-:       cmp     ok_button::state
-        beq     :+
+    END_IF
+
+    IF_A_NE     ok_button::state
         sta     ok_button::state
         BTK_CALL BTK::Hilite, ok_button
-:       rts
+    END_IF
 
+        rts
 .endproc ; UpdateOKButton
 
 ;;; ============================================================
@@ -925,10 +925,8 @@ noop:   rts
         lda     #0              ; INIT is not used as that briefly
         sta     WNDLFT          ; displays the dirty text page
         sta     WNDTOP
-        lda     #80
-        sta     WNDWDTH
-        lda     #24
-        sta     WNDBTM
+        copy8   #80, WNDWDTH
+        copy8   #24, WNDBTM
         jsr     HOME            ; Clear 80-col screen
         sta     TXTSET          ; ... and show it
 
@@ -953,15 +951,15 @@ noop:   rts
         lda     #winfo::kDialogId
         jsr     GetWindowPort
         lda     event_params::key
-        cmp     #$1C            ; Control character?
-        bcs     :+
+    IF_A_LT     #$1C            ; Control character?
         jmp     control_char
+    END_IF
 
         ;; --------------------------------------------------
 
         ;; 1-8 to select entry
 
-:       cmp     #'1'
+        cmp     #'1'
         RTS_IF_LT
 
         cmp     #'8'+1
@@ -1018,28 +1016,30 @@ not_return:
 .proc PopulateEntriesFlagTable
         ldx     #kSelectorListNumEntries - 1
         lda     #$FF
-:       sta     entries_flag_table,x
+   DO
+        sta     entries_flag_table,x
         dex
-        bpl     :-
+   WHILE_POS
 
         ldx     #0
-:       cpx     num_primary_run_list_entries
-        beq     :+
+   DO
+        BREAK_IF_X_EQ num_primary_run_list_entries
         txa
         sta     entries_flag_table,x
         inx
-        bne     :-
+   WHILE_NOT_ZERO
 
-:       ldx     #0
-:       cpx     num_secondary_run_list_entries
-        beq     :+
+        ldx     #0
+   DO
+        BREAK_IF_X_EQ num_secondary_run_list_entries
         txa
         clc
         adc     #8
         sta     entries_flag_table+8,x
         inx
-        bne     :-
-:       rts
+   WHILE_NOT_ZERO
+
+        rts
 .endproc ; PopulateEntriesFlagTable
 
 ;;; Table for 24 entries; index (0...23) if in use, $FF if empty
@@ -1114,9 +1114,10 @@ error:  lda     #AlertID::insert_system_disk
         .assert DEVLST = DEVCNT+1, error, "DEVCNT must precede DEVLST"
         ldx     DEVCNT
         inx                     ; include DEVCNT itself
-:       copy8   DEVCNT,x, backup_devlst,x
+    DO
+        copy8   DEVCNT,x, backup_devlst,x
         dex
-        bpl     :-
+    WHILE_POS
 
         ;; Find the startup volume's unit number
         copy8   DEVNUM, target
@@ -1124,32 +1125,31 @@ error:  lda     #AlertID::insert_system_disk
     IF_MINUS
         param_call CopyDeskTopOriginalPrefix, INVOKER_PREFIX
         param_call GetFileInfo, INVOKER_PREFIX
-        bcs     :+
+      IF_CC
         copy8   DEVNUM, target
-:
+      END_IF
     END_IF
 
         ;; Find the device's index in the list
         ldx     #0
-:       lda     DEVLST,x
+    DO
+        lda     DEVLST,x
         and     #UNIT_NUM_MASK  ; to compare against DEVNUM
         target := *+1
         cmp     #SELF_MODIFIED_BYTE
         beq     found
         inx
-        cpx     DEVCNT
-        bcc     :-
+    WHILE_X_LT  DEVCNT
         bcs     done            ; last one or not found
 
         ;; Save it
 found:  ldy     DEVLST,x
 
         ;; Move everything up
-:       lda     DEVLST+1,x
-        sta     DEVLST,x
+    DO
+        copy8   DEVLST+1,x, DEVLST,x
         inx
-        cpx     DEVCNT
-        bne     :-
+     WHILE_X_NE DEVCNT
 
         ;; Place it at the end
         tya
@@ -1165,9 +1165,10 @@ done:   rts
         bmi     ret             ; backup was never done
 
         inx                     ; include DEVCNT itself
-:       copy8   backup_devlst,x, DEVCNT,x
+    DO
+        copy8   backup_devlst,x, DEVCNT,x
         dex
-        bpl     :-
+    WHILE_POS
 
 ret:    rts
 .endproc ; RestoreDeviceList
@@ -1234,8 +1235,7 @@ backup_devlst:
 
         stax    text_addr       ; input is length-prefixed string
         ldy     #0
-        lda     (text_addr),y
-        sta     text_length
+        copy8   (text_addr),y, text_length
         inc16   text_addr       ; point past length
         MGTK_CALL MGTK::TextWidth, text_params
 
@@ -1334,10 +1334,10 @@ hi:    .byte   0
 
         ;; Copy string into buffer
         tay
-:       lda     (ptr),y
-        sta     entry_string_buf+3,y
+    DO
+        copy8   (ptr),y, entry_string_buf+3,y
         dey
-        bne     :-
+    WHILE_NOT_ZERO
 
         ;; Increase length by 3
         ldy     #0
@@ -1417,9 +1417,8 @@ start:
         lda     invoked_during_boot_flag
     IF_ZERO
         bit     BUTN0           ; if Open-Apple is down, skip RAMCard copy
-        bpl     :+
-        jmp     use_entry_path
-:
+        jmi     use_entry_path
+
         ;; Is there a RAMCard at all?
         jsr     GetCopiedToRAMCardFlag
         beq     use_entry_path  ; no RAMCard, skip
@@ -1594,11 +1593,13 @@ err:    lda     #AlertID::selector_unable_to_run
 
 check_path:
         ldy     INVOKER_PREFIX
-:       lda     INVOKER_PREFIX,y
+    DO
+        lda     INVOKER_PREFIX,y
         cmp     #'/'
         beq     :+
         dey
-        bne     :-
+    WHILE_NOT_ZERO
+
         lda     #AlertID::insert_source_disk
         jsr     ShowAlert
         ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
@@ -1609,13 +1610,13 @@ check_path:
         tya
         pha
         iny
-        ldx     #$00
-:       iny
+        ldx     #0
+    DO
+        iny
         inx
-        lda     INVOKER_PREFIX,y
-        sta     INVOKER_FILENAME,x
-        cpy     INVOKER_PREFIX
-        bne     :-
+        copy8   INVOKER_PREFIX,y, INVOKER_FILENAME,x
+    WHILE_Y_NE  INVOKER_PREFIX
+
         stx     INVOKER_FILENAME
         pla
         sta     INVOKER_PREFIX
@@ -1663,10 +1664,10 @@ check_path:
         ldy     #$00
         lda     (ptr),y
         tay
-:       lda     (ptr),y
-        sta     INVOKER_PREFIX,y
+    DO
+        copy8   (ptr),y, INVOKER_PREFIX,y
         dey
-        bpl     :-
+    WHILE_POS
 
         rts
 .endproc ; CopyPathToInvokerPrefix
@@ -1697,11 +1698,12 @@ check_path:
         bcc     err
 
         ldx     #kCheckHeaderLength-1
-:       lda     read_buf,x
+    DO
+        lda     read_buf,x
         cmp     check_header,x
         bne     err
         dex
-        bpl     :-
+    WHILE_POS
 
         COPY_STRING read_buf + kLinkFilePathLengthOffset, INVOKER_PREFIX
         clc
@@ -1748,19 +1750,21 @@ basis:  lda     #'S'            ; "BASI?" -> "BASIS"
         ;; Start off with `interp_path` = `launch_path`
         ldx     launch_path
         stx     path_length
-:       copy8   launch_path,x, interp_path,x
+    DO
+        copy8   launch_path,x, interp_path,x
         dex
-        bpl     :-
+    WHILE_POS
 
         ;; Pop off a path segment.
 pop_segment:
         path_length := *+1
         ldx     #SELF_MODIFIED_BYTE
-:       lda     interp_path,x
+    DO
+        lda     interp_path,x
         cmp     #'/'
         beq     found_slash
         dex
-        bne     :-
+    WHILE_NOT_ZERO
 
 no_bs:  copy8   #0, interp_path ; null out the path
         return  #$FF            ; non-zero is failure
@@ -1775,11 +1779,11 @@ found_slash:
         ;; Append BASI?.SYSTEM to path and check for file.
         ldx     interp_path
         ldy     #0
-:       inx
+    DO
+        inx
         iny
         copy8   str_basix_system,y, interp_path,x
-        cpy     str_basix_system
-        bne     :-
+    WHILE_Y_NE  str_basix_system
         stx     interp_path
         param_call GetFileInfo, interp_path
         bcs     pop_segment
@@ -1799,16 +1803,15 @@ CheckBasicSystem        := CheckBasixSystemImpl::basic
         stax    $06
         MLI_CALL GET_PREFIX, get_prefix_params
         ldy     #0
-        lda     (ptr),y
-        sta     len
+        copy8   (ptr),y, len
         ldx     INVOKER_INTERPRETER
-:       iny
+    DO
+        iny
         inx
-        lda     (ptr),y
-        sta     INVOKER_INTERPRETER,x
+        copy8   (ptr),y, INVOKER_INTERPRETER,x
         len := *+1
         cpy     #SELF_MODIFIED_BYTE
-        bne     :-
+    WHILE_NE
         stx     INVOKER_INTERPRETER
 
         param_jump GetFileInfo, INVOKER_INTERPRETER
@@ -1874,30 +1877,29 @@ str_extras_awlaunch:
 
         stax    path_addr
         ldy     #0
-        lda     (path_addr),y
-        sta     len
+        copy8   (path_addr),y, len
         tay
-:       lda     (path_addr),y
-        cmp     #'/'
-        beq     :+
-        dey
-        bne     :-
-
-:       dey
-:       lda     (path_addr),y
-        cmp     #'/'
-        beq     :+
-        dey
-        bne     :-
-
-:       dey
-        ldx     buf
-:       inx
-        iny
+    DO
         lda     (path_addr),y
-        sta     buf,x
-        cpy     len
-        bne     :-
+        BREAK_IF_A_EQ #'/'
+        dey
+    WHILE_NOT_ZERO
+
+        dey
+    DO
+        lda     (path_addr),y
+        BREAK_IF_A_EQ #'/'
+        dey
+    WHILE_NOT_ZERO
+
+        dey
+        ldx     buf
+    DO
+        inx
+        iny
+        copy8   (path_addr),y, buf,x
+    WHILE_Y_NE len
+
         stx     buf
         ldax    #buf
         rts
@@ -1946,14 +1948,14 @@ len:    .byte   0
         inc     loop_counter
         inc     loop_counter
         lda     loop_counter
-        cmp     #kMaxCounter
-        bcc     :+
+    IF_A_GE     #kMaxCounter
         copy8   #0, loop_counter
 
         jsr     ShowClock
         jsr     ResetIIgsRGB   ; in case it was reset by control panel
+    END_IF
 
-:       lda     loop_counter
+        lda     loop_counter
         rts
 
 loop_counter:
