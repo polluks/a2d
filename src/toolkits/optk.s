@@ -178,28 +178,23 @@ grafport_win:   .tag    MGTK::GrafPort
 
 .proc UpdateImpl
         ldx     #0
-loop:   txa
+    DO
+        txa
 
         jsr     _CallIsEntryProc ; preserves A, sets N
-    IF_NC
+      IF_NC
         point := tmp_space
 
         ;; Is a real entry - prep to draw it
         pha                     ; A = index
         jsr     _GetOptionPos   ; returns A,X=x , Y=y
-        clc
-        adc     oprc_hoffset
-        bcc     :+
-        inx
-:       stax    point + MGTK::Point::xcoord
+        addax8  oprc_hoffset
+        stax    point + MGTK::Point::xcoord
 
         tya
         ldx     #0
-        clc
-        adc     oprc_voffset
-        bcc     :+
-        inx
-:       stax    point + MGTK::Point::ycoord
+        addax8  oprc_voffset
+        stax    point + MGTK::Point::ycoord
 
         MGTK_CALL MGTK::MoveTo, point
 
@@ -207,12 +202,11 @@ loop:   txa
         pha                     ; A = index
         jsr     DrawEntryProc
         pla                     ; A = index
-    END_IF
+      END_IF
 
         tax                     ; X = index
         inx
-        cpx     max_entries
-        bne     loop
+    WHILE_X_NE  max_entries
 
         rts
 .endproc ; UpdateImpl
@@ -300,20 +294,20 @@ key             .byte
         sbc     oprc_num_rows
     END_IF
 
-loop:
-    IF_A_EQ     max_entries_minus_one
+    REPEAT
+      IF_A_EQ   max_entries_minus_one
         lda     #0              ; last, wrap to first
-    ELSE
+      ELSE
         clc
         adc     oprc_num_rows
-    END_IF
+      END_IF
 
-    IF_A_GE     max_entries
+      IF_A_GE   max_entries
         sec
         sbc     max_entries_minus_one
-    END_IF
+      END_IF
         jsr     _CallIsEntryProc
-        bmi     loop
+    UNTIL_NC
 
         jmp     _SetSelectionAndNotify
 .endproc ; _HandleKeyRight
@@ -323,20 +317,21 @@ loop:
 .proc _HandleKeyLeft
         lda     oprc_selected_index
         bmi     last            ; no selection, start at last
-        bne     loop            ; or if first, start at last
-
+    IF_ZERO                     ; or if first, start at last
 last:   lda     max_entries_minus_one
         clc
         adc     oprc_num_rows
+    END_IF
 
-loop:   sec
+    REPEAT
+        sec
         sbc     oprc_num_rows
-    IF_NEG
+      IF_NEG
         clc
         adc     max_entries_minus_one
-    END_IF
+      END_IF
         jsr     _CallIsEntryProc
-        bmi     loop
+    UNTIL_NC
 
         jmp     _SetSelectionAndNotify
 .endproc ; _HandleKeyLeft
@@ -352,14 +347,15 @@ loop:   sec
         lda     max_entries     ; first, start with last
     END_IF
 
-loop:   sec
+    REPEAT
+        sec
         sbc     #1
-    IF_NEG
+      IF_NEG
         lda     max_entries
-        bne     loop            ; always
-    END_IF
+        CONTINUE_IF_NE          ; always
+      END_IF
         jsr     _CallIsEntryProc
-        bmi     loop
+    UNTIL_NC
 
         jmp     _SetSelectionAndNotify
 .endproc ; _HandleKeyUp
@@ -372,13 +368,14 @@ loop:   sec
         lda     #AS_BYTE(-1)    ; no selection, start at first
     END_IF
 
-loop:   clc
+    REPEAT
+        clc
         adc     #1
-    IF_A_EQ     max_entries
+      IF_A_EQ   max_entries
         lda     #0
-    END_IF
+      END_IF
         jsr     _CallIsEntryProc
-        bmi     loop
+    UNTIL_NC
 
         jmp     _SetSelectionAndNotify
 .endproc ; _HandleKeyDown
@@ -448,21 +445,15 @@ new_selection   .byte
 
         jsr     _GetOptionPos
         stax    rect + MGTK::Rect::x1
-        clc
-        adc     oprc_item_width
-        bcc     :+
-        inx
-:       stax    rect + MGTK::Rect::x2
+        addax8  oprc_item_width
+        stax    rect + MGTK::Rect::x2
         dec16   rect + MGTK::Rect::x2
 
         tya                     ; y lo
         ldx     #0              ; y hi
         stax    rect + MGTK::Rect::y1
-        clc
-        adc     oprc_item_height
-        bcc     :+
-        inx
-:       stax    rect + MGTK::Rect::y2
+        addax8  oprc_item_height
+        stax    rect + MGTK::Rect::y2
         dec16   rect + MGTK::Rect::y2
 
         MGTK_CALL MGTK::SetPattern, solid_pattern

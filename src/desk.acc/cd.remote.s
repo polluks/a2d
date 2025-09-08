@@ -358,9 +358,7 @@ ep_size = * - ep_start
         jsr     CopyEventDataToMain
 
         lda     findwindow_params::window_id
-        cmp     #aux::kDAWindowId
-        bne     ret
-
+    IF_A_EQ     #aux::kDAWindowId
         lda     findwindow_params::which_area
         cmp     #MGTK::Area::close_box
         beq     HandleClose
@@ -368,8 +366,8 @@ ep_size = * - ep_start
         beq     HandleDrag
         cmp     #MGTK::Area::content
         beq     HandleClick
-
-ret:    lda     #$FF            ; not a button
+    END_IF
+        lda     #$FF            ; not a button
         rts
 .endproc ; HandleDown
 
@@ -608,7 +606,7 @@ done:   rts
         stax    ptr
 
         JUMP_TABLE_MGTK_CALL MGTK::GetWinPort, aux::getwinport_params
-        bne     ret
+    IF_ZERO
         JUMP_TABLE_MGTK_CALL MGTK::SetPort, aux::grafport
 
         ;; Copy rectangle
@@ -634,7 +632,8 @@ done:   rts
         ;; Invert it
         JUMP_TABLE_MGTK_CALL MGTK::SetPenMode, aux::penXOR
         JUMP_TABLE_MGTK_CALL MGTK::PaintRect, aux::tmp_rect
-ret:    rts
+    END_IF
+        rts
 
 rect:   .tag    MGTK::Rect
 
@@ -802,26 +801,24 @@ HandleKey:
 
         ;; $51 = Q (Quit)
         cmp     #'Q'
-        bne     :+
-        jmp     DoQuitAction
-:
+        jeq     DoQuitAction
+
         ;; $1B = ESC (Quit)
         cmp     #CHAR_ESCAPE
-        bne     :+
-        jmp     DoQuitAction
-:
+        jeq     DoQuitAction
+
         ;; $4C = L (Continuous Play)
-        cmp     #'L'
-        bne     :+
+    IF_A_EQ     #'L'
         jsr     ToggleLoopMode
         jmp     MainLoop
-:
+    END_IF
+
         ;; $52 = R (Random Play)
-        cmp     #'R'
-        bne     :+
+    IF_A_EQ     #'R'
         jsr     ToggleRandomMode
         jmp     MainLoop
-:
+    END_IF
+
         ;; All other key operations (Play/Stop/Pause/Next/Prev/Eject) require an online drive/disc, so check one more time
         jsr     StatusDrive
         jcs     MainLoop
@@ -830,29 +827,29 @@ HandleKey:
         pha
         lda     TOCInvalidFlag
         ;; Valid TOC has been read, we can skip the re-read
-        beq     :+
+    IF_NOT_ZERO
         jsr     ReReadTOC
-:
+    END_IF
         pla
 
         ;; $50 = P (Play)
-        cmp     #'P'
-        bne     :+
+    IF_A_EQ     #'P'
         jsr     DoPlayAction
         jmp     MainLoop
-:
+    END_IF
+
         ;; $53 = S (Stop)
-        cmp     #'S'
-        bne     :+
+    IF_A_EQ     #'S'
         jsr     DoStopAction
         jmp     MainLoop
-:
+    END_IF
+
         ;; $20 = Space (Pause)
-        cmp     #' '
-        bne     :+
+    IF_A_EQ     #' '
         jsr     DoPauseAction
         jmp     MainLoop
-:
+    END_IF
+
         ;; $08 = ^H, LA (Previous Track, Scan Backward)
     IF_A_EQ     #CHAR_LEFT
         lda     event_params::modifiers
@@ -878,10 +875,10 @@ HandleKey:
     END_IF
 
         ;; $45 = E (Eject)
-        cmp     #'E'
-        bne     :+
+    IF_A_EQ     #'E'
         jsr     C26Eject
-:
+    END_IF
+
         jmp     MainLoop
 .endproc ; MainLoop
 
@@ -2142,21 +2139,21 @@ last_sec:
         ror
         ror
         ror
-        cmp     #10             ; stuffed with $AA to blank
-        bcs     :+
+    IF_A_LT     #10             ; stuffed with $AA to blank
         ora     #'0'
         rts
-:       lda     #' '
+    END_IF
+        lda     #' '
         rts
 .endproc ; HighBCDDigitToASCII
 
 .proc LowBCDDigitToASCII
         and     #$0F
-        cmp     #10             ; stuffed with $AA to blank
-        bcs     :+
+    IF_A_LT     #10             ; stuffed with $AA to blank
         ora     #'0'
         rts
-:       lda     #' '
+    END_IF
+        lda     #' '
         rts
 .endproc ; LowBCDDigitToASCII
 

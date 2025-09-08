@@ -241,7 +241,7 @@ joystick_bitmap:
         copy16  event_params::ycoord, findwindow_params::mousey
         MGTK_CALL MGTK::FindWindow, findwindow_params
         lda     findwindow_params::window_id
-        cmp     winfo::window_id
+        cmp     #kDAWindowId
         bne     InputLoop
         lda     findwindow_params::which_area
         cmp     #MGTK::Area::close_box
@@ -265,7 +265,7 @@ joystick_bitmap:
 ;;; ============================================================
 
 .proc HandleDrag
-        copy8   winfo::window_id, dragwindow_params::window_id
+        copy8   #kDAWindowId, dragwindow_params::window_id
         copy16  event_params::xcoord, dragwindow_params::dragx
         copy16  event_params::ycoord, dragwindow_params::dragy
         MGTK_CALL MGTK::DragWindow, dragwindow_params
@@ -300,8 +300,7 @@ notpencopy:     .byte   MGTK::notpencopy
 .proc DrawWindow
         ;; Defer if content area is not visible
         MGTK_CALL MGTK::GetWinPort, getwinport_params
-        bne     ret             ; obscured
-
+    IF_ZERO                     ; not obscured
         MGTK_CALL MGTK::SetPort, grafport
         MGTK_CALL MGTK::HideCursor
 
@@ -316,8 +315,9 @@ notpencopy:     .byte   MGTK::notpencopy
 
         copy8   #$80, force_draw_flag
         MGTK_CALL MGTK::ShowCursor
+    END_IF
 
-ret:    rts
+        rts
 .endproc ; DrawWindow
 
 ;;; ============================================================

@@ -336,7 +336,7 @@ buf_search:     .res    kBufSize, 0 ; search term
 .proc HandleDown
         MGTK_CALL MGTK::FindWindow, findwindow_params
         lda     findwindow_params::window_id
-        cmp     winfo::window_id
+        cmp     #kDAWindowId
         jne     InputLoop
         lda     findwindow_params::which_area
         cmp     #MGTK::Area::close_box
@@ -363,8 +363,7 @@ buf_search:     .res    kBufSize, 0 ; search term
         copy8   #kDAWindowId, dragwindow_params::window_id
         MGTK_CALL MGTK::DragWindow, dragwindow_params
         bit     dragwindow_params::moved
-        bpl     :+
-
+    IF_NS
         ;; Draw DeskTop's windows and icons.
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
 
@@ -372,8 +371,9 @@ buf_search:     .res    kBufSize, 0 ; search term
         jsr     DrawWindow
 
         LETK_CALL LETK::Update, le_params ; window moved
+    END_IF
 
-:       jmp     InputLoop
+        jmp     InputLoop
 
 .endproc ; HandleDrag
 
@@ -399,12 +399,13 @@ loop:
         bne     next
 
         tay
-cloop:  lda     buf_search,y
+    DO
+        lda     buf_search,y
         jsr     ToUpperCase
         cmp     (ptr),y
         bne     next
         dey
-        bne     cloop
+    WHILE_NOT_ZERO
 
         ;; Match!
         ldy     #0
@@ -412,13 +413,11 @@ cloop:  lda     buf_search,y
         tay
         iny                  ; past end of string
         ldx     #0           ; copy next 4 bytes into `lat` and `long`
-:       lda     (ptr),y
-        sta     lat,x
+    DO
+        copy8   (ptr),y, lat,x
         iny
         inx
-        cpx     #4
-        bne     :-
-
+    WHILE_X_NE  #4
         jmp     done
 
         ;; Advance pointer to next record
@@ -469,9 +468,10 @@ index:  .byte   0
         MGTK_CALL MGTK::InRect, find_button::rect
     IF_NOT_ZERO
         BTK_CALL BTK::Track, find_button
-        bmi     :+
+      IF_NC
         jsr     DoFind
-:       jmp     done
+      END_IF
+        jmp     done
     END_IF
 
         ;; Click in line edit?
@@ -523,9 +523,10 @@ notpencopy:     .byte   MGTK::notpencopy
 
 .proc SetPort
         MGTK_CALL MGTK::GetWinPort, getwinport_params
-        bne     ret
+    IF_ZERO
         MGTK_CALL MGTK::SetPort, grafport_win
-ret:    rts
+    END_IF
+        rts
 .endproc ; SetPort
 
 ;;; ============================================================
@@ -557,10 +558,13 @@ done:   jmp     InputLoop
 ;;; ============================================================
 
 .proc DrawWindow
+        ;; If we're drawing the window, the indicator is implicitly
+        ;; not currently visible.
+        copy8   #0, indicator_flag
+
         ;; Defer if content area is not visible
         jsr     SetPort
-        bne     ret
-
+    IF_ZERO
         MGTK_CALL MGTK::HideCursor
 
         ;; ==============================
@@ -571,9 +575,9 @@ done:   jmp     InputLoop
         MGTK_CALL MGTK::PaintBitsHC, map_params
 
         MGTK_CALL MGTK::MoveTo, lat_label_pos
-        param_call DrawString, lat_label_str
+        param_call      DrawString, lat_label_str
         MGTK_CALL MGTK::MoveTo, long_label_pos
-        param_call DrawString, long_label_str
+        param_call      DrawString, long_label_str
 
         jsr     DrawLatLong
 
@@ -585,8 +589,8 @@ done:   jmp     InputLoop
         ;; ==============================
 
         MGTK_CALL MGTK::ShowCursor
-
-ret:    rts
+    END_IF
+        rts
 
 .endproc ; DrawWindow
 

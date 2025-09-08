@@ -297,12 +297,12 @@ frame:  .byte   0
         copy16  #FRAMEBUFFER+kFrameSizeUndoubled*2, dst
         ldy     #0
 
-byte_loop:
+    DO
         dec16   src
         lda     (src),y
 
         ldx     #8
-bit_loop:
+      DO
         ror
         php
         ror     tmp+1
@@ -311,21 +311,19 @@ bit_loop:
         ror     tmp+1
         ror     tmp
         dex
-        bne     bit_loop
+      WHILE_NOT_ZERO
 
         rol     tmp
         rol     tmp+1
         ror     tmp
 
         dec16   dst
-        lda     tmp+1
-        sta     (dst),y
+        copy8   tmp+1, (dst),y
         dec16   dst
-        lda     tmp
-        sta     (dst),y
+        copy8   tmp, (dst),y
 
         dec     count
-        bne     byte_loop
+    WHILE_NOT_ZERO
         rts
 .endproc ; FrameDouble
 
@@ -531,10 +529,12 @@ skip:   .word   0
         ;; Throttle animation
         lda     skip
         ora     skip+1
-        beq     :+
+    IF_NOT_ZERO
         dec16   skip
         jmp     InputLoop
-:       copy16  #175, skip
+    END_IF
+
+        copy16  #175, skip
 
         ;; --------------------------------------------------
         ;; Tick once per frame; used to alternate frames
@@ -561,8 +561,7 @@ skip:   .word   0
 
         sub16   screentowindow_params::windowx, x_pos, x_delta
         sub16   x_delta, #kNekoWidth / 2, x_delta
-        lda     x_delta+1
-        sta     x_neg
+        copy8   x_delta+1, x_neg
     IF_NEG
         sub16   #0, x_delta, x_delta
     END_IF
@@ -571,8 +570,7 @@ skip:   .word   0
 
         sub16   screentowindow_params::windowy, y_pos, y_delta
         sub16   y_delta, #kNekoHeight / 2, y_delta
-        lda     y_delta+1
-        sta     y_neg
+        copy8   y_delta+1, y_neg
     IF_NEG
         sub16   #0, y_delta, y_delta
     END_IF
@@ -580,15 +578,14 @@ skip:   .word   0
 
         ;; Beyond threshold?
         lda     x_delta
-        cmp     #kThreshold
-        bcs     :+
+    IF_A_LT     #kThreshold
         lda     y_delta
-        cmp     #kThreshold
-        bcs     :+
-
+      IF_A_LT   #kThreshold
         ldx     #0              ; no; null out the deltas
         beq     skip_encode     ; always
-:
+      END_IF
+    END_IF
+
         ;; Yes - do math to scale the deltas
         lda     x_delta
     IF_A_GE     y_delta
@@ -624,26 +621,28 @@ skip:   .word   0
         ;;  00 = no, 01 = +ve, 10 = -ve, 11 = (not used)
         ldx     #0
         lda     x_delta
-        cmp     #kMove/2
-        bcc     @done_x
+    IF_A_GE     #kMove/2
         bit     x_neg
-        bpl     :+
+      IF_NEG
         inx
-:       inx
-@done_x:
+      END_IF
+        inx
+    END_IF
         txa
         asl
         asl
         tax
 
         lda     y_delta
-        cmp     #kMove/2
-        bcc     @done_y
+    IF_A_GE     #kMove/2
         bit     y_neg
-        bpl     :+
+      IF_NEG
         inx
-:       inx
-@done_y:
+      END_IF
+        inx
+    END_IF
+
+
 skip_encode:
         stx     dir
 
@@ -921,9 +920,10 @@ scratch_frame_table:
 
 .proc DrawWindow
         jsr     GetSetPort
-        bne     ret             ; obscured
+    IF_ZERO                     ; not obscured
         JSR_TO_AUX aux::DrawGrowBox
-ret:    rts
+    END_IF
+        rts
 .endproc ; DrawWindow
 
 ;;; ============================================================
@@ -932,9 +932,10 @@ ret:    rts
 .proc GetSetPort
         ;; Defer if content area is not visible
         JUMP_TABLE_MGTK_CALL MGTK::GetWinPort, aux::getwinport_params
-        bne     ret
+    IF_ZERO
         JUMP_TABLE_MGTK_CALL MGTK::SetPort, aux::grafport
-ret:    rts
+    END_IF
+        rts
 .endproc ; GetSetPort
 
 ;;; ============================================================
@@ -951,13 +952,12 @@ cur_frame:                      ; NekoFrame::XXX
 
 .proc DrawCurrentFrame
         jsr     GetSetPort
-        bne     ret
-
+    IF_ZERO
         ;; Erase if needed
         bit     moved_flag
-    IF_NS
+      IF_NS
         JSR_TO_AUX aux::EraseFrame
-    END_IF
+      END_IF
 
         ;; Draw frame
         ldy     cur_frame       ; A,X are trashed by macro
@@ -968,8 +968,8 @@ cur_frame:                      ; NekoFrame::XXX
         sta     SPKR
         sta     SPKR
 .endif
-
-ret:    rts
+    END_IF
+        rts
 .endproc ; DrawCurrentFrame
 
 ;;; ============================================================

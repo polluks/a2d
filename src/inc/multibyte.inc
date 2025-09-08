@@ -496,6 +496,46 @@ skip:
     .endif
 .endmacro
 
+;;; Add arg1 (8 bit value) into A,X, optionally store to arg2
+;;;    addax8 #$11       ; immediate
+;;;    addax8 $11        ; absolute
+;;;    addax8 #$11,$2222 ; immediate, absolute
+;;;    addax8 $11,$2222  ; absolute, absolute
+.macro addax8  arg1, arg2
+.local skip
+        clc
+        adc     arg1
+    .ifnblank arg2
+        sta     arg2
+    .endif
+        bcc     skip
+        inx
+skip:
+    .ifnblank arg2
+        stx     arg2+1
+    .endif
+.endmacro
+
+;;; Subtract arg1 (8 bit value) from A,X, optionally store to arg2
+;;;    subax8 #$11       ; immediate
+;;;    subax8 $11        ; absolute
+;;;    subax8 #$11,$2222 ; immediate, absolute
+;;;    subax8 $11,$2222  ; absolute, absolute
+.macro subax8  arg1, arg2
+.local skip
+        sec
+        sbc     arg1
+    .ifnblank arg2
+        sta     arg2
+    .endif
+        bcs     skip
+        dex
+skip:
+    .ifnblank arg2
+        stx     arg2+1
+    .endif
+.endmacro
+
 ;;; Add X,Y into arg1 (X,Y remain unchanged)
 ;;;    addxy #$1111, $3333       ; immediate, absolute
 ;;;    addxy $1111, $3333        ; absolute, absolute
@@ -813,6 +853,19 @@ skip:   dec     arg
 
 ;;; ============================================================
 ;;; 24-bit pseudo-ops
+
+;;; Copy 24-bit value
+;;;    copy24 #$111111, $2222 ; immediate, absolute
+;;;    copy24 $1111, $2222      ; absolute, absolute
+.macro copy24 arg1, arg2
+        _op_b0  lda, {arg1}
+        sta     arg2
+        _op_x1  lda, {arg1}     ; optimized
+        sta     arg2+1
+        _op_x2  lda, {arg1}     ; optimized
+        sta     arg2+2
+.endmacro
+
 
 ;;; Increment 24-bit value
 .macro inc24    arg

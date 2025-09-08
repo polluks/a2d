@@ -175,10 +175,10 @@ exit1:  jmp     Exit
         beq     exit1           ; nope, bail
 
         cmp     #kMaxDeskTopWindows+1 ; is it DeskTop window?
-   IF_GE
+    IF_GE
         copy8   #0, window_id   ; nope, bail
         beq     exit1           ; always
-   END_IF
+    END_IF
 
         ;; Copy window path to buffer
         ptr := $06
@@ -373,17 +373,19 @@ start:  copy8   #0, flag
         jsr     SetPtrToFirstEntry
         jsr     SetPtrToNextEntry
 
-loop:   copy16  ptr1, ptr2
+    DO
+        copy16  ptr1, ptr2
         jsr     SetPtrToNextEntry
-        bcs     done
+        BREAK_IF_CS
 
         jsr     CompareFileEntries
-        bcc     loop
+        CONTINUE_IF_LT
+
         jsr     SwapEntries
         copy8   #$FF, flag
-        bne     loop            ; always
+    WHILE_NOT_ZERO              ; always
 
-done:   lda     flag
+        lda     flag
         bne     start
         rts
 
@@ -438,9 +440,10 @@ rtcs:   sec
         ptr2 := $08
 
         ldy     #.sizeof(FileEntry) - 1
-loop:   swap8   (ptr1),y, (ptr2),y
+    DO
+        swap8   (ptr1),y, (ptr2),y
         dey
-        bpl     loop
+    WHILE_POS
         rts
 .endproc ; SwapEntries
 
@@ -591,7 +594,7 @@ loop2:  dex
         and     #NAME_LENGTH_MASK
         cmp_len2 := *+1
         cmp     #SELF_MODIFIED_BYTE
-        bne     loop2            ; lengths don't match, so not a match
+        bne     loop2           ; lengths don't match, so not a match
 
         ;; Bytewise compare names.
         sta     cpy_len2
@@ -709,13 +712,14 @@ type0:  .byte   0
         ;; Check name suffix
         ldx     #0
         dey
-loop:   iny
+    DO
+        iny
         inx
         lda     (ptr),y
         cmp     str_system,x
         bne     fail
         cpx     str_system
-        bne     loop
+    WHILE_NE
 
         clc
         rts
@@ -763,7 +767,7 @@ next:   cpy     #SELF_MODIFIED_BYTE
         bne     loop
         lda     len2
         cmp     len1
-        beq     rtcc
+        beq     rtcc            ; TODO: `BGT` ?
         bcs     rtcs
 rtcc:   clc
         rts

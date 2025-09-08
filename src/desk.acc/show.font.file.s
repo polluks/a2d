@@ -183,11 +183,11 @@ char_label:  .byte   0
         copy16  event_params::xcoord, findwindow_params::mousex
         copy16  event_params::ycoord, findwindow_params::mousey
         MGTK_CALL MGTK::FindWindow, findwindow_params
+
         lda     findwindow_params::window_id
-        cmp     winfo::window_id
-        bpl     :+              ; TODO: `beq`
-        jmp     InputLoop
-:
+        cmp     #kDAWindowId
+        jne     InputLoop
+
         lda     findwindow_params::which_area
         cmp     #MGTK::Area::close_box
         beq     HandleClose
@@ -266,7 +266,8 @@ END_PARAM_BLOCK
 
 
         copy8   #0, index
-loop:   lda     index
+    DO
+        lda     index
         asl
         tax
         copy16  line_addrs,x, ptr
@@ -287,8 +288,7 @@ loop:   lda     index
 
         inc     index
         lda     index
-        cmp     #kLineCount
-        bne     loop
+    WHILE_A_NE  #kLineCount
 
         MGTK_CALL MGTK::ShowCursor
         rts

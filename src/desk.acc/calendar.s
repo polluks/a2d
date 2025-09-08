@@ -299,7 +299,7 @@ first_dow:
 .proc HandleDown
         MGTK_CALL MGTK::FindWindow, findwindow_params
         lda     findwindow_params::window_id
-        cmp     winfo::window_id
+        cmp     #kDAWindowId
         jne     InputLoop
         lda     findwindow_params::which_area
         cmp     #MGTK::Area::close_box
@@ -424,7 +424,7 @@ fin:    jsr     UpdateWindow
 ;;; ============================================================
 
 .proc HandleDrag
-        copy8   winfo::window_id, dragwindow_params::window_id
+        copy8   #kDAWindowId, dragwindow_params::window_id
         MGTK_CALL MGTK::DragWindow, dragwindow_params
 common:
         bit     dragwindow_params::moved
@@ -443,7 +443,7 @@ common:
 ;;; ============================================================
 
 .proc HandleClick
-        copy8   winfo::window_id, screentowindow_params::window_id
+        copy8   #kDAWindowId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
 
@@ -537,7 +537,8 @@ update: lda     #0
         MGTK_CALL MGTK::SetPenSize, grid_pen
 
         copy8   #kNumGridLines - 1, index
-lloop:  lda     index
+      DO
+        lda     index
         asl                     ; *8 == .sizeof(MGTK::Point) * 2
         asl
         asl
@@ -562,7 +563,7 @@ lloop:  lda     index
         MGTK_CALL MGTK::LineTo, SELF_MODIFIED, pt_end
 
         dec     index
-        bpl     lloop
+      WHILE_POS
     END_IF
 
         ;; --------------------------------------------------
@@ -571,7 +572,8 @@ lloop:  lda     index
         bit full_flag
     IF_MINUS
         copy8   #6, index
-dloop:  lda     index
+      DO
+        lda     index
         asl
         tax
         copy16  day_pos_table,x, pos_addr
@@ -595,7 +597,7 @@ dloop:  lda     index
         jsr     DrawString
 
         dec     index
-        bpl     dloop
+      WHILE_POS
     END_IF
 
         ;; --------------------------------------------------
@@ -625,15 +627,12 @@ dloop:  lda     index
 
         ;; Find length of month
         ldx     datetime + ParsedDateTime::month
-        lda     month_len_table-1,x
-        sta     mlen
+        copy8   month_len_table-1,x, mlen
         inc     mlen
 
         ;; Start in top-left of grid
-        lda     #0
-        sta     col
-        lda     #0
-        sta     row
+        copy8   #0, col
+        copy8   #0, row
         COPY_BLOCK date_base, date_pos
 
 day_loop:

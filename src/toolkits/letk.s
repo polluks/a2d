@@ -157,7 +157,7 @@ penXOR:         .byte   MGTK::penXOR
 
         sub16   pos+MGTK::Point::xcoord, text_params+MGTK::TextWidthParams::width, pos+MGTK::Point::xcoord
         lsr16   pos+MGTK::Point::xcoord
-   END_IF
+    END_IF
 
         rts
 .endproc ; _CalcPos
@@ -212,9 +212,9 @@ a_record  .addr
 
         ldy     #LETK::LineEditRecord::active_flag
         lda     (a_record),y
-        bmi     :+
+    IF_NC
 ret:    rts
-:
+    END_IF
 
         ldy     #LETK::LineEditRecord::caret_counter
         sub16in (a_record),y, #1, (a_record),y

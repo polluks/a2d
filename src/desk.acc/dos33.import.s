@@ -206,8 +206,7 @@ port:           .addr   grafport_win
 .proc Exit
         ldx     listbox_rec::selected_index
     IF_NC
-        lda     control_block+ControlBlock::dev_list,x
-        sta     control_block+ControlBlock::unit_num
+        copy8   control_block+ControlBlock::dev_list,x, control_block+ControlBlock::unit_num
     END_IF
 
         MGTK_CALL MGTK::CloseWindow, winfo_picker_listbox
@@ -220,12 +219,7 @@ port:           .addr   grafport_win
 
 .proc HandleKey
         lda     event_params::key
-
-        cmp     #CHAR_UP
-        beq     :+
-        cmp     #CHAR_DOWN
-:
-    IF_EQ
+    IF_A_EQ_ONE_OF #CHAR_UP, #CHAR_DOWN
         copy8   event_params::key, lb_params::key
         copy8   event_params::modifiers, lb_params::modifiers
         LBTK_CALL LBTK::Key, lb_params
@@ -536,12 +530,7 @@ remainder:      .word   0                 ; (out)
 
 .proc HandleKey
         lda     event_params::key
-
-        cmp     #CHAR_UP
-        beq     :+
-        cmp     #CHAR_DOWN
-:
-    IF_EQ
+    IF_A_EQ_ONE_OF #CHAR_UP, #CHAR_DOWN
         copy8   event_params::key, lb_params::key
         copy8   event_params::modifiers, lb_params::modifiers
         LBTK_CALL LBTK::Key, lb_params
@@ -668,10 +657,10 @@ done:   rts
         pt_ptr := $06
         stxy    pt_ptr
         ldy     #.sizeof(MGTK::Point)-1
-   DO
+    DO
         copy8   (pt_ptr),y, pt,y
         dey
-   WHILE_POS
+    WHILE_POS
         pla
 
         ;; Calculate address of `CatalogEntry`
@@ -790,25 +779,19 @@ type_table:
         ;; TODO: Make this more elegant
         lda     str_from_int
     IF_A_EQ     #1
-        lda     str_from_int+1
-        sta     str_from_int+3
+        copy8   str_from_int+1, str_from_int+3
         lda     #'0'
         sta     str_from_int+1
         sta     str_from_int+2
-        lda     #3
-        sta     str_from_int
+        copy8   #3, str_from_int
         rts
     END_IF
 
     IF_A_EQ     #2
-        lda     str_from_int+2
-        sta     str_from_int+3
-        lda     str_from_int+1
-        sta     str_from_int+2
-        lda     #'0'
-        sta     str_from_int+1
-        lda     #3
-        sta     str_from_int
+        copy8   str_from_int+2, str_from_int+3
+        copy8   str_from_int+1, str_from_int+2
+        copy8   #'0', str_from_int+1
+        copy8   #3, str_from_int
         rts
     END_IF
 
@@ -893,17 +876,17 @@ start:
         copy8   DEVCNT, index
         copy8   #0, control_block+ControlBlock::dev_count
 
-loop:   ldx     index
+    DO
+        ldx     index
         lda     DEVLST,x
         and     #UNIT_NUM_MASK
         jsr     IsDiskII
-        bne     next
+      IF_ZS
         ldx     index
         lda     DEVLST,x
         and     #UNIT_NUM_MASK
         jsr     IsDOS33
-        bne     next
-
+       IF_ZS
         ;; It is DOS 3.3 - append it to the list
         ldx     index
         lda     DEVLST,x
@@ -912,9 +895,10 @@ loop:   ldx     index
         ldx     control_block+ControlBlock::dev_count
         sta     control_block+ControlBlock::dev_list,x
         inc     control_block+ControlBlock::dev_count
-
-next:   dec     index
-        bpl     loop
+       END_IF
+      END_IF
+        dec     index
+    WHILE_POS
 
         rts
 
@@ -961,12 +945,10 @@ file_loop:
         sta     entry_buf+aux::CatalogEntry::Track
 
         iny                     ; +$01 `FileEntry::Sector`
-        lda     RWTS_SECTOR_BUF,y
-        sta     entry_buf+aux::CatalogEntry::Sector
+        copy8   RWTS_SECTOR_BUF,y, entry_buf+aux::CatalogEntry::Sector
 
         iny                     ; +$02 `FileEntry::TypeFlags`
-        lda     RWTS_SECTOR_BUF+aux::CatalogEntry::TypeFlags,y
-        sta     entry_buf+aux::CatalogEntry::TypeFlags
+        copy8   RWTS_SECTOR_BUF+aux::CatalogEntry::TypeFlags,y, entry_buf+aux::CatalogEntry::TypeFlags
 
         iny                     ; +$03 `FileEntry::Name`
         ldx     #0
@@ -1116,30 +1098,29 @@ start:
         tax
 
         ;; Make uppercase or '.'
-cloop:
+    DO
         lda     str_name,x
         jsr     ToUpperCase
 
         ;; Digit is fine
         jsr     IsDigit
-        bcc     cnext
-
+      IF_CS
         ;; Uppercase is fine
         jsr     IsUpperAlpha
-        bcc     cnext
-
+       IF_CS
         ;; Anything else becomes '.'
         lda     #'.'
+        sta     str_name,x
+       END_IF
+      END_IF
 
-cstore: sta     str_name,x
-cnext:  dex
-        bne     cloop
+        dex
+    WHILE_NOT_ZERO
 
         ;; Can't start with non-alpha, replace with 'X'
         lda     str_name+1
     IF_A_LT     #'A'
-        lda     #'X'
-        sta     str_name+1
+        copy8   #'X', str_name+1
     END_IF
 
         ;; --------------------------------------------------
@@ -1159,8 +1140,7 @@ cnext:  dex
         ldx     #0
         ldy     path_buf
         iny
-        lda     #'/'
-        sta     path_buf,y
+        copy8   #'/', path_buf,y
     DO
         inx
         iny
@@ -1240,8 +1220,7 @@ translate_type:
         ;; Set the type
         pla                     ; A = type
         jsr     clz
-        lda     prodos_type_table,x
-        sta     create_params::file_type
+        copy8   prodos_type_table,x, create_params::file_type
 
         ;; Create target file
         JUMP_TABLE_MLI_CALL CREATE, create_params
@@ -1420,16 +1399,15 @@ fail:   return  #1
 start:
         sta     read_block_params::unit_num
         JUMP_TABLE_MLI_CALL READ_BLOCK, read_block_params
-        bne     ret
-
+    IF_ZERO
         lda     RWTS_BLOCK_BUF+1
         cmp     #$A5
-        bne     ret
-
+      IF_EQ
         lda     RWTS_BLOCK_BUF+2
         cmp     #$27
-
-ret:    rts
+      END_IF
+    END_IF
+        rts
 .endproc ; IsDOS33Impl
 IsDOS33 := IsDOS33Impl::start
 

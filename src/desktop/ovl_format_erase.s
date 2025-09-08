@@ -329,14 +329,7 @@ ret:    rts
 ;;; ============================================================
 
 .proc HandleKey
-        cmp     #CHAR_UP
-        beq     :+
-        cmp     #CHAR_DOWN
-        beq     :+
-        cmp     #CHAR_LEFT
-        beq     :+
-        cmp     #CHAR_RIGHT
-:   IF_EQ
+    IF_A_EQ_ONE_OF #CHAR_UP, #CHAR_DOWN, #CHAR_LEFT, #CHAR_RIGHT
         sta     vol_picker_params::key
         OPTK_CALL OPTK::Key, vol_picker_params
     END_IF
@@ -350,7 +343,7 @@ ret:    rts
 ;;; Output: N=0 if valid entry
 .proc IsEntryCallback
         cmp     DEVCNT          ; num volumes - 1
-        beq     yes
+        beq     yes             ; TODO: `BGT` ?
         bcs     no
 yes:    lda     #$00
         rts
@@ -693,7 +686,8 @@ L1398:  stxy    total_blocks
         sta     total_blocks+1
 
         ;; Main loop to build the volume bitmap
-bitmaploop:
+    DO
+
         jsr     _BuildBlock     ; Build a bitmap for the current block
 
         lda     write_block_params::block_num+1 ; Are we at a block >255?
@@ -710,13 +704,13 @@ bitmaploop:
 
         copy8   #$00, block_buffer ; Otherwise (>=7) mark blocks 0-7 as "in use"
         lda     lastblock       ; and check again
-    IF_A_LT     #15             ; Is it 15 or more? Skip ahead.
+      IF_A_LT   #15             ; Is it 15 or more? Skip ahead.
         and     #$07            ; Otherwise (7-14) take the low three bits
         tax
         lda     freemask,x      ; convert them to the correct VBM value using a lookup table
         sta     block_buffer+1  ; put it in the bitmap
         bcc     gowrite         ; and write the block
-    END_IF
+      END_IF
 
         copy8   #$00, block_buffer+1 ; (>=15) Mark blocks 8-15 as "in use"
         lda     lastblock       ; Then finally
@@ -729,8 +723,7 @@ bitmaploop:
 gowrite:
         jsr     WriteBlockAndZero
         lda     lastblock
-        cmp     write_block_params::block_num
-        bcs     bitmaploop
+    WHILE_A_GE  write_block_params::block_num
 
         ;; Success
         lda     #$00
@@ -768,10 +761,11 @@ lastblock:
 .proc _BuildBlock
         ldy     #$00
         lda     #$FF
-ffloop: sta     block_buffer,y  ; Fill this entire block
+    DO
+        sta     block_buffer,y  ; Fill this entire block
         sta     block_buffer+$100,y ; with $FF bytes
         iny
-        bne     ffloop
+    WHILE_NOT_ZERO
 
         lda     write_block_params::block_num
         cmp     lastblock       ; Is this the last block?

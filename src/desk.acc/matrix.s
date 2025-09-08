@@ -51,8 +51,7 @@ kAuxPageClearByte  = $C0        ; light-green on black, for RGB cards
         .setcpu "65816"
         lda     TBCOLOR         ; save text fg/bg
         pha
-        lda     #$C0            ; assign text fg/bg
-        sta     TBCOLOR
+        copy8   #$C0, TBCOLOR   ; assign text fg/bg
 
         lda     CLOCKCTL        ; save border
         and     #$0F
@@ -94,40 +93,35 @@ kAuxPageClearByte  = $C0        ; light-green on black, for RGB cards
 ;;; Save and clear main/aux text page 1 (preserving screen holes)
 .proc SaveText
         sta     SET80STORE      ; let PAGE2 control banking
-        lda     #0
-        sta     CV
+        copy8   #0, CV
 
         ptr1 := $06
         ptr2 := $08
 
         ;; Set BASL/H
-rloop:  jsr     VTAB
+    DO
+        jsr     VTAB
         add16   BASL, #save_buffer-$400, ptr1
         add16   ptr1, #$400, ptr2
         ldy     #39
 
-cloop:
+      DO
         ;; Main
-        lda     (BASL),y
-        sta     (ptr1),y
-        lda     #kMainPageClearByte
-        sta     (BASL),y
+        copy8   (BASL),y, (ptr1),y
+        copy8   #kMainPageClearByte, (BASL),y
 
         ;; Aux
         sta     PAGE2ON
-        lda     (BASL),y
-        sta     (ptr2),y
-        lda     #kAuxPageClearByte
-        sta     (BASL),y
+        copy8   (BASL),y, (ptr2),y
+        copy8   #kAuxPageClearByte, (BASL),y
         sta     PAGE2OFF
 
         dey
-        bpl     cloop
+      WHILE_POS
 
         inc     CV
         lda     CV
-        cmp     #24
-        bne     rloop
+    WHILE_A_NE  #24
 
         sta     CLR80STORE
         rts
@@ -136,36 +130,33 @@ cloop:
 ;;; Restore main/aux text page 1 (preserving screen holes)
 .proc RestoreText
         sta     SET80STORE      ; let PAGE2 control banking
-        lda     #0
-        sta     CV
+        copy8   #0, CV
 
         ptr1 := $06
         ptr2 := $08
 
         ;; Set BASL/H
-rloop:  jsr     VTAB
+    DO
+        jsr     VTAB
         add16   BASL, #save_buffer-$400, ptr1
         add16   ptr1, #$400, ptr2
         ldy     #39
 
-cloop:
+      DO
         ;; Main
-        lda     (ptr1),y
-        sta     (BASL),y
+        copy8   (ptr1),y, (BASL),y
 
         ;; Aux
         sta     PAGE2ON
-        lda     (ptr2),y
-        sta     (BASL),y
+        copy8   (ptr2),y, (BASL),y
         sta     PAGE2OFF
 
         dey
-        bpl     cloop
+      WHILE_POS
 
         inc     CV
         lda     CV
-        cmp     #24
-        bne     rloop
+    WHILE_A_NE  #24
 
         sta     CLR80STORE
         rts
@@ -204,15 +195,15 @@ kNumCursors = 4
         jsr     InitRand
 
         ;; Initialize cursors
-        lda     #kNumCursors-1
-        sta     index
-:       lda     index
+        copy8   #kNumCursors-1, index
+    DO
+        lda     index
         asl
         tax
         copy16  list,x, ptr
         jsr     ResetCursor
         dec     index
-        bpl     :-
+    WHILE_POS
 
         ;; --------------------------------------------------
 
@@ -233,10 +224,9 @@ MainLoop:
         beq     exit
 
         ;; Iterate over all cursors
-        lda     #kNumCursors-1
-        sta     index
+        copy8   #kNumCursors-1, index
 
-CursorLoop:
+    DO
         lda     index
         asl
         tax
@@ -244,14 +234,14 @@ CursorLoop:
 
         jsr     Random
         and     #%00011111      ; 1/32 chance of reset
-    IF_ZERO
+      IF_ZERO
         jsr     ResetCursor
-    ELSE
+      ELSE
         jsr     AdvanceCursor
-    END_IF
+      END_IF
 
         dec     index
-        bpl     CursorLoop
+    WHILE_POS
         bmi     MainLoop        ; always
 
 exit:   rts
@@ -273,11 +263,11 @@ exit:   rts
         ldy     #Cursor::mode
         lda     (ptr),y
         and     #%00000001      ; Use low bit
-   IF_ZERO
+    IF_ZERO
         lda     #' '
-   ELSE
+    ELSE
         jsr     GetRandomChar
-   END_IF
+    END_IF
         ora     #$80
 
         ;; Draw it
@@ -320,10 +310,10 @@ exit:   rts
 
 ;;; Generate random horizontal position (0-39)
 .proc GetRandomH
-:       jsr     Random
+    DO
+        jsr     Random
         and     #%00111111      ; 0...63
-        cmp     #40
-        bcs     :-              ; retry if >= 40
+    WHILE_A_GE  #40             ; retry if >= 40
         rts
 .endproc ; GetRandomH
 
@@ -331,10 +321,10 @@ exit:   rts
 
 ;;; Generate random character
 .proc GetRandomChar
-:       jsr     Random
+    DO
+        jsr     Random
         and     #%01111111      ; 0...127
-        cmp     #' '+1
-        bcc     :-              ; retry if control or space
+    WHILE_A_LT  #' '+1          ; retry if control or space
         rts
 .endproc ; GetRandomChar
 

@@ -567,8 +567,7 @@ init:
         jsr     DrawContent
         jsr     ResetBuffersAndDisplay
 
-        lda     #Function::equals ; last kOperation
-        sta     calc_op
+        copy8   #Function::equals, calc_op ; last kOperation
 
         lda     #0              ; clear registers
         sta     calc_p
@@ -581,10 +580,10 @@ init:
 
 .proc CopyToB1
         ldx     #sizeof_chrget_routine + 4 ; should be just + 1 ?
-loop:   lda     chrget_routine-1,x
-        sta     CHRGET-1,x
+    DO
+        copy8   chrget_routine-1,x, CHRGET-1,x
         dex
-        bne     loop
+    WHILE_NOT_ZERO
 .endproc ; CopyToB1
 
         lda     #0
@@ -773,8 +772,7 @@ ret:    rts
 ;;; If a button was clicked, carry is set and accum has key char
 
 .proc MapClickToFunction
-        lda     #kDAWindowId
-        sta     screentowindow_params::window_id
+        copy8   #kDAWindowId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
 
@@ -853,8 +851,7 @@ next:   add16_8 ptr, #.sizeof(btn_c)
         ROM_CALL FLOAT
         ldxy    #farg
         ROM_CALL ROUND
-        lda     #Function::equals
-        sta     calc_op
+        copy8   #Function::equals, calc_op
         lda     #0
         sta     calc_p
         sta     calc_l
@@ -874,8 +871,7 @@ next:   add16_8 ptr, #.sizeof(btn_c)
         sta     text_buffer1 + kTextBufferSize
         sta     text_buffer2 + kTextBufferSize
       END_IF
-        lda     #'E'
-        sta     calc_e
+        copy8   #'E', calc_e
         jmp     Insert
 
 ret2:   rts
@@ -906,8 +902,7 @@ ret2:   rts
       IF_ZERO
         inc     calc_l
       END_IF
-        lda     intl_deci_sep
-        sta     calc_d
+        copy8   intl_deci_sep, calc_d
         jmp     Insert
 
 ret3:   rts
@@ -1383,9 +1378,8 @@ check_button:
         lda     event_params::kind
         cmp     #MGTK::EventKind::drag ; Button down?
         bne     done            ; Nope, done immediately
-        lda     #kDAWindowId
-        sta     screentowindow_params::window_id
 
+        copy8   #kDAWindowId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
         MGTK_CALL MGTK::InRect, 0, inrect_params
@@ -1424,23 +1418,21 @@ invert_rect:
 
 .proc ResetBuffer1
         ldy     #kTextBufferSize
-loop:   lda     #' '
-        sta     text_buffer1-1,y
+    DO
+        copy8   #' ', text_buffer1-1,y
         dey
-        bne     loop
-        lda     #'0'
-        sta     text_buffer1 + kTextBufferSize
+    WHILE_NOT_ZERO
+        copy8   #'0', text_buffer1 + kTextBufferSize
         rts
 .endproc ; ResetBuffer1
 
 .proc ResetBuffer2
         ldy     #kTextBufferSize
-loop:   lda     #' '
-        sta     text_buffer2-1,y
+    DO
+        copy8   #' ', text_buffer2-1,y
         dey
-        bne     loop
-        lda     #'0'
-        sta     text_buffer2 + kTextBufferSize
+    WHILE_NOT_ZERO
+        copy8   #'0', text_buffer2 + kTextBufferSize
         rts
 .endproc ; ResetBuffer2
 
@@ -1552,8 +1544,7 @@ label:  .addr   0
     END_IF
 
         jsr     ResetBuffer1AndState
-        lda     #Function::equals
-        sta     calc_op
+        copy8   #Function::equals, calc_op
         ldx     saved_stack
         txs
         jmp     InputLoop
@@ -1562,15 +1553,16 @@ label:  .addr   0
 PROC_AT chrget_routine, ::CHRGET
         dummy_addr := $EA60
 
-loop:   inc16   TXTPTR
+    DO
+        inc16   TXTPTR
 
         .assert * + 1 = TXTPTR, error, "misaligned routine"
         lda     dummy_addr      ; this ends up being aligned on TXTPTR
 
         cmp     #'9'+1          ; after digits?
         bcs     end
-        cmp     #' '            ; space? keep going
-        beq     loop
+    WHILE_A_EQ  #' '            ; space? keep going
+
         sec
         sbc     #'0'            ; convert to digit...
         sec

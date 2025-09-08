@@ -197,18 +197,15 @@ done:
         ldy     #0
 
         ;; For each poly...
-
-ploop:  lda     (ptr),y         ; A = num vertices
-        sta     num_verts
+ploop:  copy8   (ptr),y, num_verts ; A = num vertices
         iny
 
         ;; For each vertex...
         copy8   #0, vindex
-vloop:  lda     (ptr),y         ; A = x coord
-        sta     cur::xcoord
+    DO
+        copy8   (ptr),y, cur::xcoord
         iny
-        lda     (ptr),y         ; A = y coord
-        sta     cur::ycoord
+        copy8   (ptr),y, cur::ycoord
         iny
         lda     #0
         sta     cur::xcoord+1   ; extend to 16 bits
@@ -216,16 +213,16 @@ vloop:  lda     (ptr),y         ; A = x coord
 
         ;; Scale
         ldx     #kCharXShift    ; scale x
-    DO
+      DO
         asl16   cur::xcoord
         dex
-    WHILE_NOT_ZERO
+      WHILE_NOT_ZERO
 
         ldx     #kCharYShift    ; scale y
-    DO
+      DO
         asl16   cur::ycoord
         dex
-    WHILE_NOT_ZERO
+      WHILE_NOT_ZERO
 
         ;; Offset
         add16   vector_cursor::xcoord, cur::xcoord, cur::xcoord
@@ -235,11 +232,11 @@ vloop:  lda     (ptr),y         ; A = x coord
         pha
 
         lda     vindex
-    IF_ZERO
+      IF_ZERO
         MGTK_CALL MGTK::MoveTo, cur
-    ELSE
+      ELSE
         MGTK_CALL MGTK::LineTo, cur
-    END_IF
+      END_IF
 
         pla
         tay                     ; Y = ptr offset
@@ -247,7 +244,7 @@ vloop:  lda     (ptr),y         ; A = x coord
         inc     vindex
 
         dec     num_verts
-        bne     vloop
+    WHILE_NOT_ZERO
 
         lda     (ptr),y         ; A = num vertices, 0 if done
         beq     advance         ; done

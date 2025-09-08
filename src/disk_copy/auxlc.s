@@ -551,11 +551,11 @@ prompt_insert_source:
         ldx     #0
         lda     #kAlertMsgInsertSource ; X=0 means just show alert
         jsr     ShowAlertDialog
-        cmp     #kAlertResultOK
-        beq     :+              ; OK
+    IF_A_NE     #kAlertResultOK
         jmp     InitDialog      ; Cancel
+    END_IF
 
-:       copy8   #$00, source_disk_format ; ProDOS
+        copy8   #$00, source_disk_format ; ProDOS
 
         ;; --------------------------------------------------
         ;; Check source disk
@@ -823,8 +823,7 @@ check:  lda     current_drive_selection
         stx     message
 
         lda     source_drive_index
-        cmp     dest_drive_index
-        bne     ret
+    IF_A_EQ     dest_drive_index
 
         tax                     ; A = index
         lda     drive_unitnum_table,x
@@ -833,20 +832,20 @@ check:  lda     current_drive_selection
         pla                     ; A = unit num
         tay                     ; Y = unit num
 
-
         message := *+1
         lda     #SELF_MODIFIED_BYTE
-        ldx     #$80        ; X != 0 means Y=unit number, auto-dismiss
+        ldx     #$80            ; X != 0 means Y=unit number, auto-dismiss
         jsr     ShowAlertDialog
 
         cmp     #kAlertResultOK
-        beq     ret             ; OK
-
+      IF_NOT_ZERO
         pla                     ; Cancel
         pla
         jmp     InitDialog
+      END_IF
+    END_IF
 
-ret:    rts
+        rts
 .endproc ; MaybePromptDiskSwap
 
 ;;; ============================================================
@@ -891,12 +890,7 @@ menu_offset_table:
         bit     listbox_enabled_flag
     IF_NS
         lda     event_params::key
-
-        cmp     #CHAR_UP
-        beq     :+
-        cmp     #CHAR_DOWN
-:
-      IF_EQ
+      IF_A_EQ_ONE_OF #CHAR_UP, #CHAR_DOWN
         sta     lb_params::key
         copy8   event_params::modifiers, lb_params::modifiers
         LBTK_CALL LBTK::Key, lb_params
@@ -906,14 +900,13 @@ menu_offset_table:
     END_IF
 
         lda     event_params::modifiers
-        bne     :+
+    IF_ZERO
         lda     event_params::key
-        cmp     #CHAR_ESCAPE
-        beq     :+
+      IF_A_NE   #CHAR_ESCAPE
         jmp     dialog_shortcuts
+      END_IF
+    END_IF
 
-        ;; Modifiers
-:
         ;; Keyboard-based menu selection
         copy8   event_params::key, menukey_params::which_key
         copy8   event_params::modifiers, menukey_params::key_mods
@@ -1105,11 +1098,9 @@ params: .res    3
 
 .proc dialog_shortcuts
         lda     event_params::key
+        jsr     ToUpperCase
 
-        cmp     #kShortcutReadDisk
-        beq     :+
-        cmp     #TO_LOWER(kShortcutReadDisk)
-:   IF_EQ
+    IF_A_EQ     #kShortcutReadDisk
         BTK_CALL BTK::Flash, read_drive_button
         return  #1
     END_IF
@@ -1285,15 +1276,15 @@ match:  clc
         ;; Copy the name out of the block
         str_name := default_block_buffer+6
 
-        ldy     #0
+        ldy     #kMaxFilenameLength
     DO
         copy8   str_name,y, (ptr),y
-        iny
-    WHILE_Y_NE  str_name
-        copy8   str_name,y, (ptr),y
+        dey
+    WHILE_POS
 
         ;; If less than 15 characters, increase len by one
-    IF_Y_LT     #15
+        ldy     str_name
+    IF_Y_LT     #kMaxFilenameLength
         iny
         tya
         ldy     #0
@@ -1360,7 +1351,6 @@ match:  clc
 ;;; Output: entry is length-prefix, case-adjusted
 
 .proc AdjustOnLineEntryCase
-.if kBuildSupportsLowercase
         ptr := $A
 
         stax    ptr
@@ -1373,6 +1363,8 @@ match:  clc
         pla
         and     #NAME_LENGTH_MASK
         sta     (ptr),y         ; mask off length
+
+.if kBuildSupportsLowercase
 
         ;; --------------------------------------------------
         ;; Check for GS/OS case bits, apply if found
@@ -1449,6 +1441,8 @@ draw:   jmp     DrawDeviceListEntry
         brk                     ; rude!
     END_IF
 
+        on_line_ptr := $06
+
         lda     #0
         sta     device_index
         sta     num_drives
@@ -1459,26 +1453,26 @@ loop:   lda     device_index    ; <16
         asl     a
         clc
         adc     #<main__on_line_buffer2
-        sta     $06
+        sta     on_line_ptr
         lda     #0
         adc     #>main__on_line_buffer2
-        sta     $06+1
+        sta     on_line_ptr+1
 
         ;; Check first byte of record
         ldy     #0
-        lda     ($06),y
+        lda     (on_line_ptr),y
         and     #NAME_LENGTH_MASK
         bne     is_prodos
 
-        lda     ($06),y         ; 0?
+        lda     (on_line_ptr),y ; 0?
         beq     done            ; done!
 
         iny                     ; name_len=0 signifies an error
-        lda     ($06),y         ; error code in second byte
+        lda     (on_line_ptr),y ; error code in second byte
         cmp     #ERR_DEVICE_NOT_CONNECTED
         bne     non_prodos
         dey
-        lda     ($06),y
+        lda     (on_line_ptr),y
         jsr     IsDiskII
         jne     next_device
         lda     #ERR_DEVICE_NOT_CONNECTED
@@ -1489,7 +1483,7 @@ done:   rts
 non_prodos:
         pha
         ldy     #0
-        lda     ($06),y
+        lda     (on_line_ptr),y
         and     #UNIT_NUM_MASK
         ldx     num_drives
         sta     drive_unitnum_table,x
@@ -1517,7 +1511,7 @@ next:   inc     num_drives
         ;; Valid ProDOS volume
 is_prodos:
         ldy     #0
-        lda     ($06),y
+        lda     (on_line_ptr),y
         and     #UNIT_NUM_MASK
         ldx     num_drives
         sta     drive_unitnum_table,x
@@ -1526,30 +1520,20 @@ is_prodos:
         copy8   num_drives, current_drive_selection
     END_IF
 
-        ldax    $06
+        name_ptr := $08
+
+        ldax    on_line_ptr
         jsr     AdjustOnLineEntryCase
         lda     num_drives
-        asl     a
-        asl     a
-        asl     a
-        asl     a
-        tax
-        ldy     #$00
-        lda     ($06),y
-        and     #NAME_LENGTH_MASK
-        sta     drive_name_table,x
-        sta     len
-:       inx
-        iny
-        len := *+1
-        cpy     #SELF_MODIFIED_BYTE
-        beq     :+
-        copy8   ($06),y, drive_name_table,x
-        jmp     :-
+        jsr     GetDriveNameTableSlot
+        stax    name_ptr
+        ldy     #kMaxFilenameLength
+    DO
+        copy8   (on_line_ptr),y, (name_ptr),y
+        dey
+    WHILE_POS
 
-:       copy8   ($06),y, drive_name_table,x
         inc     num_drives
-
 
 next_device:
         inc     device_index
@@ -2330,6 +2314,7 @@ Alert := alert_dialog::Alert
 
         .include "../lib/is_diskii.s"
         .include "../lib/doubleclick.s"
+        .include "../lib/uppercase.s"
 
 ;;; ============================================================
 

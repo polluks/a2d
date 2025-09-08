@@ -238,11 +238,7 @@ num_entries := listbox_rec::num_items
         sta     lb_params::key
         stx     lb_params::modifiers
 
-        cmp     #CHAR_UP
-        beq     :+
-        cmp     #CHAR_DOWN
-:
-    IF_EQ
+    IF_A_EQ_ONE_OF #CHAR_UP, #CHAR_DOWN
         LBTK_CALL LBTK::Key, lb_params
         jmp     InputLoop
     END_IF
@@ -388,13 +384,15 @@ search:
         ldy     buf_search
         copy8   #0, pattern,y   ; null-terminate
         cpy     #0
-        beq     endloop
-loop:   lda     buf_search,y    ; copy characters
+    IF_NOT_ZERO
+      DO
+        lda     buf_search,y    ; copy characters
         jsr     ToUpperCase
         sta     pattern-1,y
         dey
-        bne     loop
-endloop:
+      WHILE_NOT_ZERO
+    END_IF
+
         copy16  #pattern, STARTLO
         copy16  #pattern+kMaxFilenameLength, ENDLO
         copy16  #main__RecursiveCatalog__pattern, DESTINATIONLO
@@ -673,8 +671,7 @@ entry:
         ;; Append '/' needed by algorithm
         ldy     searchPath
         iny
-        lda     #'/'
-        sta     searchPath,y
+        copy8   #'/', searchPath,y
         sty     searchPath
 
         jmp     continue
@@ -1306,14 +1303,15 @@ string:         .res    16      ; 15 + null terminator
         tay
         copy8   #0, string,y    ; null-terminate
         cpy     #0
-        beq     endloop
-loop:   lda     (entPtr),y      ; copy characters
+    IF_NOT_ZERO
+      DO
+        lda     (entPtr),y      ; copy characters
         jsr     ToUpperCase
 
         sta     string-1,y
         dey
-        bne     loop
-endloop:
+      WHILE_NOT_ZERO
+    END_IF
 .endscope
 
         str := $0A

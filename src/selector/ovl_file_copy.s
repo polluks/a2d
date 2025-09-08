@@ -343,8 +343,7 @@ copy_jt:
         cmp     #ERR_VOL_NOT_FOUND
         beq     check_src
         cmp     #ERR_PATH_NOT_FOUND
-        beq     check_src
-        bne     error           ; always
+        bne     error
 
 check_src:
         MLI_CALL GET_FILE_INFO, get_src_file_info_params
@@ -585,7 +584,7 @@ done:
 .proc _WriteDst
         ;; Always start off at start of copy buffer
         copy16  read_src_params::data_buffer, write_dst_params::data_buffer
-loop:
+    DO
         ;; Assume we're going to write everything we read. We may
         ;; later determine we need to write it out block-by-block.
         copy16  read_src_params::trans_count, write_dst_params::request_count
@@ -619,21 +618,21 @@ loop:
         copy16  write_dst_params::data_buffer, ptr ; first half
         ldy     #0
         tya
-    DO
+      DO
         ora     (ptr),y
         iny
-    WHILE_NOT_ZERO
+      WHILE_NOT_ZERO
 
         inc     ptr+1           ; second half
-    DO
+      DO
         ora     (ptr),y
         iny
-    WHILE_NOT_ZERO
+      WHILE_NOT_ZERO
         tay
         bne     not_sparse
 
         ;; Block is all zeros, skip over it
-        add16_8  mark_dst_params::position+1, #.hibyte(BLOCK_SIZE)
+        add16_8 mark_dst_params::position+1, #.hibyte(BLOCK_SIZE)
         MLI_CALL SET_EOF, mark_dst_params
         MLI_CALL SET_MARK, mark_dst_params
         jmp     next_block
@@ -655,7 +654,7 @@ next_block:
         ;; Anything left to write?
         lda     read_src_params::trans_count
         ora     read_src_params::trans_count+1
-        bne     loop
+    WHILE_NOT_ZERO
         clc
         rts
 
@@ -672,17 +671,17 @@ ret:    rts
 .proc CreateDstFile
         ;; Copy `file_type`, `aux_type`, and `storage_type`
         ldx     #(get_src_file_info_params::storage_type - get_src_file_info_params)
-   DO
+    DO
         copy8   get_src_file_info_params,x, create_params2,x
         dex
-   WHILE_X_NE   #(get_src_file_info_params::file_type - get_src_file_info_params) - 1
+    WHILE_X_NE  #(get_src_file_info_params::file_type - get_src_file_info_params) - 1
 
         MLI_CALL CREATE, create_params2
-   IF_CS
-     IF_A_NE    #ERR_DUPLICATE_FILENAME
+    IF_CS
+      IF_A_NE   #ERR_DUPLICATE_FILENAME
         jmp     HandleErrorCode
-     END_IF
-   END_IF
+      END_IF
+    END_IF
         clc                     ; treated as success
         rts
 .endproc ; CreateDstFile
@@ -717,14 +716,11 @@ enum_jt:
         jsr     CopyPathsFromBufsToSrcAndDst
 retry:  MLI_CALL GET_FILE_INFO, get_src_file_info_params
     IF_CS
-        cmp     #ERR_VOL_NOT_FOUND
-        beq     :+
-        cmp     #ERR_FILE_NOT_FOUND
-        bne     err
-:       jsr     ShowInsertSourceDiskAlert
+      IF_A_EQ_ONE_OF #ERR_VOL_NOT_FOUND, #ERR_FILE_NOT_FOUND
+        jsr     ShowInsertSourceDiskAlert
         jmp     retry
-
-err:    jmp     HandleErrorCode
+      END_IF
+        jmp     HandleErrorCode
     END_IF
 
         copy8   get_src_file_info_params::storage_type, storage_type
@@ -806,7 +802,7 @@ blocks_total:
         copy8   file_entry+FileEntry::file_name,x, pathname_src+1,y
         inx
         iny
-        jmp     :-
+        jmp     :-              ; TODO: `BNE`
 :
         sty     pathname_src
         rts
@@ -847,7 +843,7 @@ blocks_total:
         copy8   file_entry+FileEntry::file_name,x, pathname_dst+1,y
         inx
         iny
-        jmp     :-
+        jmp     :-              ; TODO: `BNE`
 :
         sty     pathname_dst
         rts

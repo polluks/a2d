@@ -37,25 +37,24 @@ event_params:   .tag MGTK::Event
 
 .proc InputLoop
         dec     delta
-        bne     :+
-        lda     #7
-        sta     delta
-:
+    IF_ZERO
+        copy8   #7, delta
+    END_IF
 
         dec     deltac
-        bne     :+
-        lda     #27
-        sta     deltac
-:
+    IF_ZERO
+        copy8   #27, deltac
+    END_IF
 
         kNumCols = 40
         lda     col
         sec
         sbc     deltac
-        bpl     :+
+    IF_NEG
         clc
         adc     #kNumCols
-:       sta     col
+    END_IF
+        sta     col
 
 
         MGTK_CALL MGTK::GetEvent, event_params
@@ -96,36 +95,28 @@ deltac: .byte   31
 
         ldx     #kScreenHeight - 1
         stx     row
-
-yloop:  lda     hires_table_lo,x
-        sta     dst_ptr
-        lda     hires_table_hi,x
-        sta     dst_ptr+1
+    DO
+        copylohi hires_table_lo,x, hires_table_hi,x, dst_ptr
 
         txa
         sec
         sbc     delta
         tax
 
-        lda     hires_table_lo,x
-        sta     src_ptr
-        lda     hires_table_hi,x
-        sta     src_ptr+1
+        copylohi hires_table_lo,x, hires_table_hi,x, src_ptr
 
         sta     PAGE2OFF
-        lda     (src_ptr),y
-        sta     (dst_ptr),y
+        copy8   (src_ptr),y, (dst_ptr),y
         sta     PAGE2ON
-        lda     (src_ptr),y
-        sta     (dst_ptr),y
+        copy8   (src_ptr),y, (dst_ptr),y
 
         dec     row
         ldx     row
-        cpx     delta
-        bcs     yloop
+    WHILE_X_GE  delta
 
         ;; Black in at the top
-yloop2: lda     hires_table_lo,x
+    DO
+        lda     hires_table_lo,x
         sta     dst_ptr
         lda     hires_table_hi,x
         ora     #$20
@@ -138,7 +129,7 @@ yloop2: lda     hires_table_lo,x
         sta     (dst_ptr),y
 
         dex
-        bpl     yloop2
+    WHILE_POS
         rts
 
 row:    .byte   0

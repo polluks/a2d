@@ -254,7 +254,7 @@ button_eor_table:
         copy16  event_params::ycoord, findwindow_params::mousey
         MGTK_CALL MGTK::FindWindow, findwindow_params
         lda     findwindow_params::window_id
-        cmp     winfo::window_id
+        cmp     #kDAWindowId
         bne     InputLoop
         lda     findwindow_params::which_area
         cmp     #MGTK::Area::close_box
@@ -278,20 +278,20 @@ button_eor_table:
 ;;; ============================================================
 
 .proc HandleDrag
-        copy8   winfo::window_id, dragwindow_params::window_id
+        copy8   #kDAWindowId, dragwindow_params::window_id
         copy16  event_params::xcoord, dragwindow_params::dragx
         copy16  event_params::ycoord, dragwindow_params::dragy
         MGTK_CALL MGTK::DragWindow, dragwindow_params
-common: bit     dragwindow_params::moved
-        bpl     :+
-
+common:
+        bit     dragwindow_params::moved
+    IF_NS
         ;; Draw DeskTop's windows and icons.
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
 
         ;; Draw DA's window
         jsr     DrawWindow
-
-:       jmp     InputLoop
+    END_IF
+        jmp     InputLoop
 
 .endproc ; HandleDrag
 
@@ -308,7 +308,7 @@ common: bit     dragwindow_params::moved
 
         ;; Check all the button rects
         copy8   #kNumButtons-1, index
-loop:
+    DO
         index := *+1
         lda     #SELF_MODIFIED_BYTE
         asl
@@ -317,13 +317,13 @@ loop:
         add16_8 rect_addr, #BTK::ButtonRecord::rect
 
         MGTK_CALL MGTK::InRect, SELF_MODIFIED, rect_addr
-        beq     next
-
+      IF_NOT_ZERO
         lda     index
         jmp     ToggleButton
+      END_IF
 
-next:   dec     index
-        bpl     loop
+        dec     index
+    WHILE_POS
 
         ;; ----------------------------------------
 
@@ -344,7 +344,7 @@ next:   dec     index
         ;; --------------------------------------------------
 
         copy8   #kNumButtons-1, index
-loop:
+    DO
         index := *+1
         lda     #SELF_MODIFIED_BYTE
         asl
@@ -365,7 +365,7 @@ loop:
         BTK_CALL BTK::CheckboxDraw, SELF_MODIFIED, params_addr
 
         dec     index
-        bpl     loop
+    WHILE_POS
 
         ;; --------------------------------------------------
 

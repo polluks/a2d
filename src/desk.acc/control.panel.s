@@ -523,7 +523,7 @@ caret_blink_caret_bitmap:
         addr := *+1
         jmp     SELF_MODIFIED
        END_IF
-     END_IF
+      END_IF
 
         jmp     InputLoop
     END_IF
@@ -560,7 +560,7 @@ shortcut_table_addr_hi:
 .proc HandleDown
         MGTK_CALL MGTK::FindWindow, findwindow_params
         lda     findwindow_params::window_id
-        cmp     winfo::window_id
+        cmp     #kDAWindowId
         jne     InputLoop
         lda     findwindow_params::which_area
         cmp     #MGTK::Area::close_box
@@ -584,7 +584,7 @@ shortcut_table_addr_hi:
 ;;; ============================================================
 
 .proc HandleDrag
-        copy8   winfo::window_id, dragwindow_params::window_id
+        copy8   #kDAWindowId, dragwindow_params::window_id
         MGTK_CALL MGTK::DragWindow, dragwindow_params
         bit     dragwindow_params::moved
     IF_NS
@@ -602,7 +602,7 @@ shortcut_table_addr_hi:
 ;;; ============================================================
 
 .proc HandleClick
-        copy8   winfo::window_id, screentowindow_params::window_id
+        copy8   #kDAWindowId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
 
         ;; ----------------------------------------
@@ -762,12 +762,13 @@ loop:   ldx     screentowindow_params::windowx
         ldy     screentowindow_params::windowy
         lda     pattern,y
         bit     flag
-        bpl     :+
+    IF_NS
         ora     mask1,x         ; set bit
-        jmp     @store
-:       and     mask2,x         ; clear bit
-@store: cmp     pattern,y       ; did it change?
-        beq     event
+    ELSE
+        and     mask2,x         ; clear bit
+    END_IF
+        cmp     pattern,y       ; did it change?
+    IF_NE
         sta     pattern,y
 
         ldx     screentowindow_params::windowx
@@ -776,27 +777,27 @@ loop:   ldx     screentowindow_params::windowx
         jsr     DrawBit
 
         jsr     DrawPreview
+    END_IF
 
         ;; Repeat until mouse-up
-event:  MGTK_CALL MGTK::GetEvent, event_params
+    DO
+        MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params::kind
         cmp     #MGTK::EventKind::button_up
         jeq     InputLoop
 
-        copy8   winfo::window_id, screentowindow_params::window_id
+        copy8   #kDAWindowId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
 
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
         MGTK_CALL MGTK::InRect, fatbits_rect
-        beq     event
+        CONTINUE_IF_ZERO
 
         jsr     MapCoords
         ldx     screentowindow_params::windowx
         ldy     screentowindow_params::windowy
-        cpx     lastx
-        bne     moved
-        cpy     lasty
-        beq     event
+        BREAK_IF_X_NE lastx
+    WHILE_Y_EQ  lasty
 
 moved:  stx     lastx
         sty     lasty
@@ -840,17 +841,19 @@ lasty:  .byte   0
 
         ;; Find matching index in word table, or 0
         ldx     #kDblClickSpeedTableSize * 2
-loop:   ecmp16  dblclick_speed, dblclick_speed_table-2,x
-        bne     next
+    DO
+        ecmp16  dblclick_speed, dblclick_speed_table-2,x
+      IF_EQ
         ;; Found a match
         txa
         lsr                     ; /= 2
         sta     dblclick_selection
         rts
+      END_IF
 
-next:   dex
         dex
-        bpl     loop
+        dex
+    WHILE_POS
         copy8   #0, dblclick_selection ; not found
         rts
 
@@ -1125,10 +1128,10 @@ arrow_num:
 .endproc ; DrawWindow
 
 .proc ZToButtonState
-   IF_NOT_ZERO
+    IF_NOT_ZERO
         lda     #BTK::kButtonStateNormal
         rts
-   END_IF
+    END_IF
         lda     #BTK::kButtonStateChecked
         rts
 .endproc ; ZToButtonState
@@ -1582,17 +1585,19 @@ caret_blink_counter:
 
         ;; Find matching index in word table, or 0
         ldx     #kCaretBlinkSpeedTableSize * 2
-loop:   ecmp16  caret_blink_speed, caret_blink_speed_table-2,x
-        bne     next
+    DO
+        ecmp16  caret_blink_speed, caret_blink_speed_table-2,x
+      IF_EQ
         ;; Found a match
         txa
         lsr                     ; /= 2
         sta     caret_blink_selection
         rts
+      END_IF
 
-next:   dex
         dex
-        bpl     loop
+        dex
+    WHILE_POS
         copy8   #0, caret_blink_selection ; not found
         rts
 
@@ -1682,8 +1687,7 @@ done:   rts
 
         stax    textptr
         ldy     #0
-        lda     (textptr),y
-        sta     textlen
+        copy8   (textptr),y, textlen
         inc16   textptr
         MGTK_CALL MGTK::TextWidth, params
         sub16   #0, result, result
@@ -1703,8 +1707,7 @@ done:   rts
 
         stax    textptr
         ldy     #0
-        lda     (textptr),y
-        sta     textlen
+        copy8   (textptr),y, textlen
         inc16   textptr
         MGTK_CALL MGTK::TextWidth, params
         lsr16   result

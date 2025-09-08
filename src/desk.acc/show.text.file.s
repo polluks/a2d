@@ -190,8 +190,7 @@ remainder:      .word   0       ; (out)
 ;;; Open the file and create the DA window
 
 .proc Init
-        lda     #0
-        sta     fixed_mode_flag
+        copy8   #0, fixed_mode_flag
 
         ;; open file, get length
         JSR_TO_MAIN OpenFile
@@ -390,30 +389,30 @@ end:    rts
 .endproc ; OnVScrollThumbClick
 
 .proc OnVScrollBelowClick
-loop:   jsr     PageDown
+repeat: jsr     PageDown
         jsr     CheckButtonRelease
-        bcc     loop            ; repeat while button down
+        bcc     repeat            ; repeat while button down
         rts
 .endproc ; OnVScrollBelowClick
 
 .proc OnVScrollAboveClick
-loop:   jsr     PageUp
+repeat: jsr     PageUp
         jsr     CheckButtonRelease
-        bcc     loop            ; repeat while button down
+        bcc     repeat            ; repeat while button down
         rts
 .endproc ; OnVScrollAboveClick
 
 .proc OnVScrollDownClick
-loop:   jsr     ScrollDown
+repeat: jsr     ScrollDown
         jsr     CheckButtonRelease
-        bcc     loop            ; repeat while button down
+        bcc     repeat            ; repeat while button down
         rts
 .endproc ; OnVScrollDownClick
 
 .proc OnVScrollUpClick
-loop:   jsr     ScrollUp
+repeat: jsr     ScrollUp
         jsr     CheckButtonRelease
-        bcc     loop            ; repeat while button down
+        bcc     repeat            ; repeat while button down
         rts
 .endproc ; OnVScrollUpClick
 
@@ -533,8 +532,12 @@ ForceScrollBottom := ScrollBottom::force
     END_IF
         sta     updatethumb_params::thumbpos
 
+        lda     winfo::vscroll
+        and     #MGTK::Scroll::option_active
+    IF_NOT_ZERO
         copy8   #MGTK::Ctl::vertical_scroll_bar, updatethumb_params::which_ctl
         MGTK_CALL MGTK::UpdateThumb, updatethumb_params
+    END_IF
 
         jmp     DrawContent
 .endproc ; UpdateScrollPos
@@ -633,10 +636,7 @@ end:    rts
         inc     read_params::data_buffer+1 ; subsequent reads go to second page
         jsr     ReadFilePage               ; second page
 
-        lda     #0
-        sta     visible_flag
-
-
+        copy8   #0, visible_flag
 
         jsr     ClearWindow
 
@@ -758,8 +758,7 @@ cur_offset:
 .proc FindTextRun
         ptr := $06
 
-        lda     #$FF
-        sta     L0F9B
+        copy8   #$FF, L0F9B
         lda     #0
         sta     run_width
         sta     run_width+1
@@ -796,8 +795,7 @@ loop:
         jmp     loop
     END_IF
 
-        lda     #0
-        sta     tab_flag
+        copy8   #0, tab_flag
         lda     L0F9B
     IF_A_NE     #$FF
         sta     drawtext_params::textlen
@@ -812,12 +810,10 @@ loop:
         jsr     DrawTextRun
         ldy     drawtext_params::textlen
         lda     (ptr),y
-        cmp     #CHAR_TAB
-        beq     tab
-        cmp     #CHAR_RETURN
-        bne     :+
-tab:    inc     drawtext_params::textlen
-:       clc
+    IF_A_EQ_ONE_OF #CHAR_TAB, #CHAR_RETURN
+        inc     drawtext_params::textlen
+    END_IF
+        clc
         rts
 .endproc ; FinishTextRun
 
@@ -827,8 +823,7 @@ L0F9B:  .byte   0
 run_width:  .word   0
 
 .proc HandleTab
-        lda     #1
-        sta     tab_flag
+        copy8   #1, tab_flag
         add16   run_width, line_pos::left, line_pos::left
         ldx     #0
 loop:   cmp16   times70,x, line_pos::left
@@ -843,8 +838,8 @@ loop:   cmp16   times70,x, line_pos::left
         copy16  times70,x, line_pos::left
         jmp     FinishTextRun
 
-done:   lda     #0
-        sta     tab_flag
+done:
+        copy8   #0, tab_flag
         jmp     FinishTextRun
 
 times70:.word   70
@@ -1043,8 +1038,7 @@ window_id:      .byte   kDAWindowId
         stax    text_addr
 
         ldy     #0
-        lda     (text_addr),y
-        sta     text_length
+        copy8   (text_addr),y, text_length
         inc16   text_addr       ; point past length
         MGTK_CALL MGTK::TextWidth, text_params
 

@@ -196,8 +196,7 @@ eye_rect:
 ;;; ============================================================
 
 .proc Init
-        lda     #0
-        sta     SHIFT_SIGN_EXT  ; Must zero before using FP ops
+        copy8   #0, SHIFT_SIGN_EXT ; Must zero before using FP ops
 
         MGTK_CALL MGTK::OpenWindow, winfo
         jsr     DrawWindow
@@ -249,7 +248,7 @@ eye_rect:
         copy16  event_params::ycoord, findwindow_params::mousey
         MGTK_CALL MGTK::FindWindow, findwindow_params
         lda     findwindow_params::window_id
-        cmp     winfo::window_id
+        cmp     #kDAWindowId
         bne     InputLoop
         lda     findwindow_params::which_area
         cmp     #MGTK::Area::close_box
@@ -315,7 +314,7 @@ delta:  .word   0
 ;;; ============================================================
 
 .proc HandleDrag
-        copy8   winfo::window_id, dragwindow_params::window_id
+        copy8   #kDAWindowId, dragwindow_params::window_id
         copy16  event_params::xcoord, dragwindow_params::dragx
         copy16  event_params::ycoord, dragwindow_params::dragy
         MGTK_CALL MGTK::DragWindow, dragwindow_params
@@ -350,7 +349,7 @@ common:
         bcc     nope
 
         ;; Initiate the grow... re-using the drag logic
-        copy8   winfo::window_id, dragwindow_params::window_id
+        copy8   #kDAWindowId, dragwindow_params::window_id
         copy16  event_params::xcoord, dragwindow_params::dragx
         copy16  event_params::ycoord, dragwindow_params::dragy
         MGTK_CALL MGTK::GrowWindow, dragwindow_params
@@ -813,8 +812,8 @@ oval := $50
         copy16  #0, remainder
 
         ldy     #32
-
-loop:   asl32   quotient
+    DO
+        asl32   quotient
         asl     dividend
         rol     dividend+1
         rol     remainder
@@ -826,13 +825,13 @@ loop:   asl32   quotient
         tax
         lda     remainder+1
         sbc     divisor+1
-    IF_CS
+      IF_CS
         stx     remainder
         sta     remainder+1
         inc     quotient
-    END_IF
+      END_IF
         dey
-        bne     loop
+    WHILE_NOT_ZERO
 .endscope ; fixed_div
 
 

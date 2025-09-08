@@ -186,17 +186,17 @@ UNSUPPRESS_SHADOW_WARNING
 
         ;; Copy param data to `command_data`
         ldy     #kMaxCommandDataSize-1
-     DO
+    DO
         copy8   (params_addr),y, command_data,y
         dey
-     WHILE_POS
+    WHILE_POS
 
         ;; Cache static copy of the record in `lbr_copy`, for convenience
         ldy     #.sizeof(LBTK::ListBoxRecord)-1
-     DO
+    DO
         copy8   (a_record),y, lbr_copy,y
         dey
-     WHILE_POS
+    WHILE_POS
 
         ;; Invoke the command
         dispatch := *+1
@@ -638,7 +638,7 @@ new_size        .byte
 
         lda     lbr_copy + LBTK::ListBoxRecord::num_items
         cmp     lbr_copy + LBTK::ListBoxRecord::num_rows
-        beq     :+
+        beq     :+              ; TODO: `BGT` ?
         bcs     greater
 :
         ;; Deactivate
@@ -685,7 +685,7 @@ activate:
         bmi     skip
         ;; Assert: Y = MGTK::Winfo::vthumbpos
         cmp     (winfo_ptr),y
-        beq     skip
+        beq     skip            ; TODO: `BGT` ?
         bcs     update
 skip:
         lda     force_draw_flag

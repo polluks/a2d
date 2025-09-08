@@ -577,8 +577,7 @@ digits: .byte   "0123456789ABCDEF"
 
         stax    textptr
         ldy     #0
-        lda     (textptr),y
-        sta     textlen
+        copy8   (textptr),y, textlen
         inc16   textptr
         MGTK_CALL MGTK::TextWidth, params
         sub16   #0, result, result
@@ -750,7 +749,7 @@ IterationCallback:
         dey
     WHILE_POS
 
-loop:
+    DO
         lda     path
         pha
 
@@ -762,19 +761,16 @@ loop:
         ;; Compose path
         ldx     path
         inx
-        lda     #'/'
-        sta     path,x
-
+        copy8   #'/', path,x
         ldy     #0
-        lda     (ptr),y
-        sta     len
-    DO
+        copy8   (ptr),y, len
+      DO
         iny
         inx
         copy8   (ptr),y, path,x
         len := *+1
         cpy     #SELF_MODIFIED_BYTE
-    WHILE_NE
+      WHILE_NE
         stx     path
 
         ;; Execute callback
@@ -787,8 +783,7 @@ loop:
 
         inc     index
         jsr     JUMP_TABLE_GET_SEL_COUNT
-        cmp     index
-        bne     loop
+    WHILE_A_NE  index
 
         rts
 

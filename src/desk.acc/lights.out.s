@@ -163,8 +163,7 @@ pensize_frame:  .byte   kBorderDX, kBorderDY
 .proc OnClick
         MGTK_CALL MGTK::FindWindow, findwindow_params
         lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        bne     ret
+    IF_A_EQ     #kDAWindowId
         lda     findwindow_params::which_area
 
         cmp     #MGTK::Area::close_box
@@ -175,8 +174,8 @@ pensize_frame:  .byte   kBorderDX, kBorderDY
 
         cmp     #MGTK::Area::content
         beq     DoClick
-
-ret:    rts
+    END_IF
+        rts
 .endproc ; OnClick
 
 ;;; ============================================================
@@ -217,8 +216,7 @@ ret:    rts
 ;;; ============================================================
 
 .proc DoDrag
-        lda     #kDAWindowId
-        sta     dragwindow_params::window_id
+        copy8   #kDAWindowId, dragwindow_params::window_id
         MGTK_CALL MGTK::DragWindow, dragwindow_params
         bit     dragwindow_params::moved
     IF_NS
@@ -253,21 +251,21 @@ ret:    rts
 
         copy16  #button_0_0::rect, rect_ptr
         ldx     #0
-loop:   txa                     ; A = index
+    DO
+        txa                     ; A = index
         pha
 
         MGTK_CALL MGTK::InRect, SELF_MODIFIED, rect_ptr
-    IF_NOT_ZERO
+      IF_NOT_ZERO
         pla                     ; A = index
         jmp     DoLightClick
-    END_IF
+      END_IF
 
-next:   add16_8 rect_ptr, #.sizeof(BTK::ButtonRecord)
+        add16_8 rect_ptr, #.sizeof(BTK::ButtonRecord)
         pla                     ; A = index
         tax
         inx
-        cpx     #kLights
-        bne     loop
+    WHILE_X_NE  #kLights
 
         rts
 .endproc ; DoClick
@@ -324,22 +322,24 @@ next:   add16_8 rect_ptr, #.sizeof(BTK::ButtonRecord)
         copy16  #button_0_0, rec_ptr
         ldy     #BTK::ButtonRecord::state
         ldx     #kLights-1
-:       lda     (rec_ptr),y
+    DO
+        lda     (rec_ptr),y
         bmi     ret             ; light on, so no
         add16_8 rec_ptr, #.sizeof(BTK::ButtonRecord)
         dex
-        bpl     :-
+    WHILE_POS
 
         ;; Yes, victory!
         ldx     #4
-:       txa
+    DO
+        txa
         pha
         jsr     PlaySound
         jsr     InvertWindow
         pla
         tax
         dex
-        bne     :-
+    WHILE_NOT_ZERO
 
         clc
         ror     scrambled_flag
@@ -403,9 +403,10 @@ ret:    rts
 
         tax
         copy16  #button_0_0 - .sizeof(button_0_0), ptr
-:       add16_8 ptr, #.sizeof(button_0_0)
+    DO
+        add16_8 ptr, #.sizeof(button_0_0)
         dex
-        bpl     :-
+    WHILE_POS
 
         pla                     ; A = index
         rts
@@ -427,16 +428,17 @@ ret:    rts
         ;; Draw all buttons
         copy16  #button_0_0, rec_ptr
         ldx     #kLights-1
-loop:   txa                     ; A = index
+    DO
+        txa                     ; A = index
         pha
 
         BTK_CALL BTK::RadioDraw, SELF_MODIFIED, rec_ptr
 
-next:   add16_8 rec_ptr, #.sizeof(button_0_0)
+        add16_8 rec_ptr, #.sizeof(button_0_0)
         pla                     ; A = index
         tax
         dex
-        bpl     loop
+    WHILE_POS
 
         rts
 .endproc ; DrawWindow
@@ -445,11 +447,12 @@ next:   add16_8 rec_ptr, #.sizeof(button_0_0)
 
 .proc Scramble
         ldx     #kLights-1
-loop:   txa
+    DO
+        txa
         pha                     ; A = index
 
         jsr     Random
-    IF_NS
+      IF_NS
         pla                     ; A = index
         pha                     ; A = index
 
@@ -460,47 +463,47 @@ loop:   txa
         jsr     IndexToXY
         inx
         jsr     IsXYValid
-      IF_CC
+       IF_CC
         jsr     XYToIndex
         jsr     ToggleLightNoRedraw
-      END_IF
+       END_IF
         pla
 
         pha
         jsr     IndexToXY
         dex
         jsr     IsXYValid
-      IF_CC
+       IF_CC
         jsr     XYToIndex
         jsr     ToggleLightNoRedraw
-      END_IF
+       END_IF
         pla
 
         pha
         jsr     IndexToXY
         iny
         jsr     IsXYValid
-      IF_CC
+       IF_CC
         jsr     XYToIndex
         jsr     ToggleLightNoRedraw
-      END_IF
+       END_IF
         pla
 
         pha
         jsr     IndexToXY
         dey
         jsr     IsXYValid
-      IF_CC
+       IF_CC
         jsr     XYToIndex
         jsr     ToggleLightNoRedraw
-      END_IF
+       END_IF
         pla
-    END_IF
+      END_IF
 
-next:   pla
+        pla
         tax
         dex
-        bpl     loop
+    WHILE_POS
 
         sec
         ror     scrambled_flag
@@ -514,12 +517,11 @@ next:   pla
 ;;; Output: X,Y = coords
 .proc IndexToXY
         ldy     #0
-:       cmp     #kCols
-        bcc     :+
+    DO
+        BREAK_IF_A_LT #kCols
         iny
         sbc     #kCols
-        bpl     :-              ; always
-:
+    WHILE_POS                   ; always
         tax
         rts
 
@@ -529,12 +531,13 @@ next:   pla
 ;;; Output: A = index
 .proc XYToIndex
         txa
-:       dey
-        bmi     ret
+    DO
+        dey
+        BREAK_IF_NEG
         clc
         adc     #kCols
-        bne     :-              ; always
-ret:    rts
+    WHILE_NOT_ZERO              ; always
+        rts
 .endproc ; XYToIndex
 
 ;;; Input: X,Y = coords
@@ -571,14 +574,14 @@ delay2: dey
 
 .proc InvertWindow
         MGTK_CALL MGTK::GetWinPort, getwinport_params
-        bne     ret             ; obscured
+    IF_ZERO                     ; not obscured
         MGTK_CALL MGTK::SetPort, grafport
 
         MGTK_CALL MGTK::SetPattern, pattern_black
         MGTK_CALL MGTK::SetPenMode, notpenXOR
         MGTK_CALL MGTK::PaintRect, invert_rect
-
-ret:    rts
+    END_IF
+        rts
 .endproc ; InvertWindow
 
 ;;; ============================================================

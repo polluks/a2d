@@ -949,12 +949,14 @@ pravetz_8ac_sequence:
         ldx     #0              ; offset into table
 
         ;; For each model...
-m_loop: ldy     model_lookup_table,x ; model number
+    DO
+        ldy     model_lookup_table,x ; model number
         bmi     fail            ; hit end of table
         inx
 
         ;; For each byte/expected pair in table...
-b_loop: lda     model_lookup_table,x ; offset from MODEL_ID_PAGE
+      DO
+        lda     model_lookup_table,x ; offset from MODEL_ID_PAGE
         beq     match           ; success!
         sta     @lsb
         inx
@@ -963,14 +965,12 @@ b_loop: lda     model_lookup_table,x ; offset from MODEL_ID_PAGE
         inx
         @lsb := *+1
         cmp     MODEL_ID_PAGE   ; self-modified
-
-        beq     b_loop          ; match, keep looking
+      WHILE_EQ                  ; match, keep looking
 
         ;; No match, so skip to end of this entry
 :       inx
         lda     model_lookup_table-1,x
-        beq     m_loop
-
+    WHILE_ZERO
         inx
         bne     :-
 
@@ -1216,9 +1216,9 @@ done:   rts
 
         ldx     egg
         inx
-     IF_X_EQ    #kNumModels
+    IF_X_EQ     #kNumModels
         ldx     #0
-     END_IF
+    END_IF
         stx     egg
 
         jsr     ClearWindow
@@ -1728,10 +1728,7 @@ sigtable_xdrive:        .byte   4, $07, $3C, $0B, $B0, $0C, $01, $F0, $CA
 .proc SwapRoutine
         ldx     #.sizeof(Z80Routine)-1
     DO
-        ldy     Z80Routine::target,x
-        copy8   Z80Routine,x, Z80Routine::target,x
-        tya
-        sta     Z80Routine,x
+        swap8   Z80Routine::target,x, Z80Routine,x
         dex
     WHILE_POS
         rts
@@ -2023,17 +2020,18 @@ next:   inx                     ; next bank
         ;; Iterate upwards, restoring valid banks.
 .scope
         ldx     #0              ; bank we are checking
-loop:   stx     RAMWORKS_BANK   ; select bank
+    DO
+        stx     RAMWORKS_BANK   ; select bank
         txa
-        cmp     sigb0           ; verify first signature
-        bne     next
+      IF_A_EQ   sigb0           ; verify first signature
         eor     #$FF
-        cmp     sigb1           ; verify second signature
-        bne     next
+       IF_A_EQ  sigb1           ; verify second signature
         copy8   buf0,x, sigb0   ; match - restore it
         copy8   buf1,x, sigb1
-next:   inx                     ; next bank
-        bne     loop            ; if we hit 256 banks, make sure we exit
+       END_IF
+      END_IF
+        inx                     ; next bank
+    WHILE_NOT_ZERO              ; if we hit 256 banks, make sure we exit
 .endscope
 
         ;; Switch back to RW bank 0 (normal aux memory)
