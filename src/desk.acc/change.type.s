@@ -16,6 +16,7 @@
         .include "../toolkits/btk.inc"
         .include "../toolkits/letk.inc"
         .include "../toolkits/icontk.inc"
+        .include "../lib/alert_dialog.inc"
         .include "../common.inc"
         .include "../desktop/desktop.inc"
 
@@ -617,12 +618,12 @@ auxtype:        .word   SELF_MODIFIED
 
 ;;; ============================================================
 
-stash_stack:
+saved_stack:
         .byte   0
 
 .proc Main
         tsx
-        stx     stash_stack
+        stx     saved_stack
 
         jsr     JUMP_TABLE_GET_SEL_WIN
     IF_ZERO
@@ -658,7 +659,7 @@ stash_stack:
 .endproc ; Main
 
 .proc Abort
-        ldx     stash_stack
+        ldx     saved_stack
         txs
         rts
 .endproc ; Abort

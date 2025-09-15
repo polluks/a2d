@@ -286,6 +286,7 @@ done:
         lda     get_icon_entry_params::id
         sta     main::trash_icon_num
         sta     cached_window_entry_list
+        sta     icon_param
         ldax    get_icon_entry_params::addr
         stax    ptr
 
@@ -309,6 +310,8 @@ done:
     WHILE_X_NE  trash_name
         copy8   trash_name,x, (ptr),y
 
+        ITK_CALL IconTK::DrawIcon, icon_param
+
         FALL_THROUGH_TO LoadSelectorList
 .endproc ; CreateTrashIcon
 
@@ -329,7 +332,7 @@ done:
 
         copy8   #0, index
         jsr     _ReadSelectorList
-        jne     done
+        bne     done
 
         lda     selector_list_data_buf + kSelectorListNumPrimaryRunListOffset
         clc
@@ -337,7 +340,7 @@ done:
         sta     num_selector_list_items
 
         copy8   selector_list_data_buf, count
-L0A3B:  lda     index
+loop:   lda     index
         cmp     count
         beq     done
 
@@ -364,12 +367,20 @@ L0A3B:  lda     index
 
         inc     index
         inc     selector_menu
-        jmp     L0A3B
+        jmp     loop
 
-done:   jmp     end
+done:
+        ;; No separator if it is last
+        lda     selector_menu
+    IF_A_EQ     #kSelectorMenuFixedItems
+        dec     selector_menu
+    END_IF
+        jmp     end_of_scope
 
 index:  .byte   0
 count:  .byte   0
+
+;;; --------------------------------------------------
 
 .proc _CopyPtr1ToPtr2
         ptr1 := $06
@@ -397,22 +408,17 @@ str_selector_list:
 
 .proc _ReadSelectorList
         MLI_CALL OPEN, open_params
-        bcs     _WriteSelectorList
+        bcs     not_found
 
         lda     open_params::ref_num
         sta     read_params::ref_num
         MLI_CALL READ, read_params
         MLI_CALL CLOSE, close_params
         rts
-.endproc ; _ReadSelectorList
 
-        DEFINE_CREATE_PARAMS create_params, str_selector_list, ACCESS_DEFAULT, $F1
-        DEFINE_READWRITE_PARAMS write_params, selector_list_data_buf, kSelectorListShortSize
-
-.proc _WriteSelectorList
-        ptr := $06
-
+not_found:
         ;; Clear buffer
+        ptr := $06
         copy16  #selector_list_data_buf, ptr
         ldx     #>kSelectorListShortSize ; number of pages
         lda     #0
@@ -425,27 +431,10 @@ str_selector_list:
         inc     ptr+1
         dex
     WHILE_NOT_ZERO
+        rts
+.endproc ; _ReadSelectorList
 
-        ;; Write out file
-        MLI_CALL CREATE, create_params
-        bcs     done
-        MLI_CALL OPEN, open_params
-        lda     open_params::ref_num
-        sta     write_params::ref_num
-        sta     close_params::ref_num
-        MLI_CALL WRITE, write_params ; two blocks of $400
-        MLI_CALL WRITE, write_params
-        MLI_CALL CLOSE, close_params
-
-done:   rts
-.endproc ; _WriteSelectorList
-
-end:
-        ;; No separator if it is last
-        lda     selector_menu
-    IF_A_EQ     #kSelectorMenuFixedItems
-        dec     selector_menu
-    END_IF
+        end_of_scope := *
 
 .endproc ; LoadSelectorList
 
@@ -637,149 +626,54 @@ end:
 .endscope
 
 ;;; ============================================================
-;;; Populate volume icons and device names
-
-;;; TODO: Dedupe with CmdCheckDrives
+;;; Populate volume icons
 
 .scope
-        devname_ptr := $08
-
-        ldy     #0
-        sty     main::pending_alert
+        copy8   #0, main::pending_alert
 
         ;; Enumerate DEVLST in reverse order (most important volumes first)
         copy8   DEVCNT, device_index
-
-process_volume:
-        lda     device_index
-        asl     a
-        tay
-        copy16  device_name_table,y, devname_ptr
-        ldy     device_index
-        lda     DEVLST,y        ;
-        ;; NOTE: Not masked with `UNIT_NUM_MASK`, for `CreateVolumeIcon`.
-
-        pha                     ; save all registers
-        txa
-        pha
-        tya
-        pha
-
-        inc     cached_window_entry_count
-        inc     icon_count
+    DO
+        device_index := *+1
+        ldy     #SELF_MODIFIED_BYTE
         lda     DEVLST,y
+        pha                     ; A = unmasked unit number
+
         jsr     main::CreateVolumeIcon ; A = unmasked unit number, Y = device index
-        sta     cvi_result
-        MGTK_CALL MGTK::CheckEvents
-
-        pla                     ; restore all registers
-        tay
-        pla
-        tax
-        pla
-
-        ;; A = unit number, X = (nothing), Y = device_index
-
-        pha                     ; save unit number on the stack
-
-        lda     cvi_result
-    IF_A_EQ     #ERR_DEVICE_NOT_CONNECTED
+      IF_A_EQ   #ERR_DEVICE_NOT_CONNECTED
         ;; If device is not connected, remove it from DEVLST
         ;; unless it's a Disk II.
-        ldy     device_index
-        lda     DEVLST,y
+        pla                     ; A = unmasked unit number
+        pha                     ; A = unmasked unit number
         ;; NOTE: Not masked with `UNIT_NUM_MASK`, `IsDiskII` handles it.
         jsr     main::IsDiskII
-        beq     select_template ; skip
+        beq     done_create     ; skip
         ldx     device_index
-        jsr     RemoveDevice
+        jsr     _RemoveDevice
         jmp     next
-    END_IF
+      END_IF
 
-    IF_A_EQ     #ERR_DUPLICATE_VOLUME
+      IF_A_EQ   #ERR_DUPLICATE_VOLUME
         copy8   #kErrDuplicateVolName, main::pending_alert
-    END_IF
+      END_IF
 
-        ;; This section populates device_name_table -
-        ;; it determines which device type string to use, and
-        ;; fills in slot and drive as appropriate. Used in the
-        ;; Format/Erase disk dialog.
+done_create:
+        ldx     cached_window_entry_count
+        copy8   cached_window_entry_list-1,x, icon_param
+        ITK_CALL IconTK::DrawIcon, icon_param
 
-select_template:
-        pla                     ; unit number into A
-        pha
-
-        src := $06
-
-        jsr     main::GetDeviceType
-        stax    src             ; A,X = device name (may be empty)
-
-        ;; Empty?
-        ldy     #0
-        lda     (src),y
-    IF_ZERO
-        copy16  #str_volume_type_unknown, src
-    END_IF
-
-        ;; Set final length
-        lda     (src),y         ; Y = 0
-        clc
-        adc     #kSDPrefixLength
-        sta     str_sdname_buffer
-
-        ;; Copy string into template, after prefix
-        lda     (src),y         ; Y = 0
-        tay                     ; Y = length
-    DO
-        copy8   (src),y, str_sdname_buffer + kSDPrefixLength,y
-        dey
-    WHILE_NOT_ZERO              ; leave length alone
-
-        ;; Insert Slot #
-        pla                     ; unit number into A
-        pha
-
-        and     #%01110000      ; slot (from DSSSxxxx)
-        lsr     a
-        lsr     a
-        lsr     a
-        lsr     a
-        ora     #'0'
-        sta     str_sdname_buffer + kDeviceTemplateSlotOffset
-
-        ;; Insert Drive #
-        pla                     ; unit number into A
-        pha
-
-        rol     a               ; set carry to drive - 1
-        lda     #0              ; 0 + carry + '1'
-        adc     #'1'            ; convert to '1' or '2'
-        sta     str_sdname_buffer + kDeviceTemplateDriveOffset
-
-        ;; Copy name into table
-        ldy     str_sdname_buffer
-    DO
-        copy8   str_sdname_buffer,y, (devname_ptr),y
-        dey
+next:
+        pla
+        dec     device_index
     WHILE_POS
 
-next:   pla
-        dec     device_index
-        lda     device_index
+        copy8   #0, cached_window_id
+        jsr     main::StoreWindowEntryTable
 
-        bmi     PopulateStartupMenu
-        jmp     process_volume  ; next!
+        jmp     end_of_scope
 
-device_index:
-        .byte   0
-cvi_result:
-        .byte   0
-.endscope
-
-;;; ============================================================
-
-        ;; Remove device num in X from devices list
-.proc RemoveDevice
+;;; Remove device num in X from devices list
+.proc _RemoveDevice
         dex
     DO
         inx
@@ -796,7 +690,91 @@ cvi_result:
         ;; not be necessary.
 
         rts
-.endproc ; RemoveDevice
+.endproc ; _RemoveDevice
+
+        end_of_scope := *
+        FALL_THROUGH_TO PopulateDeviceNames
+.endscope
+
+;;; ============================================================
+;;; This section populates `device_name_table` - it determines which
+;;; device type string to use, and fills in slot and drive as
+;;; appropriate. Used in the Format/Erase disk dialog.
+
+.proc PopulateDeviceNames
+        ;; Enumerate DEVLST in reverse order (most important volumes first)
+        ldy     DEVCNT
+    DO
+        tya                     ; Y = index
+        pha                     ; A = index
+
+        devname_ptr := $08
+        asl     a
+        tax
+        copy16  device_name_table,x, devname_ptr
+
+        lda     DEVLST,y
+        pha                     ; A = unmasked unit number
+
+        src := $06
+
+        jsr     main::GetDeviceType ; A = unmasked unit number
+        stax    src             ; A,X = device name (may be empty)
+
+        ;; Empty?
+        ldy     #0
+        lda     (src),y
+      IF_ZERO
+        copy16  #str_volume_type_unknown, src
+      END_IF
+
+        ;; Set final length
+        lda     (src),y         ; Y = 0
+        clc
+        adc     #kSDPrefixLength
+        sta     str_sdname_buffer
+
+        ;; Copy string into template, after prefix
+        lda     (src),y         ; Y = 0
+        tay                     ; Y = length
+      DO
+        copy8   (src),y, str_sdname_buffer + kSDPrefixLength,y
+        dey
+      WHILE_NOT_ZERO            ; leave length alone
+
+        ;; Insert Slot #
+        pla                     ; A = unmasked unit number
+        pha                     ; A = unmasked unit number
+        and     #UNIT_NUM_SLOT_MASK
+        lsr     a               ; 00111000
+        lsr     a               ; 00011100
+        lsr     a               ; 00001110
+        lsr     a               ; 00000111
+        ora     #'0'
+        sta     str_sdname_buffer + kDeviceTemplateSlotOffset
+
+        ;; Insert Drive #
+        pla                     ; A = unmasked unit number
+        rol     a               ; set carry to drive - 1
+        lda     #0              ; 0 + carry + '1'
+        adc     #'1'            ; convert to '1' or '2'
+        sta     str_sdname_buffer + kDeviceTemplateDriveOffset
+
+        ;; Copy name into table
+        ldy     str_sdname_buffer
+      DO
+        copy8   str_sdname_buffer,y, (devname_ptr),y
+        dey
+      WHILE_POS
+
+        pla                     ; A = index
+        tay                     ; Y = index
+        dey
+    WHILE_POS
+
+        FALL_THROUGH_TO PopulateStartupMenu
+
+.endproc ; PopulateDeviceNames
 
 ;;; ============================================================
 
@@ -852,7 +830,7 @@ next:   dec     slot
 
         ;; Set number of menu items.
         stx     startup_menu
-        jmp     InitializeDisksInDevicesTables
+        jmp     end_of_scope
 
 slot:   .byte   0
 
@@ -865,6 +843,9 @@ slot_string_table:
         .addr   startup_menu_item_6
         .addr   startup_menu_item_7
         ASSERT_ADDRESS_TABLE_SIZE slot_string_table, ::kMenuSizeStartup
+
+        end_of_scope := *
+        FALL_THROUGH_TO InitializeDisksInDevicesTables
 .endproc ; PopulateStartupMenu
 
 ;;; ============================================================
@@ -919,7 +900,7 @@ next:   inc     index
       WHILE_POS
     END_IF
 
-        jmp     FinalSetup
+        jmp     end_of_scope
 
         DEFINE_SP_STATUS_PARAMS status_params, SELF_MODIFIED_BYTE, dib_buffer, 3 ; Return Device Information Block (DIB)
 
@@ -977,6 +958,9 @@ index:  .byte   0
 count:  .byte   0
 unit_num:
         .byte   0
+
+        end_of_scope := *
+        FALL_THROUGH_TO FinalSetup
 .endproc ; InitializeDisksInDevicesTables
 
 ;;; ============================================================
@@ -986,23 +970,6 @@ unit_num:
         MGTK_CALL MGTK::CheckEvents
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
         copy8   #0, active_window_id
-
-        ;; Add desktop icons
-        ldx     #0
-    DO
-        BREAK_IF_X_EQ cached_window_entry_count
-        txa
-        pha
-        copy8   cached_window_entry_list,x, icon_param
-        ITK_CALL IconTK::DrawIcon, icon_param
-        pla
-        tax
-        inx
-    WHILE_NOT_ZERO              ; always
-
-        ;; Desktop icons are cached now
-        copy8   #0, cached_window_id
-        jsr     main::StoreWindowEntryTable
 
         ;; Restore state from previous session
         jsr     RestoreWindows
@@ -1106,7 +1073,7 @@ exit:   jmp     main::LoadDesktopEntryTable
         ;; fails, the routine will restore the stack then
         ;; rts, returning to our caller.
         tsx
-        stx     saved_stack
+        stx     main::saved_stack
         jmp     main::OpenWindowForPath
 .endproc ; _MaybeOpenWindow
 

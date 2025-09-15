@@ -57,6 +57,9 @@ Project Page: https://github.com/a2stuff/a2d
 * Ignore suffix when determining icon type for directories.
 * Improve mouse responsiveness while list views are drawn.
 * Prevent crash after clicking Cancel if `LOCAL/SELECTOR.LIST` is unavailable.
+* Show error when unable to move shortcut to "list only".
+* Draw volume icons during load/check for better feedback.
+* Improve startup time by creating `LOCAL/SELECTOR.LIST` lazily.
 
 ### Selector
 
@@ -87,6 +90,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Print Catalog
   * Improve use of SSC and IW2.
   * Show alert on startup if no printer card found.
+  * Show modification date.
 * Options: Add option to show invisible files.
 * Calendar:
   * Allow modifiers when clicking, double-modifiers for decade. ([#693](https://github.com/a2stuff/a2d/issues/693))
