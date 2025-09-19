@@ -84,6 +84,9 @@
 * Launch DeskTop. Open a window for a volume icon. Special > Check All Drives. Verify that all windows close, and that volume icons are correctly updated.
 * Launch DeskTop. Special > Check All Drives. Verify that no error is shown.
 * Launch DeskTop. Mount a new drive that will appear in the middle of the drive order. Special > Check All Drives. Verify that no new volumes overdraw old volumes.
+* Launch DeskTop. Select a volume icon and Special > Eject Disk.... Special > Check All Drives. Verify that DeskTop doesn't hang or crash.
+* Insert a ProDOS formatted disk in a Disk II drive. Launch DeskTop. Select the 5.25" disk icon. Replace the disk in the Disk II drive with a Pascal formatted disk. Special > Check Drive. When prompted to format it, click Cancel. Edit > Select All. Verify that DeskTop doesn't crash or hang.
+* Launch DeskTop. Insert a Pascal formatted disk in a Disk II drive. Special > Check All Drives. Verify that a prompt to format the disk is shown.
 
 * Launch DeskTop. Open a window. Create folders A, B and C. Open A, and create a folder X. Open B, and create a folder Y. Drag A and B into C. Double-click on X. Verify it opens. Double-click on Y. Verify it opens. Open C. Double-click on A. Verify that the existing A window activates. Double-click on B. Verify that the existing B window activates.
 
@@ -736,6 +739,8 @@
 * Load DeskTop. Open a window for a volume in a Disk II drive. Quit DeskTop. Remove the disk from the Disk II drive. Load DeskTop. Verify that the Disk II drive is only polled once on startup, not twice.
 
 * Launch DeskTop. Open a window. File > Quit. Launch DeskTop again. Ensure the window is restored. Try to drag-select volume icons. Verify that they are selected.
+
+* Launch DeskTop. Open a volume window. Rename the volume to "TRASH" (all uppercase). File > Quit. Load DeskTop. Verify that the restored window is named "TRASH" not "Trash".
 
 
 ## Apple Menu
@@ -1681,3 +1686,4 @@ Repeat these tests for all language builds:
 
 * Launch DeskTop. Click the Apple Menu. Verify that no screen corruption occurs.
 * Launch DeskTop. Click the Shortcuts menu. Verify that no screen corruption occurs.
+* Launch DeskTop. Select a file. File > Copy To.... Verify that directories appear within volumes.

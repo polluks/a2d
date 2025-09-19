@@ -145,8 +145,8 @@ solid_pattern:
         .res    8, $FF
 
 .params getwinport_params
-window_id:     .byte   0
-a_grafport:    .addr   grafport_win
+window_id:      .byte   0
+a_grafport:     .addr   grafport_win
 .endparams
 
 grafport_win:   .tag    MGTK::GrafPort
@@ -285,7 +285,7 @@ num_primary_run_list_entries:
 num_secondary_run_list_entries:
         .byte   0
 
-invoked_during_boot_flag:       ; set to 1 during key checks during boot, 0 otherwise
+invoked_during_boot_flag: ; set to 1 during key checks during boot, 0 otherwise
         .byte   0
 
 ;;; ============================================================
@@ -313,11 +313,11 @@ dow_strings:
         ASSERT_RECORD_TABLE_SIZE dow_strings, 7, 4
 
 parsed_date:
-        .tag ParsedDateTime
+        .tag    ParsedDateTime
 
 ;;; GrafPort used when drawing the clock
 clock_grafport:
-        .tag MGTK::GrafPort
+        .tag    MGTK::GrafPort
 
 ;;; Used to save the current GrafPort while drawing the clock.
 .params getport_params
@@ -807,12 +807,10 @@ cancel: jmp     LoadSelectorList
         jmp     HandleMenu
     END_IF
 
-        cmp     #MGTK::Area::content
-        RTS_IF_NE
+        RTS_IF_A_NE #MGTK::Area::content
 
         lda     findwindow_params::window_id
-        cmp     #winfo::kDialogId
-        RTS_IF_NE
+        RTS_IF_A_NE #winfo::kDialogId
 
         lda     #winfo::kDialogId
         jsr     GetWindowPort
@@ -852,7 +850,7 @@ retry:  param_call GetFileInfo, str_desktop_2
     END_IF
 
         ;; Entry selection?
-        COPY_STRUCT MGTK::Point, screentowindow_params::window, op_params::coords
+        COPY_STRUCT screentowindow_params::window, op_params::coords
         OPTK_CALL OPTK::Click, op_params
         bmi     ret
         jsr     DetectDoubleClick
@@ -953,16 +951,12 @@ noop:   rts
 
         ;; 1-8 to select entry
 
-        cmp     #'1'
-        RTS_IF_LT
-
-        cmp     #'8'+1
-        RTS_IF_GE
+        RTS_IF_A_LT #'1'
+        RTS_IF_A_GE #'8'+1
 
         sec
         sbc     #'1'
-        cmp     num_primary_run_list_entries
-        RTS_IF_GE
+        RTS_IF_A_GE num_primary_run_list_entries
 
         sta     op_params::new_selection
         OPTK_CALL OPTK::SetSelection, op_params
@@ -1293,7 +1287,7 @@ hi:     .byte   0
         tya
         rts
 
-hi:    .byte   0
+hi:     .byte   0
 .endproc ; GetSelectorListPathAddr
 
 ;;; ============================================================
@@ -1881,7 +1875,7 @@ str_extras_awlaunch:
         inx
         iny
         copy8   (path_addr),y, buf,x
-    WHILE_Y_NE len
+    WHILE_Y_NE  len
 
         stx     buf
         ldax    #buf
@@ -1935,7 +1929,7 @@ len:    .byte   0
         copy8   #0, loop_counter
 
         jsr     ShowClock
-        jsr     ResetIIgsRGB   ; in case it was reset by control panel
+        jsr     ResetIIgsRGB    ; in case it was reset by control panel
     END_IF
 
         lda     loop_counter
@@ -1960,7 +1954,7 @@ loop_counter:
         .include "../lib/readwrite_settings.s"
         .include "../lib/monocolor.s"
 
-         ADJUSTCASE_BLOCK_BUFFER := $1C00
+        ADJUSTCASE_BLOCK_BUFFER := $1C00
         .include "../lib/adjustfilecase.s"
 
         ;; TODO: Move these out of the `app` scope

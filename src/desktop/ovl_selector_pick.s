@@ -426,7 +426,7 @@ clean_flag:                     ; high bit set if "clean", cleared if "dirty"
         ldy     #0
         lda     (text_addr),y
         sta     text_length
-        inc16   text_addr ; point past length byte
+        inc16   text_addr       ; point past length byte
         MGTK_CALL MGTK::TextWidth, text_params
 
         sub16   #winfo_entry_picker::kWidth, text_width, pos_dialog_title::xcoord
@@ -492,7 +492,7 @@ handle_button:
         rts
     END_IF
 
-        COPY_STRUCT MGTK::Point, screentowindow_params::window, shortcut_picker_params::coords
+        COPY_STRUCT screentowindow_params::window, shortcut_picker_params::coords
         OPTK_CALL OPTK::Click, shortcut_picker_params
     IF_NC
         jsr     DetectDoubleClick
@@ -541,7 +541,7 @@ handle_button:
 .proc HandleKeyReturn
         BTK_CALL BTK::Flash, entry_picker_ok_button
     IF_NS
-        return #$FF             ; ignore
+        return  #$FF            ; ignore
     END_IF
         return  #0
 .endproc ; HandleKeyReturn

@@ -8,6 +8,15 @@
 
 .scope format_erase_overlay
 
+;;; Memory Map
+;;; ...
+;;; $1E00 - $1FFF - unused/preserved
+;;; $1C00 - $1DFF - `read_buffer` (for checking target format)
+;;; $1A00 - $1BFF - `block_buffer` (for writing)
+;;; $1700 - $19FF - unused/preserved
+;;; $0800 - $16FF - overlay code
+;;; ...
+
         MLIEntry := main::MLIRelayImpl
         MGTKEntry := MGTKRelayImpl
         LETKEntry := LETKRelayImpl
@@ -86,7 +95,7 @@ Exec:
 
     DO
         jsr     main::PromptInputLoop
-    WHILE_NS                 ; not done
+    WHILE_NS                    ; not done
         jne     cancel          ; cancel
 
         jsr     GetSelectedUnitNum
@@ -192,7 +201,7 @@ erase_flag:
 .proc FormatDisk
         lda     #$00
         jsr     PromptForDeviceAndName
-        bcs     cancel
+        bcs     finish
         sta     unit_num
 
         ;; --------------------------------------------------
@@ -222,7 +231,7 @@ l12:    pha
 
         jsr     ShowAlert
         ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
-        bne     cancel          ; `kAlertResultCancel` = 1
+        bne     finish          ; `kAlertResultCancel` = 1
         beq     retry           ; `kAlertResultTryAgain` = 0
     END_IF
 
@@ -230,10 +239,11 @@ l12:    pha
         cmp     #kAlertResultCancel
         bne     retry
 
-cancel:
+finish:
         pha
         jsr     main::SetCursorPointer
         MGTK_CALL MGTK::CloseWindow, winfo_prompt_dialog
+        jsr     main::ClearUpdates
 
         ldx     unit_num
         pla
@@ -246,7 +256,7 @@ cancel:
 .proc EraseDisk
         lda     #$80
         jsr     PromptForDeviceAndName
-        bcs     cancel
+        bcs     finish
 
 ;;; Entry point used after `FormatDisk`
 EP2:
@@ -269,14 +279,14 @@ retry:
         pla
     IF_ZERO
         lda     #$00
-        beq     cancel          ; always
+        beq     finish          ; always
     END_IF
 
     IF_A_EQ     #ERR_WRITE_PROTECTED
 
         jsr     ShowAlert
         ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
-        bne     cancel          ; `kAlertResultCancel` = 1
+        bne     finish          ; `kAlertResultCancel` = 1
         beq     retry           ; `kAlertResultTryAgain` = 0
     END_IF
 
@@ -284,10 +294,11 @@ retry:
         cmp     #kAlertResultCancel
         bne     retry
 
-cancel:
-        pha                     ; cancel
+finish:
+        pha
         jsr     main::SetCursorPointer
         MGTK_CALL MGTK::CloseWindow, winfo_prompt_dialog
+        jsr     main::ClearUpdates
 
         ldx     unit_num
         pla
@@ -315,7 +326,7 @@ EraseDisk__EP2 := EraseDisk::EP2
 ;;; ============================================================
 
 .proc HandleClick
-        COPY_STRUCT MGTK::Point, screentowindow_params::window, vol_picker_params::coords
+        COPY_STRUCT screentowindow_params::window, vol_picker_params::coords
         OPTK_CALL OPTK::Click, vol_picker_params
     IF_NC
         jsr     DetectDoubleClick
@@ -450,7 +461,7 @@ no:     lda     #$80
 
 on_line_buffer:
 path:
-        .res    17,0              ; length + '/' + 15-char name
+        .res    17,0            ; length + '/' + 15-char name
 
 ;;; ============================================================
 ;;; Get driver address
@@ -632,7 +643,7 @@ got_blocks:
         dey
     WHILE_POS
 
-        MLI_CALL GET_TIME ; Apply timestamp
+        MLI_CALL GET_TIME       ; Apply timestamp
         ldy     #3
     DO
         copy8   DATELO,y, block_buffer + VolumeDirectoryHeader::creation_date,y
@@ -892,7 +903,7 @@ prodos_loader_blocks:
         MLI_CALL READ_BLOCK, read_block_params
     IF_CC
         lda     read_buffer + 1
-      IF_A_NE     #kPascalSig1  ; DOS 3.3?
+      IF_A_NE   #kPascalSig1    ; DOS 3.3?
         jmp     maybe_dos       ; Maybe...
       END_IF
 
