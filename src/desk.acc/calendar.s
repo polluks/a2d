@@ -8,6 +8,7 @@
         RESOURCE_FILE "calendar.res"
 
         .include "apple2.inc"
+        .include "opcodes.inc"
         .include "../inc/apple2.inc"
         .include "../inc/macros.inc"
         .include "../inc/prodos.inc"
@@ -466,12 +467,7 @@ notpenXOR:      .byte   MGTK::notpenXOR
 ;;; ============================================================
 
 .proc PaintWindow
-
-draw:   lda     #$80
-        SKIP_NEXT_2_BYTE_INSTRUCTION
-update: lda     #0
-        sta     full_flag
-
+        ENTRY_POINTS_FOR_BIT7_FLAG draw, update, full_flag
 
         ;; Defer if content area is not visible
         MGTK_CALL MGTK::GetWinPort, getwinport_params
@@ -515,7 +511,7 @@ update: lda     #0
 
         ;; Erase background if needed
         bit     full_flag
-    IF_PLUS
+    IF_NC
         MGTK_CALL MGTK::SetPenMode, notpencopy
         MGTK_CALL MGTK::PaintRect, rect_month_year
     END_IF
@@ -531,7 +527,7 @@ update: lda     #0
         ;; Grid lines
 
         bit     full_flag
-    IF_MINUS
+    IF_NS
         MGTK_CALL MGTK::SetPenMode, pencopy
         MGTK_CALL MGTK::SetPenSize, grid_pen
 
@@ -569,7 +565,7 @@ update: lda     #0
         ;; Day names
 
         bit full_flag
-    IF_MINUS
+    IF_NS
         copy8   #6, index
       DO
         lda     index
@@ -691,7 +687,7 @@ draw_date:
         ;; Left/right arrow buttons
 
         bit     full_flag
-    IF_MINUS
+    IF_NS
         BTK_CALL BTK::Draw, left_button
         BTK_CALL BTK::Draw, right_button
     END_IF

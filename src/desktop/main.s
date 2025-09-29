@@ -96,8 +96,8 @@ loop:
 
         ;; Did the mouse move?
     IF_A_EQ     #kEventKindMouseMoved
-        jsr     ClearTypeDown
-        jmp     loop            ; no state change
+        jsr     ClearTypeDown   ; always returns Z=1
+        beq     loop            ; just to `loop` because no state change
     END_IF
 
         ;; Is it a key down event?
@@ -108,14 +108,14 @@ loop:
 
         ;; Is it a button-down event? (including w/ modifiers)
     IF_A_EQ_ONE_OF #MGTK::EventKind::button_down, #MGTK::EventKind::apple_key
-        jsr     ClearTypeDown
         jsr     HandleClick
-        jmp     MainLoop
+        jsr     ClearTypeDown   ; always returns Z=1
+        beq     MainLoop        ; always
     END_IF
 
         ;; Is it an update event?
     IF_A_EQ     #MGTK::EventKind::update
-        jsr     ClearUpdatesNoPeek
+        jsr     ClearUpdatesSkipGet
     END_IF
 
         jmp     loop
@@ -134,43 +134,33 @@ counter:
 ;;; (e.g. a window close followed by a nested loop or slow
 ;;; file operation).
 
-.proc ClearUpdatesImpl
-
-;;; Caller already called GetEvent, no need to PeekEvent;
-;;; just jump directly into the clearing loop.
-clear_no_peek := handle_update
-
-;;; Clear any pending updates.
-clear:
-        FALL_THROUGH_TO loop
-
-        ;; --------------------------------------------------
-loop:
+.proc ClearUpdates
+    DO
         jsr     PeekEvent
         lda     event_params::kind
-        cmp     #MGTK::EventKind::update
-        bne     finish
+        BREAK_IF_A_NE #MGTK::EventKind::update
+
         jsr     GetEvent        ; no need to synthesize events
 
-handle_update:
+;;; If caller already called GetEvent, start here.
+skip_get:
         MGTK_CALL MGTK::BeginUpdate, event_params::window_id
-        bne     loop            ; obscured
+        CONTINUE_IF_NOT_ZERO    ; obscured
+
         lda     event_params::window_id
-    IF_ZERO
+      IF_ZERO
         ;; Desktop
         ITK_CALL IconTK::DrawAll, event_params::window_id
-    ELSE_IF_A_LT #kMaxDeskTopWindows
+      ELSE_IF_A_LT #kMaxDeskTopWindows+1; 1...max are ours
         ;; Directory Window
         jsr     UpdateWindow
-    END_IF
+      END_IF
         MGTK_CALL MGTK::EndUpdate
-        jmp     loop
+    WHILE_ZERO                  ; always
 
-finish:
         rts
-.endproc ; ClearUpdatesImpl
-ClearUpdatesNoPeek := ClearUpdatesImpl::clear_no_peek
-ClearUpdates := ClearUpdatesImpl::clear
+.endproc ; ClearUpdates
+ClearUpdatesSkipGet := ClearUpdates::skip_get
 
 ;;; ============================================================
 ;;; Called by main and nested event loops to do periodic tasks.
@@ -210,16 +200,17 @@ tick_counter:
 
 ;;; Inputs: A = `window_id` from `update` event
 .proc UpdateWindow
+        sta     getwinport_params::window_id
         jsr     LoadWindowEntryTable
+
+        ;; `DrawWindowHeader` and `AdjustUpdatePortForEntries` rely on
+        ;; `window_grafport` for dimensions
+        MGTK_CALL MGTK::GetWinPort, getwinport_params
 
         ;; This correctly uses the clipped port provided by BeginUpdate.
 
-        ;; `DrawWindowHeader` relies on `window_grafport` for dimensions
-        copy8   cached_window_id, getwinport_params::window_id
-        MGTK_CALL MGTK::GetWinPort, getwinport_params
         jsr     DrawWindowHeader
 
-        ;; `AdjustUpdatePortForEntries` also relies on `window_grafport`
         jsr     AdjustUpdatePortForEntries
         jmp     DrawWindowEntries
 .endproc ; UpdateWindow
@@ -309,7 +300,7 @@ modifiers:
 menu_accelerators:
         copy8   event_params::key, menu_click_params::which_key
         copy8   event_params::modifiers, menu_click_params::key_mods
-        copy8   #0, menu_modified_click_flag ; note that source is not Apple+click
+        CLEAR_BIT7_FLAG menu_modified_click_flag ; note that source is not Apple+click
         MGTK_CALL MGTK::MenuKey, menu_click_params
 
         FALL_THROUGH_TO MenuDispatch
@@ -847,7 +838,7 @@ prev_selected_icon:
         ;; (2/4) Was a move?
         ;; NOTE: Only applies in file icon case.
 
-        bit     operations__move_flag
+        bit     operations__move_flags
     IF_NS
         ;; Update source vol's contents
         jsr     MaybeStashDropTargetName ; in case target is in window...
@@ -888,7 +879,7 @@ prev_selected_icon:
 .proc _ActivateClickedWindow
         window_id := *+1
         lda     #SELF_MODIFIED_BYTE
-        jmp     ActivateWindow
+        FALL_THROUGH_TO ActivateWindow
 .endproc ; _ActivateClickedWindow
 clicked_window_id := _ActivateClickedWindow::window_id
 
@@ -1366,7 +1357,7 @@ retry:  jsr     GetSrcFileInfo
 fallback:
         jsr     _CheckBasisSystem ; Is fallback BASIS.SYSTEM present?
     IF_CC                         ; yes, continue below
-        copy8   #$80, INVOKER_BITSY_COMPAT
+        SET_BIT7_FLAG INVOKER_BITSY_COMPAT
         bmi     launch          ; always
     END_IF
         param_jump ShowAlertParams, AlertButtonOptions::OK, aux::str_alert_cannot_open
@@ -1841,7 +1832,7 @@ devlst_backup:
         ;; "Run" command
         result := *+1
         lda     #SELF_MODIFIED_BYTE
-        jmp     InvokeSelectorEntry
+        bpl     InvokeSelectorEntry ; always
     END_IF
 
 done:   rts
@@ -2514,7 +2505,7 @@ from_double_click:
 
         ;; --------------------------------------------------
 common:
-        copy8   #0, dir_flag
+        CLEAR_BIT7_FLAG dir_flag
 
         ;; Make a copy of selection
         ldx     selected_icon_count
@@ -2534,7 +2525,7 @@ common:
 
         ;; Were any directories opened?
         dir_flag := *+1
-        lda     #SELF_MODIFIED_BYTE
+        lda     #SELF_MODIFIED_BYTE ; bit7
     IF_NS
         ;; Maybe close the previously active window, depending on source/modifiers
         jsr     MaybeCloseWindowAfterOpen
@@ -2561,7 +2552,7 @@ next:   txa
         beq     maybe_open_file ; nope
 
         ;; Directory
-        copy8   #$80, dir_flag
+        SET_BIT7_FLAG dir_flag
 
         pla                     ; A = icon id
         jsr     OpenWindowForIcon
@@ -3109,11 +3100,7 @@ done:
 ;;; ============================================================
 
 .proc CmdCheckOrEjectImpl
-
-eject:  sec
-        .byte   OPC_BCC         ; masks next byte
-check:  clc
-        sta     eject_flag
+        ENTRY_POINTS_FOR_BIT7_FLAG eject, check, eject_flag
 
         ;; Ensure that volumes are selected
         lda     selected_window_id
@@ -3228,7 +3215,7 @@ ResetHandler    := CmdQuitImpl::ResetHandler
 ;;; Returns with ALTZPOFF and ROM banked in.
 
 .proc RestoreSystem
-        copy8   #0, main::mli_relay_checkevents_flag
+        CLEAR_BIT7_FLAG main::mli_relay_checkevents_flag
 
         jsr     SaveWindows
 
@@ -3553,6 +3540,8 @@ ret:    rts
 
 ;;; ============================================================
 
+;;; Assert: Icon(s) selected
+
 .proc CmdGetInfo
         jsr     DoGetInfo
     IF_NS
@@ -3576,7 +3565,7 @@ ret:    rts
         jsr     DoDeleteSelection
         RTS_IF_A_EQ #kOperationCanceled
 
-        copy8   #$80, validate_windows_flag
+        SET_BIT7_FLAG validate_windows_flag
         jmp     UpdateActivateAndRefreshSelectedWindow
 .endproc ; CmdDeleteSelection
 
@@ -3597,7 +3586,8 @@ ret:    rts
         RTS_IF_EQ
 
         ldax    #clipboard
-        jmp     CmdRenameWithDefaultNameGiven
+        ASSERT_NOT_EQUALS .hibyte(clipboard), 0
+        bne     CmdRenameWithDefaultNameGiven
 .endproc ; CmdPaste
 
 .proc CmdCut
@@ -3607,7 +3597,8 @@ ret:    rts
 
 .proc CmdClear
         ldax    #str_empty
-        jmp     CmdRenameWithDefaultNameGiven
+        ASSERT_NOT_EQUALS .hibyte(str_empty), 0
+        beq     CmdRenameWithDefaultNameGiven
 .endproc ; CmdClear
 
 ;;; ============================================================
@@ -4007,6 +3998,7 @@ KeyboardHighlightUp    := KeyboardHighlightSpatialImpl::up
 ;;; ============================================================
 ;;; Type Down Selection
 
+;;; Output: Z=1 (always)
 .proc ClearTypeDown
         copy8   #0, typedown_buf
         rts
@@ -4345,23 +4337,6 @@ ret:    rts
 
 finish: rts
 .endproc ; CmdSelectAll
-
-
-;;; ============================================================
-;;; Initiate keyboard-based resizing
-
-.proc CmdResize
-        MGTK_CALL MGTK::KeyboardMouse
-        jmp     DoWindowResize
-.endproc ; CmdResize
-
-;;; ============================================================
-;;; Initiate keyboard-based window moving
-
-.proc CmdMove
-        MGTK_CALL MGTK::KeyboardMouse
-        jmp     DoWindowDrag
-.endproc ; CmdMove
 
 ;;; ============================================================
 ;;; Cycle Through Windows
@@ -5380,13 +5355,11 @@ alert:  jmp     ShowAlert
         return  #$FF
 
 .proc _TryActivateAndRefreshWindow
-        sec                     ; set bit7, preserving A
-        ror     exception_flag
+        SET_BIT7_FLAG exception_flag ; set bit7, preserving A
         tsx
         stx     saved_stack
         jsr     ActivateAndRefreshWindow
-        clc                     ; clear bit7, preserving A
-        ror     exception_flag
+        CLEAR_BIT7_FLAG exception_flag ; clear bit7, preserving A
         rts
 .endproc ; _TryActivateAndRefreshWindow
 
@@ -5516,32 +5489,35 @@ clear:  jsr     ClearSelection
         ;; --------------------------------------------------
         ;; Event loop
 event_loop:
+
+        ;; Done the drag?
         jsr     PeekEvent
         lda     event_params::kind
-        cmp     #MGTK::EventKind::drag
-        jeq     update
+    IF_A_NE     #MGTK::EventKind::drag
+
+        jsr     FrameTmpRect
 
         ;; Process all icons in window
-        jsr     FrameTmpRect
-        ldx     #0
-iloop:  RTS_IF_X_EQ cached_window_entry_count
+        ldx     #0              ; X = index
+      DO
+        RTS_IF_X_EQ cached_window_entry_count
+        txa
+        pha                     ; A = index
 
         ;; Check if icon should be selected
-        txa
-        pha
         copy8   cached_window_entry_list,x, icon_param
         lda     window_id
-    IF_NOT_ZERO
+       IF_NOT_ZERO
         lda     icon_param
         jsr     IconScreenToWindow
-    END_IF
+       END_IF
         ITK_CALL IconTK::IconInRect, icon_param
         beq     done_icon
 
         ;; Already selected?
         lda     icon_param
         jsr     IsIconSelected
-    IF_NE
+       IF_NE
         ;; Highlight and add to selection
         ;; NOTE: Does not use `AddIconToSelection` because we perform
         ;; a more optimized drawing below.
@@ -5549,34 +5525,36 @@ iloop:  RTS_IF_X_EQ cached_window_entry_count
         lda     icon_param
         jsr     AddToSelectionList
         copy8   window_id, selected_window_id
-    ELSE
+       ELSE
         ;; Unhighlight and remove from selection
         ITK_CALL IconTK::UnhighlightIcon, icon_param
         lda     icon_param
         jsr     RemoveFromSelectionList
-    END_IF
+       END_IF
 
         lda     window_id
-    IF_ZERO
+       IF_ZERO
         ITK_CALL IconTK::DrawIcon, icon_param
-    ELSE
+       ELSE
         ITK_CALL IconTK::DrawIconRaw, icon_param ; CHECKED (drag select)
-    END_IF
+       END_IF
 
 done_icon:
         lda     window_id
-    IF_NOT_ZERO
+       IF_NOT_ZERO
         lda     icon_param
         jsr     IconWindowToScreen
-    END_IF
-        pla
-        tax
+       END_IF
+
+        pla                     ; A = index
+        tax                     ; X = index
         inx
-        jmp     iloop
+      WHILE_NOT_ZERO            ; always
+    END_IF
 
         ;; --------------------------------------------------
         ;; Check movement threshold
-update: lda     window_id
+        lda     window_id
     IF_NOT_ZERO
         jsr     _CoordsScreenToWindow
     END_IF
@@ -5646,6 +5624,14 @@ beyond:
 .endproc ; DragSelect
 
 ;;; ============================================================
+;;; Initiate keyboard-based window moving
+
+.proc CmdMove
+        MGTK_CALL MGTK::KeyboardMouse
+        FALL_THROUGH_TO DoWindowDrag
+.endproc ; CmdMove
+
+;;; ============================================================
 
 .proc DoWindowDrag
         copy8   active_window_id, dragwindow_params::window_id
@@ -5658,6 +5644,14 @@ beyond:
 
         jmp     CachedIconsWindowToScreen
 .endproc ; DoWindowDrag
+
+;;; ============================================================
+;;; Initiate keyboard-based resizing
+
+.proc CmdResize
+        MGTK_CALL MGTK::KeyboardMouse
+        FALL_THROUGH_TO DoWindowResize
+.endproc ; CmdResize
 
 ;;; ============================================================
 
@@ -5766,14 +5760,14 @@ beyond:
 ;;; Check windows and close any where the backing volume/file no
 ;;; longer exists.
 
-;;; Set to $80 to run a validation pass and close as needed.
+;;; Set bit7 to run a validation pass and close as needed.
 validate_windows_flag:
         .byte   0
 
 .proc ValidateWindows
         bit     validate_windows_flag
     IF_NS
-        copy8   #0, validate_windows_flag
+        CLEAR_BIT7_FLAG validate_windows_flag
         copy8   #kMaxDeskTopWindows, window_id
 
       DO
@@ -6821,7 +6815,7 @@ too_many_files:
         jsr     ShowAlertParams ; A,X = string, Y = AlertButtonOptions
     END_IF
 
-        lda     #$00            ; check vol flag (no)
+        clc                     ; check vol flag (no)
         jmp     _HandleFailure
 
 enough_room:
@@ -6969,7 +6963,7 @@ file_entry_to_file_record_mapping_table:
         jsr     ShowAlert
       END_IF
 
-        lda     #$80            ; check vol flag (yes)
+        sec                     ; check vol flag (yes)
         jmp     _HandleFailure
     END_IF
 
@@ -6993,7 +6987,7 @@ suppress_error_on_open_flag:
 
 ;;; Input: A = check vol flag
 .proc _HandleFailure
-        pha                     ; A = check vol flag
+        php                     ; C = check vol flag
 
         ;; If opening an icon, need to reset icon state.
         bit     icon_param      ; Were we opening a path? (N=1)
@@ -7012,8 +7006,8 @@ suppress_error_on_open_flag:
         sta     cached_window_id
     END_IF
 
-        pla                     ; A = check vol flag
-    IF_NS
+        plp                     ; C = check vol flag
+    IF_CS
         lda     selected_window_id
       IF_ZERO
         ;; Volume icon - check that it's still valid.
@@ -7151,9 +7145,9 @@ vol_kb_used:  .word   0
         sub16   filerecords_free_start, window_filerecord_table,x, deltam
         inc     index
 
-loop2:  lda     index
-        cmp     window_id_to_filerecord_list_count
-        jeq     finish
+    DO
+        lda     index
+        BREAK_IF_A_EQ window_id_to_filerecord_list_count
 
         lda     index
         asl     a
@@ -7161,16 +7155,13 @@ loop2:  lda     index
         sub16   window_filerecord_table+2,x, window_filerecord_table,x, size
         add16   window_filerecord_table-2,x, size, window_filerecord_table,x
         inc     index
-        jmp     loop2
+    WHILE_NOT_ZERO              ; always
 
-finish:
         ;; Update "start of free memory" pointer
         lda     window_id_to_filerecord_list_count
-        sec
-        sbc     #1
         asl     a
         tax
-        add16   window_filerecord_table,x, deltam, filerecords_free_start
+        add16   window_filerecord_table-2,x, deltam, filerecords_free_start
         rts
 .endproc ; RemoveWindowFileRecords
 
@@ -7217,11 +7208,12 @@ copy_new_window_bounds_flag:
         cmp16   bbox_dx, #kMaxWindowWidth
         bcs     use_maxw
         ldax    bbox_dx
-        jmp     assign_width
+        bcc     assign_width    ; always
 
 use_minw:
         ldax    #kMinWindowWidth
-        jmp     assign_width
+        ASSERT_EQUALS .hibyte(::kMinWindowWidth), 0
+        beq     assign_width    ; always
 
 use_maxw:
         ldax    #kMaxWindowWidth
@@ -7245,11 +7237,12 @@ assign_width:
         cmp16   bbox_dy, #kMaxWindowHeight
         bcs     use_maxh
         ldax    bbox_dy
-        jmp     assign_height
+        bcc     assign_height   ; always
 
 use_minh:
         ldax    #kMinWindowHeight
-        jmp     assign_height
+        ASSERT_EQUALS .hibyte(::kMinWindowHeight), 0
+        beq     assign_height   ; always
 
 use_maxh:
         ldax    #kMaxWindowHeight
@@ -8382,7 +8375,7 @@ set_pos:
         jsr     ReadSetting
         sta     deci_sep
 
-        copy8   #0, frac_flag
+        CLEAR_BIT7_FLAG frac_flag
         cmp16   value, #20
     IF_LT
         lsr16   value        ; Convert blocks to K, rounding up
@@ -8408,7 +8401,7 @@ set_pos:
 
         ;; Append ".5" if needed
         frac_flag := *+1
-        lda     #SELF_MODIFIED_BYTE
+        lda     #SELF_MODIFIED_BYTE ; bit7
     IF_NS
         deci_sep := *+1
         lda     #SELF_MODIFIED_BYTE
@@ -9437,10 +9430,7 @@ kMaxAnimationStep = 7
         ptr := $06
         rect_table := $800
 
-close:  sec
-        .byte   OPC_BCC         ; masks next byte
-open:   clc
-        ror     close_flag
+        ENTRY_POINTS_FOR_BIT7_FLAG close, open, close_flag
 
         sta     icon_param
         txa                     ; A = window_id
@@ -9702,7 +9692,7 @@ target_is_icon:
 ;;; Caller sets `path_buf3` (source) and `path_buf4` (destination)
 .proc DoCopyFile
         copy8   #kOperationFlagsCheckBadCopy, operation_flags
-        copy8   #0, move_flag
+        copy8   #0, move_flags
         tsx
         stx     saved_stack
 
@@ -9726,9 +9716,9 @@ FinishOperation:
 ;;; Shortcuts > Run a Shortcut... w/ "Copy to RAMCard"/"at first use"
 ;;; Caller sets `path_buf3` (source) and `path_buf4` (destination)
 .proc DoCopyToRAM
-        copy8   #0, move_flag
+        copy8   #0, move_flags
         copy8   #kOperationFlagsCheckVolFree, operation_flags
-        copy8   #0, dst_is_appleshare_flag  ; by definition, not AppleShare
+        CLEAR_BIT7_FLAG dst_is_appleshare_flag  ; by definition, not AppleShare
         tsx
         stx     saved_stack
 
@@ -9756,7 +9746,7 @@ FinishOperation:
 ep_always_copy:
         lda     #0              ; do not convert to `copy8`!
 
-        sta     move_flag
+        sta     move_flags
 
         copy8   #kOperationFlagsCheckBadCopy, operation_flags
         tsx
@@ -9772,7 +9762,7 @@ DoCopySelection := DoCopyOrMoveSelection::ep_always_copy
 ;;; File > Delete
 ;;; Drag / Drop to Trash (except volumes)
 .proc DoDeleteSelection
-        copy8   #0, move_flag
+        copy8   #0, move_flags
         copy8   #kOperationFlagsNone, operation_flags
         tsx
         stx     saved_stack
@@ -9807,8 +9797,8 @@ iterate_selection:
         ;; If copy, validate the source vs. target during enumeration phase
         ;; NOTE: Here rather than in `CopyProcessSelectedFile` because we don't
         ;; run this for copy using paths (i.e. Duplicate, Copy to RAMCard)
-        lda     do_op_flag
-       IF_ZERO
+        bit     do_op_flag
+       IF_NC
         bit     operation_flags
         ASSERT_EQUALS operations::kOperationFlagsCheckBadCopy, $40
         IF_VS
@@ -9846,8 +9836,8 @@ iterate_selection:
         ;; --------------------------------------------------
 
         ;; Done icons - did we complete the operation?
-        lda     do_op_flag
-    IF_NE
+        bit     do_op_flag
+    IF_NS
         jsr     InvokeOperationCompleteCallback
         return  #0
     END_IF
@@ -9872,7 +9862,7 @@ operation_flags:
 
         ;; bit 7 set = move, clear = copy
         ;; bit 6 set = same volume move and relink supported
-move_flag:
+move_flags:
         .byte   0
 
         ;; bit 7 set = "all" selected in Yes / No / All prompt
@@ -10009,7 +9999,7 @@ OpFinishDirectory:
 
 DoNothing:   rts
 
-;;; 0 for count/size pass, non-zero for actual operation
+;;; bit7=0 for count/size pass, bit7=1 for actual operation
 do_op_flag:
         .byte   0
 
@@ -10109,7 +10099,7 @@ eof:    return  #$FF
 ;;; Input: Destination path in `path_buf4`
 ;;; Output: `dst_is_appleshare_flag` is set
 .proc SetDstIsAppleShareFlag
-        copy8   #0, dst_is_appleshare_flag
+        CLEAR_BIT7_FLAG dst_is_appleshare_flag
 
         ;; Issue a `GET_FILE_INFO` on destination to set `DEVNUM`
 retry:  param_call GetFileInfo, path_buf4
@@ -10122,7 +10112,7 @@ retry:  param_call GetFileInfo, path_buf4
         copy8   DEVNUM, vol_key_block_params::unit_num
         MLI_CALL READ_BLOCK, vol_key_block_params
     IF_A_EQ     #ERR_NETWORK_ERROR
-        copy8   #$80, dst_is_appleshare_flag
+        SET_BIT7_FLAG dst_is_appleshare_flag
     END_IF
         rts
 .endproc ; SetDstIsAppleShareFlag
@@ -10173,30 +10163,30 @@ loop:   jsr     ReadFileEntry
         ;; During directory iteration, allow Escape to cancel the operation.
         jsr     CheckCancel
 
-        copy8   #0, cancel_descent_flag
+        CLEAR_BIT7_FLAG continue_descent_flag
         jsr     OpProcessDirectoryEntry
-        lda     cancel_descent_flag
-        bne     loop
+        bit     continue_descent_flag
+        bmi     loop
 
         lda     file_entry_buf + FileEntry::file_type
         cmp     #FT_DIRECTORY
         bne     loop
         jsr     PrepToOpenDir
         inc     process_depth
-        jmp     loop
+        bpl     loop            ; always
 
 end_dir:
         lda     process_depth
     IF_NOT_ZERO
         jsr     FinishDir
         dec     process_depth
-        jmp     loop
+        bpl     loop            ; always
     END_IF
 
         jmp     CloseSrcDir
 .endproc ; ProcessDir
 
-cancel_descent_flag:  .byte   0
+continue_descent_flag:  .byte   0 ; bit7
 
 ;;; ============================================================
 
@@ -10251,7 +10241,7 @@ operation_traversal_callbacks_for_copy:
         stax    file_count
         stax    total_count
         jsr     SetPortForProgressDialog
-        bit     move_flag
+        bit     move_flags
     IF_NC
         param_call DrawProgressDialogLabel, 0, aux::str_copy_copying
     ELSE
@@ -10275,8 +10265,8 @@ operation_lifecycle_callbacks_for_copy:
 .proc PrepTraversalCallbacksForCopy
         COPY_BYTES kOpTraversalCallbacksSize, operation_traversal_callbacks_for_copy, operation_traversal_callbacks
 
-        copy8   #0, operations::all_flag
-        copy8   #1, do_op_flag
+        CLEAR_BIT7_FLAG operations::all_flag
+        SET_BIT7_FLAG do_op_flag
         rts
 .endproc ; PrepTraversalCallbacksForCopy
 
@@ -10286,8 +10276,8 @@ operation_lifecycle_callbacks_for_copy:
 .proc PrepTraversalCallbacksForDownload
         COPY_BYTES kOpTraversalCallbacksSize, operation_traversal_callbacks_for_copy, operation_traversal_callbacks
 
-        copy8   #$80, operations::all_flag
-        copy8   #1, do_op_flag
+        SET_BIT7_FLAG operations::all_flag
+        SET_BIT7_FLAG do_op_flag
         rts
 .endproc ; PrepTraversalCallbacksForDownload
 
@@ -10304,13 +10294,13 @@ operation_lifecycle_callbacks_for_copy:
 .proc CopyProcessFileImpl
         ;; Normal handling, via `CopyProcessSelectedFile`
 selected:
-        ;; Caller sets `move_flag` appropriately
+        ;; Caller sets `move_flags` appropriately
         lda     #$80
         SKIP_NEXT_2_BYTE_INSTRUCTION
 
         ;; Via File > Duplicate or copying to RAMCard
 not_selected:
-        ;; Caller sets `move_flag` to $00
+        ;; Caller sets `move_flags` to $00
         lda     #0
 
         pha                     ; A = use selection?
@@ -10362,7 +10352,7 @@ retry:  jsr     GetSrcFileInfo
         jsr     TryCreateDst
         bcs     done
 
-        bit     move_flag       ; same volume relink move?
+        bit     move_flags      ; same volume relink move?
     IF_VS
         jmp     RelinkFile
     END_IF
@@ -10376,7 +10366,7 @@ dir:
         jsr     TryCreateDst
         bcs     done
 
-        bit     move_flag       ; same volume relink move?
+        bit     move_flags      ; same volume relink move?
     IF_VS
         jsr     RelinkFile
         jmp     NotifyPathChanged
@@ -10387,7 +10377,7 @@ dir:
         jsr     GetAndApplySrcInfoToDst ; copy modified date/time
         jsr     MaybeFinishFileMove
 
-        bit     move_flag
+        bit     move_flags
     IF_NS
         jsr     NotifyPathChanged
     END_IF
@@ -10427,7 +10417,7 @@ done:
         ;; Directory
         jsr     TryCreateDst
         bcc     ok_dir          ; leave dst path segment in place for recursion
-        copy8   #$FF, cancel_descent_flag
+        SET_BIT7_FLAG continue_descent_flag
 
         ;; --------------------------------------------------
 
@@ -10447,7 +10437,7 @@ ok_dir: jsr     RemoveSrcPathSegment
 
 .proc MaybeFinishFileMove
         ;; Copy or move?
-        bit     move_flag
+        bit     move_flags
     IF_NS
         ;; Was a move - delete file
 retry:  MLI_CALL DESTROY, destroy_src_params
@@ -10562,7 +10552,7 @@ retry:  copy8   dst_path_buf, saved_length
 
         ;; Show appropriate message
         ldax    #aux::str_large_copy_prompt
-        bit     move_flag
+        bit     move_flags
     IF_NS
         ldax    #aux::str_large_move_prompt
     END_IF
@@ -10588,7 +10578,7 @@ existing_size:
 ;;; Output: C=0 on success, C=1 on failure
 
 .proc TryCreateDst
-        bit     move_flag       ; same volume relink move?
+        bit     move_flags      ; same volume relink move?
     IF_VC
         ;; No, verify that there is room.
         jsr     CheckSpaceAndShowPrompt
@@ -10644,7 +10634,7 @@ retry:  jsr     GetDstFileInfo
         beq     failure
         cmp     #kAlertResultAll
         bne     cancel
-        copy8   #$80, operations::all_flag
+        SET_BIT7_FLAG operations::all_flag
 yes:
         MLI_CALL DESTROY, destroy_dst_params
         bcs     retry
@@ -10897,7 +10887,7 @@ Start:  lda     DEVNUM
         jsr     _OpenDst
     IF_NOT_ZERO
         ;; Destination not available; note it, can prompt later
-        copy8   #$FF, src_dst_exclusive_flag
+        SET_BIT7_FLAG src_dst_exclusive_flag
     END_IF
 
         ;; Read
@@ -10921,7 +10911,7 @@ write:  bit     src_eof_flag
 
         MLI_CALL SET_MARK, mark_src_params
         bcc     read
-        copy8   #$FF, src_eof_flag
+        SET_BIT7_FLAG src_eof_flag
         jmp     read
 
         ;; EOF
@@ -10977,7 +10967,7 @@ retry:  MLI_CALL READ, read_src_params
         lda     read_src_params::trans_count
         ora     read_src_params::trans_count+1
         bne     :+
-eof:    copy8   #$FF, src_eof_flag
+eof:    SET_BIT7_FLAG src_eof_flag
 :       MLI_CALL GET_MARK, mark_src_params
         rts
 .endproc ; _ReadSrc
@@ -11082,7 +11072,7 @@ src_dst_exclusive_flag:
         .byte   0
 
 src_eof_flag:
-        .byte   0
+        .byte   0               ; bit7
 
 .endproc ; DoFileCopy
 
@@ -11148,8 +11138,8 @@ operation_lifecycle_callbacks_for_delete:
 .proc PrepTraversalCallbacksForDelete
         COPY_BYTES kOpTraversalCallbacksSize, operation_traversal_callbacks_for_delete, operation_traversal_callbacks
 
-        copy8   #0, operations::all_flag
-        copy8   #1, do_op_flag
+        CLEAR_BIT7_FLAG operations::all_flag
+        SET_BIT7_FLAG do_op_flag
         rts
 .endproc ; PrepTraversalCallbacksForDelete
 
@@ -11213,8 +11203,8 @@ retry:  MLI_CALL DESTROY, destroy_src_params
         beq     unlock
         cmp     #kAlertResultAll
         bne     :+
-        copy8   #$80, operations::all_flag
-        bne     unlock          ; always
+        SET_BIT7_FLAG operations::all_flag
+        bmi     unlock          ; always
 :       jmp     CloseFilesCancelDialogWithFailedResult
 
 unlock: jsr     UnlockSrcFile
@@ -11335,7 +11325,7 @@ retry:  jsr     GetSrcFileInfo
         ;; `src_file_info_params` populated.
         jsr     EnumerationProcessDirectoryEntry
 
-        bit     move_flag       ; same volume relink move?
+        bit     move_flags      ; same volume relink move?
         RTS_IF_VS
 
 is_dir:
@@ -11543,8 +11533,8 @@ map:    .byte   FileEntry::access
     END_IF
         rts
 
-cancel: lda     do_op_flag
-        beq     CloseFilesCancelDialogWithCanceledResult
+cancel: bit     do_op_flag
+        bpl     CloseFilesCancelDialogWithCanceledResult
         FALL_THROUGH_TO CloseFilesCancelDialogWithFailedResult
 .endproc ; CheckCancel
 
@@ -11761,8 +11751,6 @@ ShowErrorAlertDst       := ShowErrorAlertImpl::flag_set
 ;;; Assert: At least one icon is selected
 
 .proc DoGetInfo
-        lda     selected_icon_count
-        RTS_IF_ZERO
 
         ;; --------------------------------------------------
         ;; Loop over selected icons
@@ -11771,14 +11759,15 @@ ShowErrorAlertDst       := ShowErrorAlertImpl::flag_set
         sta     icon_index
         sta     result_flag
 
-loop:   ldx     icon_index
+loop:
+        icon_index := *+1
+        ldx     #SELF_MODIFIED_BYTE
         cpx     selected_icon_count
         jeq     done
 
-        ldx     icon_index
         lda     selected_icon_list,x
         cmp     trash_icon_num
-        jeq     next
+        beq     next
 
         ;; --------------------------------------------------
         ;; Get the file / volume info from ProDOS
@@ -11803,7 +11792,7 @@ common: jsr     GetSrcFileInfo
         lda     selected_window_id
     IF_ZERO
         ;; Volume - determine write-protect state
-        copy8   #0, write_protected_flag
+        CLEAR_BIT7_FLAG write_protected_flag
         ldx     icon_index
         lda     selected_icon_list,x
         jsr     IconToDeviceIndex
@@ -11815,7 +11804,7 @@ common: jsr     GetSrcFileInfo
        IF_CC
         MLI_CALL WRITE_BLOCK, getinfo_block_params
         IF_A_EQ #ERR_WRITE_PROTECTED
-        copy8   #$80, write_protected_flag
+        SET_BIT7_FLAG write_protected_flag
         END_IF
        END_IF
       END_IF
@@ -11848,9 +11837,7 @@ done:   copy8   #0, path_buf4
         lda     result_flag
         rts
 
-icon_index:
-        .byte   0
-result_flag:
+result_flag:                    ; bit7
         .byte   0
 vol_used_blocks:
         .word   0
@@ -11863,13 +11850,13 @@ write_protected_flag:
 ;;; Open and populate the dialog
 
 .proc _DialogOpen
-        copy8   #0, has_input_field_flag
+        CLEAR_BIT7_FLAG has_input_field_flag
 
-        lda     #$00            ; OK only
+        lda     #kPromptButtonsOKCancel
         ldx     icon_index
         inx
     IF_X_EQ     selected_icon_count
-        lda     #$80            ; OK/Cancel
+        lda     #kPromptButtonsOKOnly
     END_IF
         jsr     OpenPromptWindow
         jsr     SetPortForDialogWindow
@@ -12192,7 +12179,7 @@ do_nibble:
         bit     LCBANK1
         bit     LCBANK1
 
-        copy8   #$80, result_flag
+        SET_BIT7_FLAG result_flag
 
 ret:    return  #$FF
 .endproc ; _ToggleFileLock
@@ -12210,7 +12197,7 @@ ret:    return  #$FF
         DoDeleteSelection := operations::DoDeleteSelection
         DoCopyToRAM := operations::DoCopyToRAM
         DoCopyFile := operations::DoCopyFile
-        operations__move_flag := operations::move_flag
+        operations__move_flags := operations::move_flags
 
         DoGetInfo := operations::get_info::DoGetInfo
 
@@ -12464,7 +12451,7 @@ DoRename        := DoRenameImpl::start
 
         COPY_STRUCT MGTK::Point, tmp_rect::topleft, winfo_rename_dialog::viewloc
 
-        copy8   #0, cursor_ibeam_flag
+        CLEAR_BIT7_FLAG cursor_ibeam_flag
         jsr     SetCursorPointer
 
         MGTK_CALL MGTK::OpenWindow, winfo_rename_dialog
@@ -13609,7 +13596,7 @@ ignore: sec
         bit     cursor_ibeam_flag
     IF_NS
         jsr     SetCursorPointer ; toggle routine
-        copy8   #0, cursor_ibeam_flag
+        CLEAR_BIT7_FLAG cursor_ibeam_flag
     END_IF
         rts
 .endproc ; SetCursorPointerWithFlag
@@ -13618,7 +13605,7 @@ ignore: sec
         bit     cursor_ibeam_flag
     IF_NC
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
-        copy8   #$80, cursor_ibeam_flag
+        SET_BIT7_FLAG cursor_ibeam_flag
     END_IF
         rts
 .endproc ; SetCursorIBeamWithFlag
@@ -14073,7 +14060,7 @@ exit:
 
 ;;; ============================================================
 
-mli_relay_checkevents_flag:
+mli_relay_checkevents_flag:     ; bit7
         .byte   0
 
 .proc MLIRelayImpl
@@ -14214,7 +14201,8 @@ params:  .res    3
 
     IF_A_EQ     #DDL_VALUE
         copy16  #kDialogValueLeft, dialog_label_pos::xcoord
-        jmp     calc_y
+        ASSERT_EQUALS .hibyte(::kDialogValueLeft), 0
+        beq     calc_y
     END_IF
 
         ;; Compute text width
@@ -14910,6 +14898,8 @@ icontype_table:
         DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $2000, 33, IconType::graphics ; DHR image as FOT
         DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $4000, 33, IconType::graphics ; DHR image as FOT
         DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $5800, 3,  IconType::graphics ; Minipix as FOT
+        DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $400, 3,  IconType::graphics ; LR image as FOT
+        DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $400, 5,  IconType::graphics ; DLR image as FOT
 
         ;; Simple Mappings
         DEFINE_ICTRECORD $FF, FT_TEXT,      ICT_FLAGS_NONE, 0, 0, IconType::text          ; $04

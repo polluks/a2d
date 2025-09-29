@@ -1,5 +1,8 @@
 ;;; Render current time to right side of menu bar
 ;;;
+;;; `ShowClockForceUpdate`: force an update, even if time hasn't changed
+;;; `ShowClock`: only update if time has changed
+;;;
 ;;; Requires:
 ;;;    `ReadSetting` defined
 ;;;    `MGTK_CALL` defined
@@ -9,15 +12,9 @@
 ;;;    `str_4_spaces`
 
 .scope menuclock_impl
-;;; Entry point: force an update, even if time hasn't changed
-force_update:
-        copy8   #$80, force_flag
-        bne     common          ; always
+        ENTRY_POINTS_FOR_BIT7_FLAG force_update, normal, force_flag
 
-;;; Entry point: only update if time has changed
-normal: copy8   #0, force_flag
-
-common: lda     MACHID
+        lda     MACHID
         and     #kMachIDHasClock
         RTS_IF_ZERO
 
@@ -140,7 +137,7 @@ last_s1:.byte   0               ; previous settings
 last_s2:.byte   0               ; previous settings
 
 force_flag:
-        .byte   0               ; force update if high bit set
+        .byte   0               ; bit7 = force update
 .endscope ; menuclock_impl
 
 ;;; Exports

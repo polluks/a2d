@@ -14,6 +14,38 @@
         .byte   $2C             ; OPC_BIT_abs
 .endmacro
 
+.macro SET_BIT7_FLAG ident
+    .ifblank ident
+        .error "CLEAR_BIT7_FLAG without identifier!"
+    .endif
+        sec
+        ror     ident
+.endmacro
+
+.macro CLEAR_BIT7_FLAG ident
+    .ifblank ident
+        .error "CLEAR_BIT7_FLAG without identifier!"
+    .endif
+        clc
+        ror     ident
+.endmacro
+
+.macro ENTRY_POINTS_FOR_BIT7_FLAG ep_set, ep_clear, flag_name
+ep_set:
+        sec
+        .byte   $90             ; OPC_BCC
+ep_clear:
+        clc
+        ror     flag_name       ; C into bit7
+.endmacro
+
+;;; Inject a return address to the stack.
+.macro PUSH_RETURN_ADDRESS addr
+        lda     #>(addr-1)
+        pha
+        lda     #<(addr-1)
+        pha
+.endmacro
 
 ;;; ============================================================
 ;;; Strings
