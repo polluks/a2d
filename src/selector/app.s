@@ -256,7 +256,7 @@ str_selector_list:
 str_desktop:
         PASCAL_STRING kPathnameDeskTop
 
-        DEFINE_CLOSE_PARAMS close_params
+        DEFINE_CLOSE_PARAMS close_desktop_params
 
         DEFINE_OPEN_PARAMS open_selector_params, str_selector, $800
 
@@ -267,7 +267,7 @@ str_selector:
         DEFINE_SET_MARK_PARAMS set_mark_overlay2_params, kOverlayCopyDialogOffset
         DEFINE_READWRITE_PARAMS read_overlay1_params, OVERLAY_ADDR, kOverlayFileDialogLength
         DEFINE_READWRITE_PARAMS read_overlay2_params, OVERLAY_ADDR, kOverlayCopyDialogLength
-        DEFINE_CLOSE_PARAMS close_params2
+        DEFINE_CLOSE_PARAMS close_overlay_params
 
 str_desktop_2:
         PASCAL_STRING kPathnameDeskTop
@@ -683,7 +683,6 @@ menu_addr_table:
 
         SelChangeCallback := UpdateOKButton
         DEFINE_OPTION_PICKER op_record, winfo::kDialogId, kEntryPickerLeft, kEntryPickerTop, kEntryPickerRows, kEntryPickerCols, kEntryPickerItemWidth, kEntryPickerItemHeight, kEntryPickerTextHOffset, kEntryPickerTextVOffset, IsEntryCallback, DrawEntryCallback, SelChangeCallback
-        op_record__selected_index := op_record::selected_index
 
         DEFINE_OPTION_PICKER_PARAMS op_params, op_record
 
@@ -763,7 +762,7 @@ retry:
         sta     read_overlay1_params::ref_num
         MLI_CALL SET_MARK, set_mark_overlay1_params
         MLI_CALL READ, read_overlay1_params
-        MLI_CALL CLOSE, close_params2
+        MLI_CALL CLOSE, close_overlay_params
 
         ;; Invoke file dialog
         jsr     file_dialog_init
@@ -884,7 +883,7 @@ noop:   rts
         lda     open_desktop_params::ref_num
         sta     read_desktop_params::ref_num
         MLI_CALL READ, read_desktop_params
-        MLI_CALL CLOSE, close_params
+        MLI_CALL CLOSE, close_desktop_params
         jmp     desktop_load_addr
 .endproc ; RunDesktop
 
@@ -1041,7 +1040,7 @@ entries_flag_table:
         lda     open_selector_list_params::ref_num
         sta     read_selector_list_params::ref_num
         MLI_CALL READ, read_selector_list_params
-        MLI_CALL CLOSE, close_params
+        MLI_CALL CLOSE, close_desktop_params
 
 cache:  copy8   selector_list + kSelectorListNumPrimaryRunListOffset, num_primary_run_list_entries
         copy8   selector_list + kSelectorListNumSecondaryRunListOffset, num_secondary_run_list_entries
@@ -1058,7 +1057,7 @@ start:  MLI_CALL OPEN, open_selector_params
         sta     read_overlay2_params::ref_num
         MLI_CALL SET_MARK, set_mark_overlay2_params
         MLI_CALL READ, read_overlay2_params
-        MLI_CALL CLOSE, close_params2
+        MLI_CALL CLOSE, close_overlay_params
         rts
 
 error:  lda     #AlertID::insert_system_disk
@@ -1317,7 +1316,7 @@ hi:     .byte   0
         lda     (ptr),y
         clc
         adc     #3
-        sta     text_params__length
+        sta     text_params::length
 
         pla
     IF_A_GE     #8              ; first 8?
@@ -1343,7 +1342,6 @@ common: MGTK_CALL MGTK::DrawText, text_params
 data:   .addr   entry_string_buf+1
 length: .byte   SELF_MODIFIED_BYTE
 .endparams
-        text_params__length := text_params::length
 .endproc ; DrawEntryCallback
 
 ;;; ============================================================
@@ -1424,7 +1422,7 @@ start:
         jsr     CopyPathToInvokerPrefix
 
         jsr     LoadOverlayCopyDialog ; Trashes in-memory selector list
-        jsr     file_copier__Exec
+        jsr     ::file_copier::Exec
         pha
         jsr     LoadSelectorList
         jsr     CheckAndClearUpdates
@@ -1652,16 +1650,16 @@ check_path:
 
         MLI_CALL OPEN, open_params
         bcs     err
-        lda     open_params__ref_num
-        sta     read_params__ref_num
-        sta     close_params__ref_num
+        lda     open_params::ref_num
+        sta     read_params::ref_num
+        sta     close_params::ref_num
         MLI_CALL READ, read_params
         php
         MLI_CALL CLOSE, close_params
         plp
         bcs     err
 
-        lda     read_params__trans_count
+        lda     read_params::trans_count
         cmp     #kLinkFilePathLengthOffset
         bcc     err
 
@@ -1685,12 +1683,8 @@ check_header:
         kCheckHeaderLength = * - check_header
 
         DEFINE_OPEN_PARAMS open_params, INVOKER_PREFIX, io_buf
-        open_params__ref_num := open_params::ref_num
         DEFINE_READWRITE_PARAMS read_params, read_buf, kLinkFileMaxSize
-        read_params__ref_num := read_params::ref_num
-        read_params__trans_count := read_params::trans_count
         DEFINE_CLOSE_PARAMS close_params
-        close_params__ref_num := close_params::ref_num
 
 .endproc ; ReadLinkFile
 
@@ -1962,7 +1956,6 @@ loop_counter:
 ;;; ============================================================
 
 .endscope ; app
-        app__entry := app::entry
 
         ENDSEG SegmentApp
         ASSERT_ADDRESS OVERLAY_ADDR

@@ -838,7 +838,9 @@ prev_selected_icon:
         ;; (2/4) Was a move?
         ;; NOTE: Only applies in file icon case.
 
-        bit     operations__move_flags
+        PREDEFINE_SCOPE ::main::operations
+
+        bit     operations::move_flags
     IF_NS
         ;; Update source vol's contents
         jsr     MaybeStashDropTargetName ; in case target is in window...
@@ -1056,7 +1058,7 @@ check_disk_in_drive:
         jsr     FindSmartportDispatchAddress
     IF_CC                       ; is SmartPort
         stax    dispatch
-        sty     status_unit_num
+        sty     status_params::unit_num
 
         ;; Execute SmartPort call
         dispatch := *+1
@@ -1081,7 +1083,6 @@ finish: pla
 
         ;; params for call
         DEFINE_SP_STATUS_PARAMS status_params, 1, status_buffer, 0
-        status_unit_num := status_params::unit_num
 .endproc ; CheckDisksInDevices
 
 ;;; ============================================================
@@ -1608,16 +1609,16 @@ LaunchFileWithPathOnSystemDisk := LaunchFileWithPath::sys_disk
 
         MLI_CALL OPEN, open_params
         bcs     err
-        lda     open_params__ref_num
-        sta     read_params__ref_num
-        sta     close_params__ref_num
+        lda     open_params::ref_num
+        sta     read_params::ref_num
+        sta     close_params::ref_num
         MLI_CALL READ, read_params
         php
         MLI_CALL CLOSE, close_params
         plp
         bcs     err
 
-        lda     read_params__trans_count
+        lda     read_params::trans_count
     IF_A_GE     #kLinkFilePathLengthOffset
 
         ldx     #kCheckHeaderLength-1
@@ -1643,12 +1644,8 @@ check_header:
         kCheckHeaderLength = * - check_header
 
         DEFINE_OPEN_PARAMS open_params, src_path_buf, $1C00
-        open_params__ref_num := open_params::ref_num
         DEFINE_READWRITE_PARAMS read_params, read_buf, kLinkFileMaxSize
-        read_params__ref_num := read_params::ref_num
-        read_params__trans_count := read_params::trans_count
         DEFINE_CLOSE_PARAMS close_params
-        close_params__ref_num := close_params::ref_num
 
 .endproc ; ReadLinkFile
 
@@ -1812,7 +1809,7 @@ devlst_backup:
 
         ;; Invoke routine
         lda     menu_click_params::item_num
-        jsr     selector_picker__Exec
+        jsr     SelectorPickOverlay::Exec
         sta     result
 
         ;; Restore from overlays
@@ -2163,7 +2160,7 @@ CmdDeskAcc      := CmdDeskAccImpl::start
 ;;;        Y = icon id to animate ($FF for none)
 
 .proc InvokeDeskAccWithIcon
-        stax    open_pathname
+        stax    open_params::pathname
 
         tya
         sta     icon            ; can't use stack, as DAs can modify
@@ -2182,27 +2179,27 @@ retry:  MLI_CALL OPEN, open_params
         rts                     ; cancel, so fail
     END_IF
 
-        lda     open_ref_num
-        sta     read_header_ref_num
-        sta     read_ref_num
-        sta     close_ref_num
+        lda     open_params::ref_num
+        sta     read_header_params::ref_num
+        sta     read_params::ref_num
+        sta     close_params::ref_num
         MLI_CALL READ, read_header_params
 
-        lda     DAHeader__aux_length
-        ora     DAHeader__aux_length+1
+        lda     DAHeader::aux_length
+        ora     DAHeader::aux_length+1
         beq     main
 
         ;; Aux memory segment
-        copy16  DAHeader__aux_length, read_request_count
+        copy16  DAHeader::aux_length, read_params::request_count
         MLI_CALL READ, read_params
         copy16  #DA_LOAD_ADDRESS, STARTLO
         copy16  #DA_LOAD_ADDRESS, DESTINATIONLO
-        add16   #DA_LOAD_ADDRESS-1, DAHeader__aux_length, ENDLO
+        add16   #DA_LOAD_ADDRESS-1, DAHeader::aux_length, ENDLO
         sec                     ; main>aux
         jsr     AUXMOVE
 
         ;; Main memory segment
-main:   copy16  DAHeader__main_length, read_request_count
+main:   copy16  DAHeader::main_length, read_params::request_count
         MLI_CALL READ, read_params
         MLI_CALL CLOSE, close_params
 
@@ -2228,22 +2225,11 @@ main:   copy16  DAHeader__main_length, read_request_count
 aux_length:     .word   0
 main_length:    .word   0
 .endparams
-        DAHeader__aux_length := DAHeader::aux_length
-        DAHeader__main_length := DAHeader::main_length
 
         DEFINE_OPEN_PARAMS open_params, 0, DA_IO_BUFFER
-        open_ref_num := open_params::ref_num
-        open_pathname := open_params::pathname
-
         DEFINE_READWRITE_PARAMS read_header_params, DAHeader, .sizeof(DAHeader)
-        read_header_ref_num := read_header_params::ref_num
-
         DEFINE_READWRITE_PARAMS read_params, DA_LOAD_ADDRESS, kDAMaxSize
-        read_ref_num := read_params::ref_num
-        read_request_count := read_params::request_count
-
         DEFINE_CLOSE_PARAMS close_params
-        close_ref_num := close_params::ref_num
 
 .endproc ; InvokeDeskAccWithIcon
 
@@ -2329,7 +2315,7 @@ main_length:    .word   0
         jsr     LoadDynamicRoutine
         RTS_IF_NS
 
-        jsr     FileCopyOverlay__Run
+        jsr     ::FileCopyOverlay::Run
         pha                     ; A = dialog result
         lda     #kDynamicRoutineRestoreFD
         jsr     RestoreDynamicRoutine
@@ -3479,7 +3465,7 @@ exec:   lda     #kDynamicRoutineFormatErase
         ldx     #SELF_MODIFIED_BYTE
         action := *+1
         lda     #SELF_MODIFIED_BYTE
-        jsr     format_erase_overlay__Exec
+        jsr     ::FormatEraseOverlay::Exec
         RTS_IF_NOT_ZERO
 
         txa
@@ -8963,18 +8949,19 @@ map_delta_y:    .word   0
 ;;;
 ;;; Uses start of $800 as a param buffer
 
-dib_buffer := $800
-        DEFINE_SP_STATUS_PARAMS status_params, 1, dib_buffer, 3 ; Return Device Information Block (DIB)
-
 ;;; Roughly follows:
 ;;; Technical Note: ProDOS #21: Identifying ProDOS Devices
 ;;; https://web.archive.org/web/2007/http://web.pdx.edu/~heiss/technotes/pdos/tn.pdos.21.html
 
-.proc GetDeviceType
+.proc GetDeviceTypeImpl
+dib_buffer := $800
+        DEFINE_SP_STATUS_PARAMS status_params, 1, dib_buffer, 3 ; Return Device Information Block (DIB)
+
         ;; Avoid Initializer memory ($800-$1200)
         block_buffer := $1E00
 
-        sta     unit_number
+start:
+        sta     block_params::unit_num
 
         ;; Special case for RAM.DRV.SYSTEM/RAMAUX.SYSTEM
     IF_A_EQ_ONE_OF #kRamDrvSystemUnitNum, #kRamAuxSystemUnitNum
@@ -9006,7 +8993,7 @@ vdrive: ldax    #str_device_type_vdrive
 :
         ;; Is Disk II? A dedicated test that takes advantage of the
         ;; fact that Disk II devices are never remapped.
-        lda     unit_number
+        lda     block_params::unit_num
         jsr     IsDiskII
     IF_ZS
         ldax    #str_device_type_diskii
@@ -9015,13 +9002,13 @@ vdrive: ldax    #str_device_type_vdrive
     END_IF
 
         ;; Look up driver address
-        lda     unit_number
+        lda     block_params::unit_num
         jsr     DeviceDriverAddress ; Z=1 if $Cn
         bvs     is_sp
         jne     generic         ; not $CnXX, unknown type
 
         ;; Firmware driver; maybe SmartPort?
-is_sp:  lda     unit_number
+is_sp:  lda     block_params::unit_num
         jsr     FindSmartportDispatchAddress
         bcs     not_sp
         stax    dispatch
@@ -9130,7 +9117,7 @@ test_size:
         kMax525FloppyBlocks = 280
         kMax35FloppyBlocks = 1600
 
-        lda     unit_number
+        lda     block_params::unit_num
         jsr     GetBlockCount
     IF_CC
         stax    blocks
@@ -9153,11 +9140,11 @@ f35:    ldax    #dib_buffer+SPDIB::ID_String_Length
         rts
 
         DEFINE_READWRITE_BLOCK_PARAMS block_params, block_buffer, kVolumeDirKeyBlock
-        unit_number := block_params::unit_num
 
 blocks: .word   0
 
-.endproc ; GetDeviceType
+.endproc ; GetDeviceTypeImpl
+GetDeviceType := GetDeviceTypeImpl::start
 
 ;;; ============================================================
 ;;; Get the block count for a given unit number.
@@ -10288,6 +10275,7 @@ eof:    return  #$FF
      IF_A_GE  #ST_TREE_FILE+1 ; only seedling/sapling/tree supported
         ;; Unsupported type - show error, and either abort or return failure
         param_call ShowAlertParams, AlertButtonOptions::OKCancel, aux::str_alert_unsupported_type
+        jsr     SetCursorWatch  ; preserves A
         cmp     #kAlertResultCancel
         jeq     CloseFilesCancelDialogWithFailedResult
         sec
@@ -10622,6 +10610,15 @@ blocks_free:
 
 ;;; Assert: `src_file_info_params` is populated
 .proc CheckSpaceAndShowPrompt
+
+        ;; Copying a volume? If so, `src_file_info_params` has total
+        ;; blocks used on the volume, which isn't useful for an
+        ;; incremental copy.
+        lda     src_file_info_params::storage_type
+    IF_A_EQ     #ST_VOLUME_DIRECTORY
+        clc
+        rts
+    END_IF
 
         ;; --------------------------------------------------
         ;; Check how much space is available on the target volume
@@ -10996,7 +10993,7 @@ Start:  lda     DEVNUM
         sta     mark_dst_params::position+2
 
         jsr     _OpenSrc
-        jsr     _OpenDst
+        jsr     _OpenDstOrFail
     IF_NOT_ZERO
         ;; Destination not available; note it, can prompt later
         SET_BIT7_FLAG src_dst_exclusive_flag
@@ -11007,9 +11004,7 @@ read:   jsr     _ReadSrc
         bit     src_dst_exclusive_flag
         bpl     write
         jsr     _CloseSrc       ; swap if necessary
-    DO
         jsr     _OpenDst
-    WHILE_NOT_ZERO
         MLI_CALL SET_MARK, mark_dst_params
 
         ;; Write
@@ -11045,26 +11040,35 @@ retry:  MLI_CALL OPEN, open_src_params
         sta     read_src_params::ref_num
         sta     close_src_params::ref_num
         sta     mark_src_params::ref_num
-        return  #0
+        rts
 .endproc ; _OpenSrc
 
-.proc _OpenDst
+.proc _OpenDstImpl
+        ENTRY_POINTS_FOR_BIT7_FLAG fail_ok, no_fail, fail_ok_flag
+
 retry:  MLI_CALL OPEN, open_dst_params
     IF_CS
-      IF_A_NE   #ERR_VOL_NOT_FOUND
-        jsr     ShowErrorAlertDst
-        jmp     retry
+        fail_ok_flag := *+1
+        ldy     #SELF_MODIFIED_BYTE
+      IF_NS
+        cmp     #ERR_VOL_NOT_FOUND
+        beq     finish
       END_IF
         jsr     ShowErrorAlertDst
-        return  #ERR_VOL_NOT_FOUND
+        jmp     retry
     END_IF
 
-        lda     open_dst_params::ref_num
+finish:
+        pha                     ; A = result
+        lda     open_dst_params::ref_num ; harmless if failed
         sta     write_dst_params::ref_num
         sta     close_dst_params::ref_num
         sta     mark_dst_params::ref_num
-        return  #0
-.endproc ; _OpenDst
+        pla                     ; A = result, set N and Z
+        rts
+.endproc ; _OpenDstImpl
+_OpenDst := _OpenDstImpl::no_fail
+_OpenDstOrFail := _OpenDstImpl::fail_ok
 
 .proc _ReadSrc
         copy16  #kCopyBufferSize, read_src_params::request_count
@@ -12240,7 +12244,6 @@ ret:    return  #$FF
         DoDeleteSelection := operations::DoDeleteSelection
         DoCopyToRAM := operations::DoCopyToRAM
         DoCopyFile := operations::DoCopyFile
-        operations__move_flags := operations::move_flags
 
         DoGetInfo := operations::get_info::DoGetInfo
 
@@ -12736,8 +12739,8 @@ do_str2:
     IF_CC
         stax    status_dispatch
         stax    control_dispatch
-        sty     status_unit_number
-        sty     control_unit_number
+        sty     status_params::unit_num
+        sty     control_params::unit_number
 
         ;; Execute SmartPort call
         status_dispatch := *+1
@@ -12759,10 +12762,8 @@ do_str2:
         rts
 
         DEFINE_SP_STATUS_PARAMS status_params, SELF_MODIFIED_BYTE, dib_buffer, 3 ; Return Device Information Block (DIB)
-        status_unit_number := status_params::unit_num
-
         DEFINE_SP_CONTROL_PARAMS control_params, SELF_MODIFIED_BYTE, list, $04 ; For Apple/UniDisk 3.3: Eject disk
-        control_unit_number := control_params::unit_number
+
 list:   .word   0               ; 0 items in list
 .endproc ; SmartportEject
 
@@ -13146,8 +13147,6 @@ RestoreDynamicRoutine   := LoadDynamicRoutineImpl::restore
 ;;; Inputs: A,X = path
 ;;; Output: A = length
 
-        PROC_USED_IN_OVERLAY
-
 .proc RemovePathSegment
         jsr     PushPointers
 
@@ -13203,7 +13202,7 @@ finish: jsr     PopPointers     ; do not tail-call optimize!
 
         jsr     GetSrcFileInfo
         bcs     ret
-        copy8   DEVNUM, unit_number
+        copy8   DEVNUM, block_params::unit_num
 
         lda     src_file_info_params::storage_type
     IF_A_NE     #ST_VOLUME_DIRECTORY
@@ -13212,7 +13211,7 @@ finish: jsr     PopPointers     ; do not tail-call optimize!
 
         param_call GetFileEntryBlock, src_path_buf
         bcs     ret
-        stax    block_number
+        stax    block_params::block_num
 
         block_ptr := $08
         param_call GetFileEntryBlockOffset, block_buffer ; Y is already the entry number
@@ -13279,7 +13278,7 @@ ret:    rts
         ;; --------------------------------------------------
         ;; Volume
 
-        copy16  #kVolumeDirKeyBlock, block_number
+        copy16  #kVolumeDirKeyBlock, block_params::block_num
         MLI_CALL READ_BLOCK, block_params
         bcs     ret
 
@@ -13314,8 +13313,6 @@ get_case_bits_per_option_and_adjust_string:
         ;; --------------------------------------------------
         block_buffer := $800
         DEFINE_READWRITE_BLOCK_PARAMS block_params, block_buffer, SELF_MODIFIED
-        unit_number := block_params::unit_num
-        block_number := block_params::block_num
 .endproc ; ApplyCaseBits
 
 ;;; ============================================================
@@ -13969,9 +13966,9 @@ kEntriesPerBlock = $0D
         JUMP_TABLE_MLI_CALL OPEN, open_params
         jcs     exit
 
-        lda     open_params_ref_num
-        sta     read_params_ref_num
-        sta     close_params_ref_num
+        lda     open_params::ref_num
+        sta     read_params::ref_num
+        sta     close_params::ref_num
 
 next_block:
         ;; This is the block we're about to read; save for later.
@@ -14042,9 +14039,6 @@ exit:
         DEFINE_OPEN_PARAMS open_params, path_buf, io_buf
         DEFINE_READWRITE_PARAMS read_params, block_buf, BLOCK_SIZE
         DEFINE_CLOSE_PARAMS close_params
-        open_params_ref_num := open_params::ref_num
-        read_params_ref_num := read_params::ref_num
-        close_params_ref_num := close_params::ref_num
 
 .endproc ; GetFileEntryBlock
 
@@ -14273,7 +14267,7 @@ calc_y:
         bit     has_device_picker_flag
     IF_NS
         lda     #0
-        jsr     format_erase_overlay__ValidSelection ; preserves A
+        jsr     ::FormatEraseOverlay::ValidSelection ; preserves A
         bpl     set_state
         lda     #$80
         bne     set_state       ; always

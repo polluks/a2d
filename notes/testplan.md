@@ -575,12 +575,14 @@
 * Launch DeskTop. Find a folder containing files and folders. Copy the folder to another volume. Using File > Get Info, compare the source and destination folders and files (both the top level folder and nested folders). Verify that the creation and modification dates match the original.
 * Launch DeskTop. Drag a volume icon onto another volume icon (with sufficient capacity). Verify that no alert is shown. Repeat, but drag onto a volume window instead.
 * Launch DeskTop. Drag a volume icon onto a folder icon (with sufficient capacity). Verify that no alert is shown, and that the folder's creation and modification dates are unchanged. Repeat, but drag onto a folder window instead.
+* Launch DeskTop. Drag a volume icon onto another volume icon where there is not enough capacity for all of the files but there is capacity for some files. Verify that the copy starts and that when an alert is shown the progress dialog references a specific file, not the source volume itself.
 
 * Launch DeskTop. Open two windows containing multiple files. Select multiples files in the first window. File > Copy To.... Select the second window's location as a destination and click OK. During the initial count of the files, press Escape. Verify that the count is canceled and the progress dialog is closed, and that the second window's contents do not refresh.
 * Launch DeskTop. Open two windows containing multiple files. Select multiples files in the first window. File > Copy To.... Select the second window's location as a destination and click OK. After the initial count of the files is complete and the actual operation has started, press Escape. Verify that the second window's contents do refresh.
 
 * Launch DeskTop. Open a volume window. Create a new empty folder. Drag it to another volume. Verify that it is copied.
 
+* Configure a system with removable disks, e.g. Disk II in S6D1, and prepare two ProDOS disks with volume names `SRC` and `DST`, and a small file (2K or less is ideal) on `SRC`. Mount `SRC`. Launch DeskTop. Open `SRC` and select the file. File > Copy To.... Eject the disk and insert `DST`. Click Drives. Select `DST` and click OK. When prompted, insert the appropriate source and destination disks until the copy is complete. Inspect the contents of the file and verify that it was copied byte-for-byte correctly.
 
 ## File Deletion
 
@@ -834,7 +836,8 @@
 
 * Launch DeskTop. File > New Folder.... Name it with a .A2FC suffix. Verify that it still has a folder icon.
 
-* Launch DeskTop. Try to copy files including a GS/OS forked file in the selection. Verify that an alert is shown, with the filename visible in the progress dialog. Verify that if OK is clicked, the operation continues with other files, and if Cancel is clicked the operation is aborted.
+* Launch DeskTop. Try to copy files including a GS/OS forked file in the selection. Verify that an alert is shown, with the filename visible in the progress dialog. Verify that if OK is clicked, the operation continues with other files, and the watch cursor is shown.
+* Launch DeskTop. Try to copy files including a GS/OS forked file in the selection. Verify that an alert is shown, with the filename visible in the progress dialog. Verify that if Cancel is clicked the operation is aborted.
 * Launch DeskTop. Try to copy files including a GS/OS forked file contained in a selected folder. Verify that an alert is shown, with the filename visible in the progress dialog. Verify that if OK is clicked, the operation continues with other files, and if Cancel is clicked the operation is aborted.
 * Launch DeskTop. Try to delete files including a GS/OS forked file in the selection. Verify that an alert is shown, with the filename visible in the progress dialog. Verify that if OK is clicked, the operation continues with other files, and if Cancel is clicked the operation is aborted.
 * Launch DeskTop. Try to delete files including a GS/OS forked file contained in a selected folder. Verify that an alert is shown, with the filename visible in the progress dialog. Verify that if OK is clicked, the operation continues with other files, and if Cancel is clicked the operation is aborted. Note that non-empty directories will fail to be deleted.
