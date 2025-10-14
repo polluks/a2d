@@ -61,9 +61,7 @@ END_PARAM_BLOCK
         pla
         sta     params_hi
         adc     #>3
-        pha
-        txa
-        pha
+        phax
 
         ;; Save ZP
         PUSH_BYTES kBytesToSave, zp_start
@@ -182,7 +180,7 @@ grafport_win:   .tag    MGTK::GrafPort
         txa
 
         jsr     _CallIsEntryProc ; preserves A, sets N
-      IF_NC
+      IF NC
         point := tmp_space
 
         ;; Is a real entry - prep to draw it
@@ -206,7 +204,7 @@ grafport_win:   .tag    MGTK::GrafPort
 
         tax                     ; X = index
         inx
-    WHILE_X_NE  max_entries
+    WHILE X <> max_entries
 
         rts
 .endproc ; UpdateImpl
@@ -255,7 +253,7 @@ coords          .tag MGTK::Point
 
         ;; Is it valid?
         jsr     _CallIsEntryProc
-    IF_NS
+    IF NS
         lda     #$FF
     END_IF
         jmp     _SetSelectionAndNotify
@@ -288,26 +286,26 @@ key             .byte
 
 .proc _HandleKeyRight
         lda     oprc_selected_index
-    IF_NS
+    IF NS
         lda     #0              ; no selection, start at first
         sec
         sbc     oprc_num_rows
     END_IF
 
     REPEAT
-      IF_A_EQ   max_entries_minus_one
+      IF A = max_entries_minus_one
         lda     #0              ; last, wrap to first
       ELSE
         clc
         adc     oprc_num_rows
       END_IF
 
-      IF_A_GE   max_entries
+      IF A >= max_entries
         sec
         sbc     max_entries_minus_one
       END_IF
         jsr     _CallIsEntryProc
-    UNTIL_NC
+    UNTIL NC
 
         bpl     _SetSelectionAndNotify ; always
 .endproc ; _HandleKeyRight
@@ -317,7 +315,7 @@ key             .byte
 .proc _HandleKeyLeft
         lda     oprc_selected_index
         bmi     last            ; no selection, start at last
-    IF_ZERO                     ; or if first, start at last
+    IF ZERO                     ; or if first, start at last
 last:   lda     max_entries_minus_one
         clc
         adc     oprc_num_rows
@@ -326,12 +324,12 @@ last:   lda     max_entries_minus_one
     REPEAT
         sec
         sbc     oprc_num_rows
-      IF_NEG
+      IF NEG
         clc
         adc     max_entries_minus_one
       END_IF
         jsr     _CallIsEntryProc
-    UNTIL_NC
+    UNTIL NC
 
         bpl     _SetSelectionAndNotify ; always
 .endproc ; _HandleKeyLeft
@@ -340,22 +338,22 @@ last:   lda     max_entries_minus_one
 
 .proc _HandleKeyUp
         lda     oprc_selected_index
-    IF_NS
+    IF NS
         lda     max_entries     ; no selection, start with last
     END_IF
-    IF_EQ
+    IF EQ
         lda     max_entries     ; first, start with last
     END_IF
 
     REPEAT
         sec
         sbc     #1
-      IF_NEG
+      IF NEG
         lda     max_entries
-        CONTINUE_IF_NE          ; always
+        CONTINUE_IF NOT_ZERO    ; always
       END_IF
         jsr     _CallIsEntryProc
-    UNTIL_NC
+    UNTIL NC
 
         bpl     _SetSelectionAndNotify ; always
 .endproc ; _HandleKeyUp
@@ -364,18 +362,18 @@ last:   lda     max_entries_minus_one
 
 .proc _HandleKeyDown
         lda     oprc_selected_index
-    IF_NS
+    IF NS
         lda     #AS_BYTE(-1)    ; no selection, start at first
     END_IF
 
     REPEAT
         clc
         adc     #1
-      IF_A_EQ   max_entries
+      IF A = max_entries
         lda     #0
       END_IF
         jsr     _CallIsEntryProc
-    UNTIL_NC
+    UNTIL NC
 
         bpl     _SetSelectionAndNotify ; always
 .endproc ; _HandleKeyDown
@@ -420,7 +418,7 @@ new_selection   .byte
 ;;; ============================================================
 
 .proc _SetSelection
-        RTS_IF_A_EQ oprc_selected_index ; same as previous?
+        RTS_IF A = oprc_selected_index ; same as previous?
 
         pha                     ; A = new selection
         jsr     _SetPort
@@ -490,9 +488,7 @@ ret:    rts
         adc     oprc_top
 
         tay                     ; Y coord
-        pla
-        tax                     ; X coord hi
-        pla                     ; X coord lo
+        plax                    ; X coord
 
         rts
 .endproc ; _GetOptionPos

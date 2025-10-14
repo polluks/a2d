@@ -22,9 +22,7 @@
 .define res_string_slot_drive_pattern "Slot #  Schijf #"
 .define res_const_slot_drive_pattern_offset1 6
 .define res_const_slot_drive_pattern_offset2 16
-.define res_string_dos33_s_d_pattern "DOS 3.3 S#, D# "
-.define res_const_dos33_s_d_pattern_offset1 10
-.define res_const_dos33_s_d_pattern_offset2 14
+.define res_string_dos33 "DOS 3.3"
 .define res_string_dos33_disk_copy "DOS 3.3 schijfkopie"
 .define res_string_pascal_disk_copy "Pascal-schijfkopie"
 .define res_string_prodos_disk_copy "ProDOS-schijfkopie"
@@ -35,6 +33,9 @@
 .define res_string_prompt_insert_destination "Plaats de doelschijf en klik op OK."
 .define res_string_prompt_erase_prefix "Weet je zeker dat je wilt wissen \x22"
 .define res_string_prompt_erase_suffix "\x22?"
+.define res_string_prompt_erase_dos33_pattern "Weet je zeker dat je wilt u de DOS 3.3-schijf in slot # station # wissen?"
+.define res_const_prompt_erase_dos33_pattern_offset1 55
+.define res_const_prompt_erase_dos33_pattern_offset2 65
 .define res_string_prompt_erase_slot_drive_pattern "Weet je zeker dat je wilt u de schijf in slot # station # wissen?"
 .define res_const_prompt_erase_slot_drive_pattern_offset1 47
 .define res_const_prompt_erase_slot_drive_pattern_offset2 57

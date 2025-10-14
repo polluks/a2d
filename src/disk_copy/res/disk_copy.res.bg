@@ -22,9 +22,7 @@
 .define res_string_slot_drive_pattern "slot # disk #"
 .define res_const_slot_drive_pattern_offset1 6
 .define res_const_slot_drive_pattern_offset2 13
-.define res_string_dos33_s_d_pattern "DOS 3.3 S#, D# "
-.define res_const_dos33_s_d_pattern_offset1 10
-.define res_const_dos33_s_d_pattern_offset2 14
+.define res_string_dos33 "DOS 3.3"
 .define res_string_dos33_disk_copy "kopirane na dos 3.3 disk"
 .define res_string_pascal_disk_copy "kopirane na paskal disk"
 .define res_string_prodos_disk_copy "kopirane na prodos disk"
@@ -35,6 +33,9 @@
 .define res_string_prompt_insert_destination "postawi wtoriqt disk i }rakni OK."
 .define res_string_prompt_erase_prefix "siguren li si, ~e iska{ da iztrie{ \x22"
 .define res_string_prompt_erase_suffix "\x22?"
+.define res_string_prompt_erase_dos33_pattern "siguren li si, ~e iska{ da iztrie{ diska DOS 3.3 w slot # u-wo #?"
+.define res_const_prompt_erase_dos33_pattern_offset1 57
+.define res_const_prompt_erase_dos33_pattern_offset2 64
 .define res_string_prompt_erase_slot_drive_pattern "siguren li si, ~e iska{ da iztrie{ diska w slot # u-wo #?"
 .define res_const_prompt_erase_slot_drive_pattern_offset1 49
 .define res_const_prompt_erase_slot_drive_pattern_offset2 56

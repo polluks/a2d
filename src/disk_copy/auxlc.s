@@ -11,10 +11,12 @@
 
 kShortcutReadDisk = res_char_button_read_drive_shortcut
 
+default_block_buffer := main::default_block_buffer
+
 ;;; ============================================================
 
 ;;; number of alert messages
-kNumAlertMessages = 11
+kNumAlertMessages = 12
 
 kAlertMsgInsertSource           = 0 ; No bell, *
 kAlertMsgInsertDestination      = 1 ; No bell, *
@@ -23,10 +25,11 @@ kAlertMsgDestinationFormatFail  = 3 ; Bell
 kAlertMsgFormatError            = 4 ; Bell
 kAlertMsgDestinationProtected   = 5 ; Bell
 kAlertMsgConfirmEraseSlotDrive  = 6 ; No bell, X = unit number
-kAlertMsgCopySuccessful         = 7 ; No bell
-kAlertMsgCopyFailure            = 8 ; No bell
-kAlertMsgInsertSourceOrCancel   = 9 ; No bell, *
-kAlertMsgInsertDestinationOrCancel = 10 ; No bell, *
+kAlertMsgConfirmEraseDOS33      = 7 ; No bell, X = unit number
+kAlertMsgCopySuccessful         = 8 ; No bell
+kAlertMsgCopyFailure            = 9 ; No bell
+kAlertMsgInsertSourceOrCancel   = 10 ; No bell, *
+kAlertMsgInsertDestinationOrCancel = 11 ; No bell, *
 ;;; "Bell" or "No bell" determined by the `MaybeBell` proc.
 ;;; * = the 'InsertXOrCancel' variants are selected automatically when
 ;;; InsertX is specified if X flag is non-zero, and the unit number in
@@ -372,10 +375,8 @@ str_from_int:   PASCAL_STRING "000,000" ; filled in by IntToString
 str_slot_drive_pattern:
         PASCAL_STRING res_string_slot_drive_pattern
 
-str_dos33_s_d:
-        PASCAL_STRING res_string_dos33_s_d_pattern
-        kStrDOS33SlotOffset = res_const_dos33_s_d_pattern_offset1
-        kStrDOS33DriveOffset = res_const_dos33_s_d_pattern_offset2
+str_dos33:
+        PASCAL_STRING res_string_dos33
 
 str_dos33_disk_copy:
         PASCAL_STRING res_string_dos33_disk_copy
@@ -463,7 +464,7 @@ InitDialog:
         MGTK_CALL MGTK::MoveTo, point_title
         ldax    #label_quick_copy
         bit     disk_copy_flag
-    IF_NS
+    IF NS
         ldax    #label_disk_copy
     END_IF
         jsr     DrawStringCentered
@@ -549,7 +550,7 @@ prompt_insert_source:
         ldx     #0
         lda     #kAlertMsgInsertSource ; X=0 means just show alert
         jsr     ShowAlertDialog
-    IF_A_NE     #kAlertResultOK
+    IF A <> #kAlertResultOK
         jmp     InitDialog      ; Cancel
     END_IF
 
@@ -576,7 +577,7 @@ check_source_error:
 source_is_pro:
         lda     main::on_line_buffer2
         and     #$0F            ; mask off name length
-    IF_ZERO                     ; 0 signals error
+    IF ZERO                     ; 0 signals error
         lda     main::on_line_buffer2+1
         jmp     check_source_error
     END_IF
@@ -598,7 +599,7 @@ check_source_finish:
         ldx     #0
         lda     #kAlertMsgInsertDestination ; X=0 means just show alert
         jsr     ShowAlertDialog
-    IF_A_NE     #kAlertResultOK
+    IF A <> #kAlertResultOK
         jmp     InitDialog      ; Cancel
     END_IF
 
@@ -631,31 +632,41 @@ dest_ok:
 
         lda     main::on_line_buffer2
         and     #NAME_LENGTH_MASK
-    IF_ZERO
-        ;; Not ProDOS - try to read Pascal name
+    IF ZERO
+        ;; Not ProDOS - try to identify disk type
         ldx     dest_drive_index
         copy8   drive_unitnum_table,x, main::block_params::unit_num
         copy16  #0, main::block_params::block_num
         copy16  #default_block_buffer, main::block_params::data_buffer
         jsr     main::ReadBlock
-        bcs     use_sd
+      IF CC
+
+        ;; Pascal?
         jsr     IsPascalBootBlock
-        bcs     use_sd
-
+       IF CC
         param_call GetPascalVolName, main::on_line_buffer2
-        ldxy    #main::on_line_buffer2
-        lda     #kAlertMsgConfirmErase ; X,Y = ptr to volume name
-        jmp     show
+        jmp     buf2
+       END_IF
 
-use_sd:
-        ;; No name, use slot/drive
+        ;; DOS 3.3?
+        jsr     IsDOS33BootBlock
+       IF EQ
+        ldx     dest_drive_index
+        lda     drive_unitnum_table,x
+        tax                     ; slot/drive
+        lda     #kAlertMsgConfirmEraseDOS33 ; X = unit number
+        bne     show            ; always
+       END_IF
+      END_IF
+
+        ;; Unknown, just use slot/drive
         ldx     dest_drive_index
         lda     drive_unitnum_table,x
         tax                     ; slot/drive
         lda     #kAlertMsgConfirmEraseSlotDrive ; X = unit number
     ELSE
         param_call AdjustOnLineEntryCase, main::on_line_buffer2
-        ldxy    #main::on_line_buffer2
+buf2:   ldxy    #main::on_line_buffer2
         lda     #kAlertMsgConfirmErase ; X,Y = ptr to volume name
     END_IF
 show:   jsr     ShowAlertDialog
@@ -695,7 +706,7 @@ format: param_call DrawStatus, str_formatting
         jsr     main::FormatDevice
         bcc     do_copy
 
-    IF_A_NE     #ERR_WRITE_PROTECTED
+    IF A <> #ERR_WRITE_PROTECTED
         lda     #kAlertMsgFormatError ; no args
         jsr     ShowAlertDialog
         .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
@@ -778,7 +789,7 @@ copy_success:
         lda     drive_unitnum_table,x
         jsr     main::EjectDisk
         ldx     dest_drive_index
-    IF_X_NE     source_drive_index
+    IF X <> source_drive_index
         lda     drive_unitnum_table,x
         jsr     main::EjectDisk
     END_IF
@@ -821,7 +832,7 @@ check:  lda     current_drive_selection
         stx     message
 
         lda     source_drive_index
-    IF_A_EQ     dest_drive_index
+    IF A = dest_drive_index
 
         tax                     ; A = index
         lda     drive_unitnum_table,x
@@ -836,7 +847,7 @@ check:  lda     current_drive_selection
         jsr     ShowAlertDialog
 
         cmp     #kAlertResultOK
-      IF_NOT_ZERO
+      IF NE
         pla                     ; Cancel
         pla
         jmp     InitDialog
@@ -886,7 +897,7 @@ menu_offset_table:
 
 .proc HandleKey
         bit     listbox_enabled_flag
-    IF_NS
+    IF NS
         lda     event_params::key
       IF_A_EQ_ONE_OF #CHAR_UP, #CHAR_DOWN
         sta     lb_params::key
@@ -898,9 +909,9 @@ menu_offset_table:
     END_IF
 
         lda     event_params::modifiers
-    IF_ZERO
+    IF ZERO
         lda     event_params::key
-      IF_A_NE   #CHAR_ESCAPE
+      IF A <> #CHAR_ESCAPE
         jmp     dialog_shortcuts
       END_IF
     END_IF
@@ -914,7 +925,7 @@ menu_offset_table:
 
 .proc HandleMenuSelection
         ldx     menuselect_params::menu_id
-    IF_ZERO
+    IF ZERO
         return  #$FF
     END_IF
 
@@ -982,14 +993,14 @@ ret:    rts
         MGTK_CALL MGTK::FindWindow, findwindow_params
         lda     findwindow_params::which_area
         .assert MGTK::Area::desktop = 0, error, "enum mismatch"
-        RTS_IF_ZERO
+        RTS_IF ZERO
 
-    IF_A_EQ     #MGTK::Area::menubar
+    IF A = #MGTK::Area::menubar
         MGTK_CALL MGTK::MenuSelect, menuselect_params
         jmp     HandleMenuSelection
     END_IF
 
-    IF_A_NE     #MGTK::Area::content
+    IF A <> #MGTK::Area::content
         return  #$FF
     END_IF
 
@@ -997,14 +1008,14 @@ ret:    rts
         cmp     #winfo_dialog::kWindowId
         beq     HandleDialogClick
 
-    IF_A_EQ     winfo_drive_select
+    IF A = winfo_drive_select
         COPY_STRUCT event_params::coords, lb_params::coords
         LBTK_CALL LBTK::Click, lb_params
 
         php
         jsr     UpdateOKButton
         plp
-      IF_NC
+      IF NC
         jsr     DetectDoubleClick
       END_IF
     END_IF
@@ -1035,18 +1046,18 @@ ret:    rts
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
 
         MGTK_CALL MGTK::InRect, dialog_ok_button::rect
-    IF_NOT_ZERO
+    IF NOT_ZERO
         BTK_CALL BTK::Track, dialog_ok_button
-      IF_NC
+      IF NC
         lda     #$00
       END_IF
         rts
     END_IF
 
         MGTK_CALL MGTK::InRect, read_drive_button::rect
-    IF_NOT_ZERO
+    IF NOT_ZERO
         BTK_CALL BTK::Track, read_drive_button
-      IF_NC
+      IF NC
         lda     #$01
       END_IF
     END_IF
@@ -1068,16 +1079,14 @@ ret:    rts
         pla
         sta     params_src+1
         adc     #>3
-        pha
-        txa
-        pha
+        phax
 
         ;; Copy the params here
         ldy     #3              ; ptr is off by 1
     DO
         copy8   (params_src),y, params-1,y
         dey
-    WHILE_NOT_ZERO
+    WHILE NOT_ZERO
 
         ;; Bank and call
         sta     RAMRDON
@@ -1096,12 +1105,12 @@ params: .res    3
         lda     event_params::key
         jsr     ToUpperCase
 
-    IF_A_EQ     #kShortcutReadDisk
+    IF A = #kShortcutReadDisk
         BTK_CALL BTK::Flash, read_drive_button
         return  #1
     END_IF
 
-    IF_A_EQ     #CHAR_RETURN
+    IF A = #CHAR_RETURN
         BTK_CALL BTK::Flash, dialog_ok_button
         bmi     ignore          ; disabled
         return  #0
@@ -1125,69 +1134,6 @@ ignore: return  #$FF
 .endproc ; SetCursorPointer
 
 ;;; ============================================================
-;;; Populate `drive_name_table` for a non-ProDOS volume
-;;; Input: A=unit number
-;;; Output: Z=1 if successful
-
-default_block_buffer := main::default_block_buffer
-
-.proc NameNonProDOSVolume
-        sta     main::block_params::unit_num
-        copy16  #0, main::block_params::block_num
-        copy16  #default_block_buffer, main::block_params::data_buffer
-        jsr     main::ReadBlock
-        bcs     fail
-
-        jsr     IsPascalBootBlock
-        bne     try_dos33
-
-        ;; Find slot for string in table
-        lda     num_drives
-        jsr     GetDriveNameTableSlot
-        jsr     GetPascalVolName
-        return  #$00
-
-fail:   return  #$FF
-
-try_dos33:
-        jsr     IsDOS33BootBlock
-        bcs     fail
-        FALL_THROUGH_TO GetDos33VolName
-.endproc ; NameNonProDOSVolume
-
-;;; ============================================================
-;;; Construct DOS 3.3 volume name (referencing slot/drive)
-;;; Uses `str_dos33_s_d` template to construct volume name
-;;; Inputs: `num_drives` and `main::block_params::unit_num` are set
-;;; Outputs: Nth `drive_name_table` entry is populated
-
-.proc GetDos33VolName
-        ;; Mask off slot and drive, inject into template
-        lda     main::block_params::unit_num
-        pha
-        jsr     UnitNumToSlotDigit
-        sta     str_dos33_s_d + kStrDOS33SlotOffset
-        pla
-        jsr     UnitNumToDriveDigit
-        sta     str_dos33_s_d + kStrDOS33DriveOffset
-
-        ;; Find slot for string in table
-        ptr := $06
-        lda     num_drives
-        jsr     GetDriveNameTableSlot
-        stax    ptr
-
-        ;; Copy the string in
-        ldy     str_dos33_s_d
-    DO
-        copy8   str_dos33_s_d,y, (ptr),y
-        dey
-    WHILE_POS
-
-        return  #0
-.endproc ; GetDos33VolName
-
-;;; ============================================================
 ;;; Input: A = table index
 ;;; Output: A,X = address in `drive_name_table`
 
@@ -1206,6 +1152,29 @@ try_dos33:
 
         rts
 .endproc ; GetDriveNameTableSlot
+
+;;; ============================================================
+;;; Input: A,X = source string, `num_drives` must be valid
+
+.proc AssignDriveName
+        src_ptr := $06
+        dst_ptr := $08
+
+        stax    src_ptr
+
+        lda     num_drives
+        jsr     GetDriveNameTableSlot
+        stax    dst_ptr
+
+        ldy     #0
+        lda     (src_ptr),y
+        tay
+      DO
+        copy8   (src_ptr),y, (dst_ptr),y
+        dey
+      WHILE POS
+        rts
+.endproc ; AssignDriveName
 
 ;;; ============================================================
 ;;; Check block at `default_block_buffer` for Pascal signature
@@ -1260,7 +1229,7 @@ match:  clc
         stax    ptr
         copy16  #kVolumeDirKeyBlock, main::block_params::block_num
         jsr     main::ReadBlock
-    IF_CS
+    IF CS
         ;; Just use a single space as the name
         ldy     #0
         copy8   #1, (ptr),y
@@ -1276,11 +1245,11 @@ match:  clc
     DO
         copy8   str_name,y, (ptr),y
         dey
-    WHILE_POS
+    WHILE POS
 
         ;; If less than 15 characters, increase len by one
         ldy     str_name
-    IF_Y_LT     #kMaxFilenameLength
+    IF Y < #kMaxFilenameLength
         iny
         tya
         ldy     #0
@@ -1377,13 +1346,13 @@ match:  clc
         ldy     #1
     DO
         asl16   case_bits       ; Shift out high byte first
-      IF_CS
+      IF CS
         lda     (ptr),y
         ora     #AS_BYTE(~CASE_MASK) ; guarded by `kBuildSupportsLowercase`
         sta     (ptr),y
       END_IF
         iny
-    WHILE_Y_LT  #16             ; bits
+    WHILE Y < #16               ; bits
         rts
 
         ;; --------------------------------------------------
@@ -1415,11 +1384,11 @@ fallback:
     DO
         copy8   (pt_ptr),y, list_entry_pos,y
         dey
-    WHILE_POS
+    WHILE POS
         pla
 
         bit     selection_mode_flag  ; source or destination?
-    IF_NS
+    IF NS
         tax                     ; indirection for destination
         lda     destination_index_table,x
     END_IF
@@ -1433,7 +1402,7 @@ fallback:
 .proc EnumerateDevices
         copy8   #0, main::on_line_params2::unit_num
         jsr     main::CallOnLine2
-    IF_CS
+    IF CS
         brk                     ; rude!
     END_IF
 
@@ -1457,79 +1426,83 @@ loop:   lda     device_index    ; <16
         ;; Check first byte of record
         ldy     #0
         lda     (on_line_ptr),y
-        and     #NAME_LENGTH_MASK
-        bne     is_prodos
+        RTS_IF ZERO             ; 0 indicates end of valid records
 
-        lda     (on_line_ptr),y ; 0?
-        beq     done            ; done!
-
-        iny                     ; name_len=0 signifies an error
-        lda     (on_line_ptr),y ; error code in second byte
-        cmp     #ERR_DEVICE_NOT_CONNECTED
-        bne     non_prodos
-        dey
-        lda     (on_line_ptr),y
-        jsr     IsDiskII
-        jne     next_device
-        lda     #ERR_DEVICE_NOT_CONNECTED
-        bne     non_prodos      ; always
-
-done:   rts
-
-non_prodos:
-        pha
-        ldy     #0
-        lda     (on_line_ptr),y
+        ;; Tentatively add to table; doesn't count until we inc `num_drives`
+        pha                     ; A = unit number / name length
         and     #UNIT_NUM_MASK
         ldx     num_drives
         sta     drive_unitnum_table,x
+        pla                     ; A = unit number / name length
 
-        pla
-    IF_A_EQ     #ERR_NOT_PRODOS_VOLUME
+        and     #NAME_LENGTH_MASK
+    IF ZERO
+        ;; Not ProDOS
+
+        ;; name_len=0 signifies an error, with error code in second byte
+        iny                     ; Y = 1
+        lda     (on_line_ptr),y
+      IF A = #ERR_DEVICE_NOT_CONNECTED
+        ;; Device Not Connected - skip, unless it's a Disk II device
+        dey                     ; Y = 0
+        lda     (on_line_ptr),y ; A = unmasked unit number
+        jsr     IsDiskII
+        bne     next_device
+
+        lda     #ERR_DEVICE_NOT_CONNECTED
+      END_IF
+
+      IF A = #ERR_NOT_PRODOS_VOLUME
+        ldx     num_drives
         lda     drive_unitnum_table,x
-        jsr     NameNonProDOSVolume
-        beq     next
-    END_IF
+
+        ;; Read boot block
+        sta     main::block_params::unit_num
+        copy16  #0, main::block_params::block_num
+        copy16  #default_block_buffer, main::block_params::data_buffer
+        jsr     main::ReadBlock
+        bcs     next_device     ; failure
+
+        jsr     IsPascalBootBlock
+       IF EQ
+        ;; Pascal
+        lda     num_drives
+        jsr     GetDriveNameTableSlot ; result in A,X
+        jsr     GetPascalVolName      ; A,X is buffer to populate
+        jmp     next
+       END_IF
+
+        jsr     IsDOS33BootBlock
+       IF CC
+        ;; DOS 3.3
+        ldax    #str_dos33
+        jsr     AssignDriveName
+        jmp     next
+       END_IF
+      END_IF
 
         ;; Unknown
-        lda     num_drives
-        jsr     GetDriveNameTableSlot
-        stax    $06
-        ldy     str_unknown
-    DO
-        copy8   str_unknown,y, ($06),y
-        dey
-    WHILE_POS
+        ldax    #str_unknown
+        jsr     AssignDriveName
 
 next:   inc     num_drives
-        jmp     next_device
 
+    ELSE
         ;; Valid ProDOS volume
-is_prodos:
-        ldy     #0
-        lda     (on_line_ptr),y
-        and     #UNIT_NUM_MASK
+
         ldx     num_drives
-        sta     drive_unitnum_table,x
-
-    IF_A_EQ     DISK_COPY_INITIAL_UNIT_NUM
+        lda     drive_unitnum_table,x
+      IF A = DISK_COPY_INITIAL_UNIT_NUM
         copy8   num_drives, current_drive_selection
-    END_IF
-
-        name_ptr := $08
+      END_IF
 
         ldax    on_line_ptr
         jsr     AdjustOnLineEntryCase
-        lda     num_drives
-        jsr     GetDriveNameTableSlot
-        stax    name_ptr
-        ldy     #kMaxFilenameLength
-    DO
-        copy8   (on_line_ptr),y, (name_ptr),y
-        dey
-    WHILE_POS
+        ldax    on_line_ptr
+        jsr     AssignDriveName
 
         inc     num_drives
+    END_IF
 
 next_device:
         inc     device_index
@@ -1541,6 +1514,7 @@ next_device:
 
 device_index:
         .byte   0
+
 .endproc ; EnumerateDevices
 
 ;;; ============================================================
@@ -1630,7 +1604,7 @@ device_index:
         jsr     GetBlockCount
         inc     index
         lda     index
-    WHILE_A_NE  num_drives
+    WHILE A <> num_drives
         rts
 
 index:  .byte   0
@@ -1693,15 +1667,11 @@ tmp:    .byte   0
 ;;; ============================================================
 
 .proc DrawStatus
-        pha
-        txa
-        pha
+        phax
         jsr     SetPortForDialog
         MGTK_CALL MGTK::PaintRect, rect_status
         MGTK_CALL MGTK::MoveTo, point_status
-        pla
-        tax
-        pla
+        plax
         jmp     DrawStringCentered
 .endproc ; DrawStatus
 
@@ -1775,7 +1745,7 @@ remainder:      .word   0              ; (out)
         copy16  blocks_read, tmp_read
         copy16  blocks_written, tmp_written
         bit     progress_muldiv_params::denominator+1
-    IF_NC
+    IF NC
         ;; Use (read + written) / total*2
         asl16   progress_muldiv_params::denominator
     ELSE
@@ -1840,18 +1810,18 @@ show_name:
         MGTK_CALL MGTK::MoveTo, point_disk_copy
 
         bit     source_disk_format
-    IF_NC                       ; ProDOS
+    IF NC                       ; ProDOS
         param_call DrawString, str_prodos_disk_copy
         rts
     END_IF
-    IF_VC                       ; DOS 3.3
+    IF VC                       ; DOS 3.3
         param_call DrawString, str_dos33_disk_copy
         rts
     END_IF
 
         lda     source_disk_format
         and     #$0F
-    IF_ZERO                     ; Pascal
+    IF ZERO                     ; Pascal
         param_call DrawString, str_pascal_disk_copy
     END_IF
 
@@ -1871,12 +1841,12 @@ show_name:
 .proc ShowBlockError
         stx     err_writing_flag
 
-    IF_A_EQ     #ERR_WRITE_PROTECTED
+    IF A = #ERR_WRITE_PROTECTED
         jsr     main::Bell
         lda     #kAlertMsgDestinationProtected ; no args
         jsr     ShowAlertDialog
         .assert kAlertResultCancel <> 0, error, "Branch assumes enum value"
-      IF_ZERO
+      IF ZERO
         jsr     DrawStatusWriting ; Try Again
         return  #1
       END_IF
@@ -1891,7 +1861,7 @@ show_name:
         jsr     IntToStringWithSeparators
 
         lda     err_writing_flag
-    IF_ZERO
+    IF ZERO
         MGTK_CALL MGTK::MoveTo, error_reading_label_pos
         param_call DrawString, error_reading_label_str
         jsr     DrawIntString
@@ -1931,7 +1901,7 @@ err_writing_flag:
         copy8   default_block_buffer,y,      (ptr1),y
         copy8   default_block_buffer+$100,y, (ptr2),y
         iny
-    WHILE_NOT_ZERO
+    WHILE NOT_ZERO
 
         sta     RAMRDOFF
         sta     RAMWRTOFF
@@ -1960,7 +1930,7 @@ ret:    rts
         copy8   (ptr1),y, default_block_buffer,y
         copy8   (ptr2),y, default_block_buffer+$100,y
         iny
-    WHILE_NOT_ZERO
+    WHILE NOT_ZERO
 
         sta     RAMRDOFF
         sta     RAMWRTOFF
@@ -2035,7 +2005,12 @@ str_format_error:
 str_dest_protected:
         PASCAL_STRING res_string_errmsg_dest_protected
 
-;;; This string is seen when copying over a non-ProDOS/non-Pascal disk.
+;;; This string is seen when copying over a DOS 3.3 disk.
+str_confirm_erase_dos33:
+        PASCAL_STRING res_string_prompt_erase_dos33_pattern
+        kStrConfirmEraseDOS33SlotOffset = res_const_prompt_erase_dos33_pattern_offset1
+        kStrConfirmEraseDOS33DriveOffset = res_const_prompt_erase_dos33_pattern_offset2
+;;; This string is seen when copying over a non-ProDOS/non-Pascal/non-DOS 3.3 disk.
 str_confirm_erase_sd:
         PASCAL_STRING res_string_prompt_erase_slot_drive_pattern
         kStrConfirmEraseSDSlotOffset = res_const_prompt_erase_slot_drive_pattern_offset1
@@ -2058,6 +2033,7 @@ alert_table:
         .byte   kAlertMsgFormatError
         .byte   kAlertMsgDestinationProtected
         .byte   kAlertMsgConfirmEraseSlotDrive
+        .byte   kAlertMsgConfirmEraseDOS33
         .byte   kAlertMsgCopySuccessful
         .byte   kAlertMsgCopyFailure
         .byte   kAlertMsgInsertSourceOrCancel
@@ -2072,6 +2048,7 @@ message_table:
         .addr   str_format_error
         .addr   str_dest_protected
         .addr   str_confirm_erase_sd
+        .addr   str_confirm_erase_dos33
         .addr   str_copy_success
         .addr   str_copy_fail
         .addr   str_insert_source_or_cancel
@@ -2086,6 +2063,7 @@ alert_button_options_table:
         .byte   AlertButtonOptions::TryAgainCancel ; kAlertMsgFormatError
         .byte   AlertButtonOptions::TryAgainCancel ; kAlertMsgDestinationProtected
         .byte   AlertButtonOptions::OKCancel    ; kAlertMsgConfirmEraseSlotDrive
+        .byte   AlertButtonOptions::OKCancel    ; kAlertMsgConfirmEraseDOS33
         .byte   AlertButtonOptions::OK          ; kAlertMsgCopySuccessful
         .byte   AlertButtonOptions::OK          ; kAlertMsgCopyFailure
         .byte   AlertButtonOptions::OK          ; kAlertMsgInsertSourceOrCancel
@@ -2100,6 +2078,7 @@ alert_options_table:
         .byte   AlertOptions::Beep      ; kAlertMsgFormatError
         .byte   AlertOptions::Beep      ; kAlertMsgDestinationProtected
         .byte   0                       ; kAlertMsgConfirmEraseSlotDrive
+        .byte   0                       ; kAlertMsgConfirmEraseDOS33
         .byte   0                       ; kAlertMsgCopySuccessful
         .byte   0                       ; kAlertMsgCopyFailure
         .byte   0                       ; kAlertMsgInsertSourceOrCancel
@@ -2121,7 +2100,7 @@ start:
 
         pla                     ; A = alert id
         .assert kAlertMsgInsertSource = 0, error, "enum mismatch"
-    IF_EQ                       ; kAlertMsgInsertSource
+    IF ZERO                     ; kAlertMsgInsertSource
         cpx     #0
         beq     find_in_alert_table
         jsr     _IsDriveEjectable
@@ -2130,11 +2109,11 @@ start:
         bne     find_in_alert_table ; always
     END_IF
 
-    IF_A_EQ     #kAlertMsgInsertDestination
+    IF A = #kAlertMsgInsertDestination
         cpx     #0
         beq     find_in_alert_table
         jsr     _IsDriveEjectable
-      IF_NOT_ZERO
+      IF NOT_ZERO
         lda     #kAlertMsgInsertDestinationOrCancel
         bne     find_in_alert_table ; always
       END_IF
@@ -2142,15 +2121,16 @@ start:
         bne     find_in_alert_table ; always
     END_IF
 
-    IF_A_EQ     #kAlertMsgConfirmErase
+    IF A = #kAlertMsgConfirmErase
         jsr     _AppendToConfirmErase
         lda     #kAlertMsgConfirmErase
         bne     find_in_alert_table ; always
     END_IF
 
-    IF_A_EQ     #kAlertMsgConfirmEraseSlotDrive
-        jsr     _SetConfirmEraseSdSlotDrive
-        lda     #kAlertMsgConfirmEraseSlotDrive
+    IF_A_EQ_ONE_OF #kAlertMsgConfirmEraseSlotDrive, #kAlertMsgConfirmEraseDOS33
+        pha
+        jsr     _SetConfirmEraseSlotDrive
+        pla
         FALL_THROUGH_TO find_in_alert_table
     END_IF
 
@@ -2161,7 +2141,7 @@ find_in_alert_table:
         cmp     alert_table,y
         beq     :+
         iny
-    WHILE_Y_NE  #kNumAlertMessages
+    WHILE Y <> #kNumAlertMessages
         ldy     #0              ; default
 :
         ;; Y = index
@@ -2190,7 +2170,7 @@ find_in_alert_table:
     DO
         copy8   (ptr),y, str_confirm_erase_buf-1,y
         dey
-    WHILE_NOT_ZERO
+    WHILE NOT_ZERO
 
         pla
         clc
@@ -2202,7 +2182,7 @@ find_in_alert_table:
         iny
         inx
         copy8   str_confirm_erase_suffix,x, str_confirm_erase,y
-    WHILE_X_NE  str_confirm_erase_suffix
+    WHILE X <> str_confirm_erase_suffix
 
         sty     str_confirm_erase
         rts
@@ -2211,15 +2191,17 @@ find_in_alert_table:
 ;;; --------------------------------------------------
 ;;; Inputs: X = %DSSSxxxx
 
-.proc _SetConfirmEraseSdSlotDrive
+.proc _SetConfirmEraseSlotDrive
         txa
         jsr     UnitNumToSlotDigit
         sta     str_confirm_erase_sd  + kStrConfirmEraseSDSlotOffset
+        sta     str_confirm_erase_dos33  + kStrConfirmEraseDOS33SlotOffset
         txa
         jsr     UnitNumToDriveDigit
         sta     str_confirm_erase_sd + kStrConfirmEraseSDDriveOffset
+        sta     str_confirm_erase_dos33 + kStrConfirmEraseDOS33DriveOffset
         rts
-.endproc ; _SetConfirmEraseSdSlotDrive
+.endproc ; _SetConfirmEraseSlotDrive
 
 ;;; --------------------------------------------------
 
@@ -2229,7 +2211,7 @@ find_in_alert_table:
         sty     unit_num
         tya
         jsr     main::IsDriveEjectable
-    IF_NS
+    IF NS
         sta     ejectable_flag
     END_IF
         rts
@@ -2299,7 +2281,7 @@ Alert := alert_dialog::Alert
         loop_counter := *+1
         lda     #SELF_MODIFIED_BYTE
         cmp     #kMaxCounter
-    IF_GE
+    IF GE
         copy8   #0, loop_counter
         jsr     main::ResetIIgsRGB ; in case it was reset by control panel
     END_IF

@@ -22,9 +22,7 @@
 .define res_string_slot_drive_pattern "Kortplats #  Diskenhet #"
 .define res_const_slot_drive_pattern_offset1 11
 .define res_const_slot_drive_pattern_offset2 24
-.define res_string_dos33_s_d_pattern "DOS 3.3 K#, E# "
-.define res_const_dos33_s_d_pattern_offset1 10
-.define res_const_dos33_s_d_pattern_offset2 14
+.define res_string_dos33 "DOS 3.3"
 .define res_string_dos33_disk_copy "DOS 3.3 diskkopia"
 .define res_string_pascal_disk_copy "Pascal skiva kopia"
 .define res_string_prodos_disk_copy "ProDOS diskkopia"
@@ -35,6 +33,9 @@
 .define res_string_prompt_insert_destination "S{tt i m}lskivan och klicka p} OK."
 .define res_string_prompt_erase_prefix "[r du s{ker att du vill radera \x22"
 .define res_string_prompt_erase_suffix "\x22?"
+.define res_string_prompt_erase_dos33_pattern "[r du s{ker att du vill radera DOS 3.3-skivan i kortplats # enhet #?"
+.define res_const_prompt_erase_dos33_pattern_offset1 59
+.define res_const_prompt_erase_dos33_pattern_offset2 67
 .define res_string_prompt_erase_slot_drive_pattern "[r du s{ker att du vill radera disken i kortplats # enhet #?"
 .define res_const_prompt_erase_slot_drive_pattern_offset1 51
 .define res_const_prompt_erase_slot_drive_pattern_offset2 59

@@ -1,10 +1,11 @@
 ;;; ============================================================
-;;; Requires: `hex_digits` to be defined as "0123456789ABCDEF"
-;;; ============================================================
 
 ;;; Populated by call to `ComposeFileTypeString`
 str_file_type:
         PASCAL_STRING "$00"
+
+;;; ============================================================
+
 
 ;;; Input: A = ProDOS file type
 ;;; Output: `str_file_type` populated (3 chars, length prefixed)
@@ -18,7 +19,7 @@ str_file_type:
         lda     type_table,y
         file_type := *+1
         cmp     #SELF_MODIFIED_BYTE
-      IF_EQ
+      IF EQ
         ;; Found - copy string from `type_names_table`
         tya
         sta     add
@@ -33,12 +34,12 @@ str_file_type:
         copy8   type_names_table,y, str_file_type+1,x
         iny
         inx
-       WHILE_X_NE #3
+       WHILE X <> #3
 
         rts
       END_IF
         dey
-    WHILE_POS
+    WHILE POS
 
         ;; Type not found - use generic "$xx"
         copy8   #'$', str_file_type+1
@@ -49,14 +50,21 @@ str_file_type:
         lsr     a
         lsr     a
         lsr     a
-        tax
-        copy8   hex_digits,x, str_file_type+2
+        jsr     hex_to_ascii
+        sta     str_file_type+2
 
         pla                     ; A = file_type
-        and     #$0F
-        tax
-        copy8   hex_digits,x, str_file_type+3
+        jsr     hex_to_ascii
+        sta     str_file_type+3
 
+        rts
+
+hex_to_ascii:
+        and     #%00001111
+        sed                     ; BCD Hex to ASCII trick c/o Lee Davison
+        cmp     #10             ; >= 10?
+        adc     #'0'            ; +$30 (i.e. '0') if < 10, +$40 (i.e. 'A') -10 if >= 10
+        cld
         rts
 
 ;;; Map ProDOS file type to string (for listings/Get Info).

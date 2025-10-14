@@ -18,7 +18,6 @@
         jsr     EnumerateFiles
         bne     skip
 
-        copy16  file_count, total_count
         jsr     PrepWindowForCopy
 
         jsr     PrepSrcAndDstPaths
@@ -73,9 +72,6 @@ kCopyBufferSize = $1F00 - copy_buffer
 ;;; is okay if it already exists.
 ::kCopyIgnoreDuplicateErrorOnCreate = 1
 
-;;; We do an enumeration pass before the copy, so this is not needed.
-::kCopyCheckSpaceAvailable = 0
-
 ;;; --------------------------------------------------
 ;;; Callbacks
 ;;; --------------------------------------------------
@@ -84,21 +80,18 @@ kCopyBufferSize = $1F00 - copy_buffer
 op_jt_addrs:
 op_jt_addr1:  .addr   SELF_MODIFIED
 op_jt_addr2:  .addr   SELF_MODIFIED
-op_jt_addr3:  .addr   SELF_MODIFIED
 kOpJTSize = * - op_jt_addrs
 
 OpCheckCancel     := CheckCancel
 OpInsertSource    := ShowInsertSourceDiskPrompt
 OpHandleErrorCode := HandleErrorCode
 OpHandleNoSpace   := ShowDiskFullError
-OpUpdateProgress  := UpdateCopyProgress
+OpUpdateCopyProgress  := UpdateCopyProgress
 
 OpProcessDirectoryEntry:
         jmp     (op_jt_addr1)
-OpResumeDirectory:
-        jmp     (op_jt_addr2)
 OpFinishDirectory:
-        jmp     (op_jt_addr3)
+        jmp     (op_jt_addr2)
 
 ;;; --------------------------------------------------
 ;;; Library
@@ -113,8 +106,7 @@ OpFinishDirectory:
 ;;; Jump table for `CopyFiles`
 copy_jt:
         .addr   CopyProcessDirectoryEntry ; callback for `OpProcessDirectoryEntry`
-        .addr   RemoveDstPathSegment      ; callback for `OpResumeDirectory`
-        .addr   NoOp                      ; callback for `OpFinishDirectory`
+        .addr   RemoveDstPathSegment      ; callback for `OpFinishDirectory`
 
 ;;; ============================================================
 ;;; Paths for overall copy operation
@@ -139,7 +131,7 @@ saved_stack:
     DO
         copy8   copy_jt,y, op_jt_addrs,y
         dey
-    WHILE_POS
+    WHILE POS
 
         tsx
         stx     saved_stack
@@ -147,13 +139,13 @@ saved_stack:
         ;; Is there enough space?
         jsr     CopyPathsFromBufsToSrcAndDst
         MLI_CALL GET_FILE_INFO, dst_file_info_params
-    IF_CS
+    IF CS
         jmp     HandleErrorCode
     END_IF
         blocks := $06
         sub16   dst_file_info_params::aux_type, dst_file_info_params::blocks_used, blocks
-        cmp16   blocks, blocks_total
-    IF_LT
+        cmp16   blocks, block_count
+    IF LT
         jmp     ShowDiskFullError
     END_IF
 
@@ -167,7 +159,7 @@ saved_stack:
         iny
         inx
         copy8   filename,y, pathname_dst,x
-    WHILE_Y_NE filename
+    WHILE Y <> filename
         stx     pathname_dst
 
         jmp     DoCopy
@@ -180,18 +172,17 @@ saved_stack:
 ;;; Jump table for `EnumerateFiles`
 enum_jt:
         .addr   EnumerateVisitFile ; callback for `OpProcessDirectoryEntry`
-        .addr   NoOp               ; callback for `OpResumeDirectory`
         .addr   NoOp               ; callback for `OpFinishDirectory`
 
 ;;; ============================================================
 ;;; Initially populated during enumeration, used during copy for UI
 ;;; updates.
 
-file_count:
+file_count:                     ; increments during enumeration, decrements during op
         .word   0
-total_count:
+total_count:                    ; increments during enumeration
         .word   0
-blocks_total:
+block_count:                    ; totaled during enumeration
         .word   0
 
 ;;; ============================================================
@@ -202,7 +193,7 @@ blocks_total:
     DO
         copy8   enum_jt,y, op_jt_addrs,y
         dey
-    WHILE_POS
+    WHILE POS
 
         tsx
         stx     saved_stack
@@ -210,12 +201,12 @@ blocks_total:
         lda     #$00
         sta     file_count
         sta     file_count+1
-        sta     blocks_total
-        sta     blocks_total+1
+        sta     block_count
+        sta     block_count+1
 
         jsr     CopyPathsFromBufsToSrcAndDst
 retry:  MLI_CALL GET_FILE_INFO, src_file_info_params
-    IF_CS
+    IF CS
       IF_A_EQ_ONE_OF #ERR_VOL_NOT_FOUND, #ERR_FILE_NOT_FOUND
         jsr     ShowInsertSourceDiskPrompt
         jmp     retry
@@ -226,15 +217,13 @@ retry:  MLI_CALL GET_FILE_INFO, src_file_info_params
         ;; Visit the key file
         lda     src_file_info_params::storage_type
         pha                     ; A = `storage_type`
-        ldxy    #0              ; dummy value
-    IF_A_NE     #ST_VOLUME_DIRECTORY
-        ldxy    src_file_info_params::blocks_used ; actual value
+    IF A = #ST_VOLUME_DIRECTORY
+        copy16  #0, src_file_info_params::blocks_used ; dummy value
     END_IF
-        stxy    file_entry+FileEntry::blocks_used
-        jsr     EnumerateVisitFile ; needs `file_entry`'s `blocks_used`
+        jsr     EnumerateVisitFile
+        pla                     ; A = `storage_type`
 
         ;; Traverse if necessary
-        pla                     ; A = `storage_type`
     IF_A_EQ_ONE_OF #ST_VOLUME_DIRECTORY, #ST_LINKED_DIRECTORY
         jsr     ProcessDirectory
     END_IF
@@ -243,12 +232,15 @@ retry:  MLI_CALL GET_FILE_INFO, src_file_info_params
 .endproc ; EnumerateFiles
 
 ;;; ============================================================
-;;; Input: `file_entry+FileEntry::blocks_used` populated
-;;; Output: `file_count` and `blocks_total` updated
+;;; Input: `src_file_info_params::blocks_used` populated
+;;; Output: `file_count`, `total_count`, and `block_count` updated
 
 .proc EnumerateVisitFile
-        add16   blocks_total, file_entry+FileEntry::blocks_used, blocks_total
+        ;; Called with `src_file_info_params` pre-populated
+        add16   block_count, src_file_info_params::blocks_used, block_count
+
         inc16   file_count
+        copy16  file_count, total_count
         jmp     UpdateEnumerationProgress
 .endproc ; EnumerateVisitFile
 
@@ -272,18 +264,18 @@ retry:  MLI_CALL GET_FILE_INFO, src_file_info_params
     DO
         iny
         lda     src_path,y
-      IF_A_EQ   #'/'
+      IF A = #'/'
         sty     src_path_slash_index
       END_IF
         sta     pathname_src,y
-    WHILE_Y_NE  src_path
+    WHILE Y <> src_path
 
         ;; Copy `dst_path` to `pathname_dst`
         ldy     dst_path
     DO
         copy8   dst_path,y, pathname_dst,y
         dey
-    WHILE_POS
+    WHILE POS
 
         rts
 .endproc ; CopyPathsFromBufsToSrcAndDst
@@ -297,24 +289,24 @@ retry:  MLI_CALL GET_FILE_INFO, src_file_info_params
         ldy     src_path
     DO
         lda     src_path,y
-        BREAK_IF_A_EQ #'/'
+        BREAK_IF A = #'/'
         dey
-    WHILE_NOT_ZERO
+    WHILE NOT_ZERO
         dey
         sty     src_path
 
     DO
         lda     src_path,y
-        BREAK_IF_A_EQ #'/'
+        BREAK_IF A = #'/'
         dey
-    WHILE_POS
+    WHILE POS
 
         ldx     #0
     DO
         iny
         inx
         copy8   src_path,y, filename,x
-    WHILE_Y_NE  src_path
+    WHILE Y <> src_path
         stx     filename
 
         param_call app::CopyRAMCardPrefix, dst_path
@@ -450,7 +442,7 @@ remainder:      .word   0                 ; (out)
 .proc UpdateCopyProgress
         dec     file_count
         lda     file_count
-    IF_A_EQ     #$FF
+    IF A = #$FF
         dec     file_count+1
     END_IF
 
@@ -504,7 +496,7 @@ display_path:
         lda     #AlertID::insert_source_disk
         jsr     app::ShowAlert
         .assert kAlertResultCancel <> 0, error, "Branch assumes enum value"
-    IF_ZERO                         ; `kAlertResultCancel` = 1
+    IF ZERO                     ; `kAlertResultCancel` = 1
         jmp     app::SetCursorWatch ; try again
     END_IF
         jmp     RestoreStackAndReturn
@@ -548,7 +540,7 @@ display_path:
 .proc CheckCancel
         MGTK_CALL MGTK::GetEvent, app::event_params
         lda     app::event_params::kind
-    IF_A_EQ     #MGTK::EventKind::key_down
+    IF A = #MGTK::EventKind::key_down
         lda     app::event_params::key
         cmp     #CHAR_ESCAPE
         beq     RestoreStackAndReturn

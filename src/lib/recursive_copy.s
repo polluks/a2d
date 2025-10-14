@@ -16,33 +16,40 @@
 ;;; * `src_io_buffer`   - 1024 bytes for I/O
 ;;; * `dst_io_buffer`   - 1024 bytes for I/O
 ;;; * `copy_buffer` and `kCopyBufferSize` (integral number of blocks)
+;;;
+;;; ----------------------------------------
+;;; Build-time Options
+;;; ----------------------------------------
 ;;; * `::kCopyIgnoreDuplicateErrorOnCreate` (0 or 1)
 ;;; * `::kCopyCheckSpaceAvailable` (0 or 1)
+;;; * `::kCopyInteractive` (0 or 1) - allow retries/disk swapping
+;;; * `::kCopyCheckAppleShare` (0 or 1)
+;;; * `::kCopyValidateStorageType` (0 or 1)
+;;; * `::kCopySupportMove` (0 or 1)
+;;; * `::kCopyUseOwnSetDstInfo` (0 or 1)
+;;; * `::kCopyCaseBits` (0 or 1)
 ;;;
 ;;; ----------------------------------------
 ;;; Callbacks
 ;;; ----------------------------------------
 ;;; * `OpCheckCancel` - called regularly, allows caller to abort (close all open files, restore stack, hide UI)
+;;; * `OpCheckRetry` - if `::kCopyInteractive`, called on error; client returns Z=1 to retry
 ;;; * `OpInsertSource` - called by `DoCopy`
 ;;; * `OpHandleErrorCode` - shows error, restores stack
 ;;; * `OpHandleNoSpace` - shows error, restores stack
-;;; * `OpUpdateProgress` - updates UI and returns
+;;; * `OpUpdateCopyProgress` - updates UI and returns
 ;;;
 ;;; * `OpProcessDirectoryEntry` - called for each directory entry
-;;; * `OpResumeDirectory` - called when resuming directory enumeration
 ;;; * `OpFinishDirectory` - called when enumerating a directory is complete
 ;;;
 ;;; For file copies:
 ;;; * `OpProcessDirectoryEntry` can use `CopyProcessDirectoryEntry`
-;;; * `OpResumeDirectory` should be `RemoveDstPathSegment` (to keep in sync w/ src path)
-;;; * `OpFinishDirectory` can be `NoOp`
+;;; * `OpFinishDirectory` should be `RemoveDstPathSegment` (to keep in sync w/ src path)
 ;;; For enumeration:
 ;;; * `OpProcessDirectoryEntry` can increment a count and inspect `file_entry`
-;;; * `OpResumeDirectory` can be `NoOp`
 ;;; * `OpFinishDirectory` can be `NoOp`
 ;;; For deletion:
 ;;; * `OpProcessDirectoryEntry` should delete non-directory files
-;;; * `OpResumeDirectory` can be `NoOp`
 ;;; * `OpFinishDirectory` should delete the directory
 
 ;;; ----------------------------------------
@@ -69,6 +76,22 @@
         .assert .lobyte(dst_io_buffer) = 0, error, "I/O buffers must be page-aligned"
         .assert .lobyte(copy_buffer) = 0, error, "page-align copy buffer for better performance"
         .assert (kCopyBufferSize .mod BLOCK_SIZE) = 0, error, "integral number of blocks needed for sparse copies and performance"
+
+;;; Build defaults
+.macro ZERO_IF_NOT_DEFINED ident
+.ifndef ident
+        ident = 0
+.endif
+.endmacro
+
+        ZERO_IF_NOT_DEFINED ::kCopyIgnoreDuplicateErrorOnCreate
+        ZERO_IF_NOT_DEFINED ::kCopyCheckSpaceAvailable
+        ZERO_IF_NOT_DEFINED ::kCopyInteractive
+        ZERO_IF_NOT_DEFINED ::kCopyCheckAppleShare
+        ZERO_IF_NOT_DEFINED ::kCopyValidateStorageType
+        ZERO_IF_NOT_DEFINED ::kCopySupportMove
+        ZERO_IF_NOT_DEFINED ::kCopyUseOwnSetDstInfo
+        ZERO_IF_NOT_DEFINED ::kCopyCaseBits
 
 NoOp:   rts
 
@@ -113,6 +136,10 @@ stack_index             .byte
 
 entry_index_in_block    .byte
 dir_data_buffer_end     .byte
+
+;;; Other state
+dst_vol_blocks_free     .word
+
         END_PARAM_BLOCK
         .assert dir_data_buffer_end - dir_data_buffer <= 256, error, "too big"
 
@@ -134,7 +161,7 @@ dir_data_buffer_end     .byte
         jsr     _OpenSrcDir
 loop:
         jsr     _ReadFileEntry
-    IF_ZERO
+    IF ZERO
         param_call AdjustFileEntryCase, file_entry
 
         lda     file_entry + FileEntry::storage_type_name_length
@@ -167,7 +194,7 @@ loop:
     END_IF
 
         lda     recursion_depth
-    IF_NOT_ZERO
+    IF NOT_ZERO
         jsr     _AscendDirectory
         dec     recursion_depth
         bpl     loop            ; always
@@ -189,14 +216,14 @@ entry_err_flag:  .byte   0      ; bit7
         ldy     map,x
         copy8   file_entry,y, src_file_info_params::access,x
         dex
-    WHILE_POS
+    WHILE POS
 
         ;; Fix `storage_type`
         ldx     #4
     DO
         lsr     src_file_info_params::storage_type
         dex
-    WHILE_NOT_ZERO
+    WHILE NOT_ZERO
 
         rts
 
@@ -249,9 +276,15 @@ map:    .byte   FileEntry::access
         sta     entry_index_in_dir+1
         sta     entry_index_in_block
 
-        MLI_CALL OPEN, open_src_dir_params
-    IF_CS
+retry:  MLI_CALL OPEN, open_src_dir_params
+    IF CS
+.if ::kCopyInteractive
+        jsr     OpCheckRetry
+        beq     retry           ; always
+.else
+        .refto retry
 fail:   jmp     OpHandleErrorCode
+.endif
     END_IF
 
         lda     open_src_dir_params::ref_num
@@ -261,8 +294,16 @@ fail:   jmp     OpHandleErrorCode
         sta     close_src_dir_params::ref_num
 
         ;; Skip over prev/next block pointers in header
-        MLI_CALL READ, read_block_pointers_params
+retry2: MLI_CALL READ, read_block_pointers_params
+.if ::kCopyInteractive
+    IF CS
+        jsr     OpCheckRetry
+        beq     retry2          ; always
+    END_IF
+.else
+        .refto retry2
         bcs     fail
+.endif
 
         ;; Header size is next/prev blocks + a file entry
         copy8   #13, entries_per_block ; so `_ReadFileEntry` doesn't immediately advance
@@ -277,9 +318,15 @@ fail:   jmp     OpHandleErrorCode
 ;;; ============================================================
 
 .proc _CloseSrcDir
-        MLI_CALL CLOSE, close_src_dir_params
-    IF_CS
+retry:  MLI_CALL CLOSE, close_src_dir_params
+    IF CS
+.if ::kCopyInteractive
+        jsr     OpCheckRetry
+        beq     retry           ; always
+.else
+        .refto retry
         jmp     OpHandleErrorCode
+.endif
     END_IF
         rts
 .endproc ; _CloseSrcDir
@@ -291,21 +338,35 @@ fail:   jmp     OpHandleErrorCode
 .proc _ReadFileEntry
         inc16   entry_index_in_dir
 
-        MLI_CALL READ, read_src_dir_entry_params
-    IF_CS
+retry:  MLI_CALL READ, read_src_dir_entry_params
+    IF CS
         cmp     #ERR_END_OF_FILE
         beq     eof
 
+.if ::kCopyInteractive
+        jsr     OpCheckRetry
+        beq     retry           ; always
+.else
+        .refto retry
 fail:   jmp     OpHandleErrorCode
+.endif
     END_IF
 
         inc     entry_index_in_block
         lda     entry_index_in_block
-    IF_A_GE     entries_per_block
+    IF A >= entries_per_block
         ;; Advance to first entry in next "block"
         copy8   #0, entry_index_in_block
-        MLI_CALL READ, read_padding_bytes_params
+retry2: MLI_CALL READ, read_padding_bytes_params
+.if ::kCopyInteractive
+      IF CS
+        jsr     OpCheckRetry
+        beq     retry2          ; always
+      END_IF
+.else
+        .refto retry2
         bcs     fail
+.endif
     END_IF
 
         return  #0
@@ -337,93 +398,100 @@ eof:    return  #$FF
         jsr     _OpenSrcDir
 
 :       cmp16   entry_index_in_dir, target_index
-    IF_LT
+    IF LT
         jsr     _ReadFileEntry
         jmp     :-
     END_IF
 
-        jmp     OpResumeDirectory
+        rts
 .endproc ; _AscendDirectory
 
 ;;; ============================================================
 ;;; Append name at `file_entry` to path at `pathname_src`
 
 .proc AppendFileEntryToSrcPath
-        lda     file_entry+FileEntry::storage_type_name_length
-    IF_NOT_ZERO
-        ldx     #0
-        ldy     pathname_src
-        copy8   #'/', pathname_src+1,y
-      DO
-        iny
-        BREAK_IF_X_GE file_entry+FileEntry::storage_type_name_length
-        copy8   file_entry+FileEntry::file_name,x, pathname_src+1,y
-        inx
-      WHILE_NOT_ZERO            ; always
-        sty     pathname_src
-    END_IF
-        rts
+        param_jump AppendFileEntryToPath, pathname_src
 .endproc ; AppendFileEntryToSrcPath
 
 ;;; ============================================================
 ;;; Remove segment from path at `pathname_src`
 
 .proc RemoveSrcPathSegment
-        ldx     pathname_src
-    IF_NOT_ZERO
-        lda     #'/'
-      DO
-        cmp     pathname_src,x
-        beq     :+
-        dex
-      WHILE_NOT_ZERO
-        inx
-:
-        dex
-        stx     pathname_src
-    END_IF
-        rts
+        param_jump RemovePathSegment, pathname_src
 .endproc ; RemoveSrcPathSegment
 
 ;;; ============================================================
 ;;; Append name at `file_entry` to path at `pathname_dst`
 
 .proc AppendFileEntryToDstPath
-        lda     file_entry+FileEntry::storage_type_name_length
-    IF_NOT_ZERO
-        ldx     #0
-        ldy     pathname_dst
-        copy8   #'/', pathname_dst+1,y
-      DO
-        iny
-        BREAK_IF_X_GE file_entry+FileEntry::storage_type_name_length
-        copy8   file_entry+FileEntry::file_name,x, pathname_dst+1,y
-        inx
-      WHILE_NOT_ZERO            ; always
-        sty     pathname_dst
-    END_IF
-        rts
+        param_jump AppendFileEntryToPath, pathname_dst
 .endproc ; AppendFileEntryToDstPath
 
 ;;; ============================================================
 ;;; Remove segment from path at `pathname_dst`
 
 .proc RemoveDstPathSegment
-        ldx     pathname_dst
-    IF_NOT_ZERO
-        lda     #'/'
+        param_jump RemovePathSegment, pathname_dst
+.endproc ; RemoveDstPathSegment
+
+;;; ============================================================
+;;; Input: `file_entry` (a `FileEntry`), and A,X = path to modify
+;;; Trashes $06
+
+.proc AppendFileEntryToPath
+        path_ptr := $06
+        stax    path_ptr
+
+        lda     file_entry+FileEntry::storage_type_name_length
+    IF NOT_ZERO
+        ldy     #0
+        lda     (path_ptr),y
+        tay
+        iny
+        copy8   #'/', (path_ptr),y
+        ldx     #0
       DO
-        cmp     pathname_dst,x
-        beq     :+
-        dex
-      WHILE_NOT_ZERO
+        iny
+        copy8   file_entry+FileEntry::file_name,x, (path_ptr),y
         inx
-:
-        dex
-        stx     pathname_dst
+      WHILE X < file_entry+FileEntry::storage_type_name_length
+        tya
+        ldy     #0
+        sta     (path_ptr),y
     END_IF
         rts
-.endproc ; RemoveDstPathSegment
+.endproc ; AppendFileEntryToPath
+
+;;; ============================================================
+;;; Remove segment from path at A,X
+;;; Input: A,X = path to modify
+;;; Output: A = length
+;;; Trashes $06
+
+.proc RemovePathSegment
+        path_ptr := $06
+        stax    path_ptr
+
+        ldy     #0
+        lda     (path_ptr),y    ; length
+    IF NOT_ZERO
+        tay
+      DO
+        lda     (path_ptr),y
+        cmp     #'/'
+        beq     :+
+        dey
+      WHILE NOT_ZERO
+        iny
+:
+        dey
+        tya
+        ldy     #0
+        sta     (path_ptr),y
+    END_IF
+
+        rts
+.endproc ; RemovePathSegment
 
 ;;; ============================================================
 ;;; Standard Copy Implementation
@@ -432,11 +500,16 @@ eof:    return  #$FF
 ;;; ============================================================
 ;;; File copy parameter blocks
 
+        ;; Used for both files and directories
         DEFINE_CREATE_PARAMS create_params, pathname_dst, ACCESS_DEFAULT
+
         DEFINE_OPEN_PARAMS open_src_params, pathname_src, src_io_buffer
         DEFINE_OPEN_PARAMS open_dst_params, pathname_dst, dst_io_buffer
         DEFINE_READWRITE_PARAMS read_src_params, copy_buffer, kCopyBufferSize
         DEFINE_READWRITE_PARAMS write_dst_params, copy_buffer, kCopyBufferSize
+.if ::kCopyInteractive
+        DEFINE_SET_MARK_PARAMS mark_src_params, 0
+.endif
         DEFINE_SET_MARK_PARAMS mark_dst_params, 0
         DEFINE_CLOSE_PARAMS close_src_params
         DEFINE_CLOSE_PARAMS close_dst_params
@@ -456,7 +529,7 @@ eof:    return  #$FF
 
         ;; Get source info
 retry:  MLI_CALL GET_FILE_INFO, src_file_info_params
-    IF_CS
+    IF CS
       IF_A_EQ_ONE_OF #ERR_VOL_NOT_FOUND, #ERR_FILE_NOT_FOUND
         jsr     OpInsertSource
         jmp     retry
@@ -475,9 +548,6 @@ retry:  MLI_CALL GET_FILE_INFO, src_file_info_params
         ;; --------------------------------------------------
         ;; File
 
-.if ::kCopyCheckSpaceAvailable
-        jsr     _EnsureSpaceAvailable
-.endif
         jsr     _CopyCreateFile
         jmp     _CopyNormalFile
 
@@ -486,45 +556,52 @@ retry:  MLI_CALL GET_FILE_INFO, src_file_info_params
         ;; --------------------------------------------------
         ;; Directory
 
-.if ::kCopyCheckSpaceAvailable
-        jsr     _EnsureSpaceAvailable
-.endif
         jsr     _CopyCreateFile
         jmp     ProcessDirectory
 
 .endproc ; DoCopy
 
 ;;; ============================================================
-;;; Copy an entry in a directory - regular file or directory.
+;;; Called by `ProcessDirectory` to process a single file
 ;;; Inputs: `file_entry` populated with `FileEntry`
 ;;;         `src_file_info_params` populated
 ;;;         `pathname_src` has source directory path
 ;;;         `pathname_dst` has destination directory path
-;;; Errors: `OpHandleErrorCode` is invoked
 
 .proc CopyProcessDirectoryEntry
         jsr     AppendFileEntryToDstPath
         jsr     AppendFileEntryToSrcPath
-        jsr     OpUpdateProgress
+        jsr     OpUpdateCopyProgress
 
         ;; Called with `src_file_info_params` pre-populated
         lda     src_file_info_params::storage_type
-    IF_A_NE     #ST_LINKED_DIRECTORY
+    IF A <> #ST_LINKED_DIRECTORY
+
         ;; --------------------------------------------------
         ;; File
-.if ::kCopyCheckSpaceAvailable
-        jsr     _EnsureSpaceAvailable
+
+.if ::kCopyValidateStorageType
+        jsr     ValidateStorageType
+        bcs     done
 .endif
+
         jsr     _CopyCreateFile
         bcs     done
 
         jsr     _CopyNormalFile
+.if ::kCopySupportMove
+        jsr     MaybeFinishFileMove
+.endif
+
     ELSE
+
         ;; --------------------------------------------------
         ;; Directory
+
         jsr     _CopyCreateFile
         bcc     ok_dir ; leave dst path segment in place for recursion
         SET_BIT7_FLAG entry_err_flag
+
     END_IF
 
         ;; --------------------------------------------------
@@ -537,7 +614,7 @@ ok_dir: jsr     RemoveSrcPathSegment
 ;;; ============================================================
 ;;; Record the number of blocks free on the destination volume.
 ;;; Input: `pathname_dst` is path on destination volume
-;;; Output: `blocks_free` has the free block count
+;;; Output: `dst_vol_blocks_free` has the free block count
 
 .if ::kCopyCheckSpaceAvailable
 .proc _RecordDestVolBlocksFree
@@ -552,22 +629,27 @@ ok_dir: jsr     RemoveSrcPathSegment
         cpy     pathname_dst
         bcs     :+
         lda     pathname_dst,y
-    WHILE_A_NE  #'/'
+    WHILE A <> #'/'
         sty     pathname_dst
 :
         ;; Get total blocks/used blocks on destination volume
-        MLI_CALL GET_FILE_INFO, dst_file_info_params
+retry:  MLI_CALL GET_FILE_INFO, dst_file_info_params
+.if ::kCopyInteractive
+    IF NOT_ZERO
+        jsr     ShowErrorAlertDst
+        jmp     retry
+    END_IF
+.else
+        .refto retry
         jcs     OpHandleErrorCode
+.endif
 
         ;; Free = Total (aux) - Used
-        sub16   dst_file_info_params::aux_type, dst_file_info_params::blocks_used, blocks_free
+        sub16   dst_file_info_params::aux_type, dst_file_info_params::blocks_used, dst_vol_blocks_free
 
         pla                     ; A = `pathname_dst` saved length
         sta     pathname_dst
         rts
-
-blocks_free:              ; Blocks free on volume
-        .word   0
 .endproc ; _RecordDestVolBlocksFree
 .endif
 
@@ -580,26 +662,24 @@ blocks_free:              ; Blocks free on volume
 
 .if ::kCopyCheckSpaceAvailable
 .proc _EnsureSpaceAvailable
-        blocks_free := _RecordDestVolBlocksFree::blocks_free
-
         ;; Get destination size (in case of overwrite)
         MLI_CALL GET_FILE_INFO, dst_file_info_params
-    IF_CC
+    IF CC
         ;; Assume those blocks will be freed
-        add16   blocks_free, dst_file_info_params::blocks_used, blocks_free
-    ELSE_IF_A_NE #ERR_FILE_NOT_FOUND
+        add16   dst_vol_blocks_free, dst_file_info_params::blocks_used, dst_vol_blocks_free
+    ELSE_IF A <> #ERR_FILE_NOT_FOUND
         jmp     OpHandleErrorCode
     END_IF
 
         ;; Does it fit? (free >= needed)
-        cmp16   blocks_free, src_file_info_params::blocks_used
-    IF_LT
+        cmp16   dst_vol_blocks_free, src_file_info_params::blocks_used
+    IF LT
         ;; Not enough room
         jmp     OpHandleNoSpace
     END_IF
 
         ;; Assume those blocks will be used
-        add16   blocks_free, src_file_info_params::blocks_used, blocks_free
+        sub16   dst_vol_blocks_free, src_file_info_params::blocks_used, dst_vol_blocks_free
 
         rts
 .endproc ; _EnsureSpaceAvailable
@@ -613,54 +693,94 @@ blocks_free:              ; Blocks free on volume
 ;;; Errors: `OpHandleErrorCode` is invoked
 
 .proc _CopyNormalFile
-        ;; Open source
-        MLI_CALL OPEN, open_src_params
-        bcs     fail
-
-        ;; Open destination
-        MLI_CALL OPEN, open_dst_params
-        bcs     fail
-
-        lda     open_src_params::ref_num
-        sta     read_src_params::ref_num
-        sta     close_src_params::ref_num
-        lda     open_dst_params::ref_num
-        sta     write_dst_params::ref_num
-        sta     mark_dst_params::ref_num
-        sta     close_dst_params::ref_num
-
         lda     #0
         sta     mark_dst_params::position
         sta     mark_dst_params::position+1
         sta     mark_dst_params::position+2
+.if ::kCopyInteractive
+        sta     src_dst_exclusive_flag
+        sta     mark_src_params::position
+        sta     mark_src_params::position+1
+        sta     mark_src_params::position+2
+.endif
+
+        jsr     _OpenSrc
+.if ::kCopyInteractive
+        jsr     _OpenDstOrFail
+    IF NOT_ZERO
+        ;; Destination not available; note it, can prompt later
+        SET_BIT7_FLAG src_dst_exclusive_flag
+    END_IF
+.else
+        jsr     _OpenDst
+.endif
 
         ;; Read a chunk
     DO
         copy16  #kCopyBufferSize, read_src_params::request_count
         jsr     OpCheckCancel
-        MLI_CALL READ, read_src_params
-      IF_CS
+
+retry:  MLI_CALL READ, read_src_params
+      IF CS
         cmp     #ERR_END_OF_FILE
         beq     close
+.if ::kCopyInteractive
+        jsr     ShowErrorAlert
+        jmp     retry
+.else
+        .refto retry
 fail:   jmp     OpHandleErrorCode
+.endif
       END_IF
 
-        ;; EOF?
-        lda     read_src_params::trans_count
-        ora     read_src_params::trans_count+1
-        beq     close
+.if ::kCopyInteractive
+        bit     src_dst_exclusive_flag
+      IF NS
+        ;; Swap
+        MLI_CALL GET_MARK, mark_src_params
+        MLI_CALL CLOSE, close_src_params
+       DO
+        jsr     _OpenDst
+       WHILE NOT_ZERO
+        MLI_CALL SET_MARK, mark_dst_params
+      END_IF
+.endif
 
         ;; Write the chunk
         jsr     OpCheckCancel
         jsr     _WriteDst
+.if !::kCopyInteractive
         bcs     fail
-    WHILE_CC                    ; always
+.endif
+
+.if ::kCopyInteractive
+        bit     src_dst_exclusive_flag
+        CONTINUE_IF NC
+
+        ;; Swap
+        MLI_CALL CLOSE, close_dst_params
+        jsr     _OpenSrc
+        MLI_CALL SET_MARK, mark_src_params
+.endif
+
+    WHILE CC                    ; always
 
         ;; Close source and destination
-close:  MLI_CALL CLOSE, close_dst_params
+close:
+        MLI_CALL CLOSE, close_dst_params
+.if ::kCopyInteractive
+        bit     src_dst_exclusive_flag
+    IF NC
         MLI_CALL CLOSE, close_src_params
+    END_IF
+.else
+        MLI_CALL CLOSE, close_src_params
+.endif
 
         ;; Copy file info
+.if ::kCopyUseOwnSetDstInfo
+        jmp     ApplySrcInfoToDst
+.else
         COPY_BYTES $B, src_file_info_params::access, dst_file_info_params::access
 
         copy8   #7, dst_file_info_params ; `SET_FILE_INFO` param_count
@@ -668,6 +788,87 @@ close:  MLI_CALL CLOSE, close_dst_params
         copy8   #10, dst_file_info_params ; `GET_FILE_INFO` param_count
 
         rts
+.endif
+
+.if ::kCopyInteractive
+        ;; Set if src/dst can't be open simultaneously.
+src_dst_exclusive_flag:
+        .byte   0
+.endif
+
+;;; --------------------------------------------------
+
+.proc _OpenSrc
+retry:  MLI_CALL OPEN, open_src_params
+.if ::kCopyInteractive
+    IF CS
+        jsr     ShowErrorAlert
+        jmp     retry
+    END_IF
+.else
+        .refto retry
+        bcs     fail
+.endif
+
+        lda     open_src_params::ref_num
+        sta     read_src_params::ref_num
+        sta     close_src_params::ref_num
+.if ::kCopyInteractive
+        sta     mark_src_params::ref_num
+.endif
+        rts
+.endproc ; _OpenSrc
+
+;;; --------------------------------------------------
+
+.if ::kCopyInteractive
+.proc _OpenDstImpl
+        ENTRY_POINTS_FOR_BIT7_FLAG fail_ok, no_fail, fail_ok_flag
+.else
+.proc _OpenDst
+.endif
+
+retry:  MLI_CALL OPEN, open_dst_params
+.if ::kCopyInteractive
+    IF CS
+  .if ::kCopyInteractive
+        fail_ok_flag := *+1
+        ldy     #SELF_MODIFIED_BYTE
+      IF NS
+        cmp     #ERR_VOL_NOT_FOUND
+        beq     finish
+      END_IF
+  .endif
+        jsr     ShowErrorAlertDst
+        jmp     retry
+    END_IF
+.else
+        .refto retry
+        bcs     fail
+.endif
+
+finish:
+.if ::kCopyInteractive
+        pha                     ; A = result
+.endif
+        lda     open_dst_params::ref_num ; harmless if failed
+        sta     mark_dst_params::ref_num
+        sta     write_dst_params::ref_num
+        sta     close_dst_params::ref_num
+.if ::kCopyInteractive
+        pla                     ; A = result, set N and Z
+.endif
+        rts
+
+.if ::kCopyInteractive
+.endproc ; _OpenDstImpl
+_OpenDst := _OpenDstImpl::no_fail
+_OpenDstOrFail := _OpenDstImpl::fail_ok
+.else
+.endproc ; _OpenDst
+.endif
+
+;;; --------------------------------------------------
 
 ;;; Write the buffer to the destination file, being mindful of sparse blocks.
 .proc _WriteDst
@@ -678,8 +879,15 @@ close:  MLI_CALL CLOSE, close_dst_params
         ;; later determine we need to write it out block-by-block.
         copy16  read_src_params::trans_count, write_dst_params::request_count
 
+.if ::kCopyCheckAppleShare
+        ;; ProDOS Tech Note #30: AppleShare servers do not support
+        ;; sparse files. https://prodos8.com/docs/technote/30
+        bit     dst_is_appleshare_flag
+        bmi     do_write        ; ...and done!
+.else
         ;; Assert: We're only ever copying to a RAMDisk, not AppleShare.
         ;; https://prodos8.com/docs/technote/30
+.endif
 
         ;; Is there less than a full block? If so, just write it.
         lda     read_src_params::trans_count+1
@@ -699,7 +907,7 @@ close:  MLI_CALL CLOSE, close_dst_params
         lda     mark_dst_params::position+1
         and     #%11111100
         ora     mark_dst_params::position+2
-      IF_NOT_ZERO
+      IF NOT_ZERO
         ;; Is this block all zeros? Scan all $200 bytes
         ;; (Note: coded for size, not speed, since we're I/O bound)
         ptr := $06
@@ -709,14 +917,14 @@ close:  MLI_CALL CLOSE, close_dst_params
        DO
         ora     (ptr),y
         iny
-       WHILE_NOT_ZERO
+       WHILE NOT_ZERO
         inc     ptr+1           ; second half
        DO
         ora     (ptr),y
         iny
-       WHILE_NOT_ZERO
+       WHILE NOT_ZERO
         tay
-       IF_ZERO
+       IF ZERO
         ;; Block is all zeros, skip over it
         add16_8 mark_dst_params::position+1, #.hibyte(BLOCK_SIZE)
         MLI_CALL SET_EOF, mark_dst_params
@@ -727,7 +935,11 @@ close:  MLI_CALL CLOSE, close_dst_params
 
         ;; Block is not sparse, write it
         jsr     do_write
+.if ::kCopyInteractive
+        ;; `do_write` will exit on failure
+.else
         bcs     ret
+.endif
         FALL_THROUGH_TO next_block
 
         ;; Advance to next block
@@ -741,13 +953,22 @@ next_block:
         ;; Anything left to write?
         lda     read_src_params::trans_count
         ora     read_src_params::trans_count+1
-    WHILE_NOT_ZERO
+    WHILE NOT_ZERO
         clc
         rts
 
 do_write:
-        MLI_CALL WRITE, write_dst_params
+retry:  MLI_CALL WRITE, write_dst_params
+.if ::kCopyInteractive
+        .refto ret
+    IF CS
+        jsr     ShowErrorAlertDst
+        jmp     retry
+    END_IF
+.else
+        .refto retry
         bcs     ret
+.endif
         MLI_CALL GET_MARK, mark_dst_params
 ret:    rts
 .endproc ; _WriteDst
@@ -756,29 +977,42 @@ ret:    rts
 ;;; ============================================================
 
 .proc _CopyCreateFile
+.if ::kCopyCheckSpaceAvailable
+        jsr     _EnsureSpaceAvailable
+.endif
+
         ;; Copy `file_type`, `aux_type`, and `storage_type`
         COPY_BYTES src_file_info_params::storage_type - src_file_info_params::file_type + 1, src_file_info_params::file_type, create_params::file_type
 
         ;; Copy `create_date`/`create_time`
         COPY_STRUCT DateTime, src_file_info_params::create_date, create_params::create_date
 
-        ;; If source is volume, create directory
+.if ::kCopyCaseBits
+        jsr     _ReadSrcCaseBits
+.endif
+
+        ;; If source is volume, create directory instead
         lda     create_params::storage_type
-    IF_A_EQ     #ST_VOLUME_DIRECTORY
+    IF A = #ST_VOLUME_DIRECTORY
         copy8   #ST_LINKED_DIRECTORY, create_params::storage_type
     END_IF
 
+        ;; --------------------------------------------------
         ;; Create it
+
         MLI_CALL CREATE, create_params
-    IF_CS
+    IF CS
 .if ::kCopyIgnoreDuplicateErrorOnCreate
-      IF_A_NE   #ERR_DUPLICATE_FILENAME
+      IF A <> #ERR_DUPLICATE_FILENAME
         jmp     OpHandleErrorCode
       END_IF
 .else
         jmp     OpHandleErrorCode
 .endif
     END_IF
+
+        ;; --------------------------------------------------
+
         clc                     ; treated as success
         rts
 .endproc ; _CopyCreateFile

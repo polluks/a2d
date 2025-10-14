@@ -22,9 +22,7 @@
         pla
         sta     params+1
         adc     #>2
-        pha
-        txa
-        pha
+        phax
 
         ;; Copy the actual address
         ldy     #2      ; ptr is off by 1
@@ -33,7 +31,7 @@
         lda     SELF_MODIFIED,y
         sta     addr-1,y
         dey
-    WHILE_NOT_ZERO
+    WHILE NOT_ZERO
 
         ;; Bank in ROM for call
         bit     ROMIN2
