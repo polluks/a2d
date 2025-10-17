@@ -107,7 +107,7 @@ loop:
     END_IF
 
         ;; Is it a button-down event? (including w/ modifiers)
-    IF_A_EQ_ONE_OF #MGTK::EventKind::button_down, #MGTK::EventKind::apple_key
+    IF A IN #MGTK::EventKind::button_down, #MGTK::EventKind::apple_key
         jsr     HandleClick
         jsr     ClearTypeDown   ; always returns Z=1
         beq     MainLoop        ; always
@@ -290,7 +290,7 @@ modifiers:
         cmp     #kShortcutScrollWindow ; Apple-S (Scroll)
         jeq     CmdScroll
 
-      IF_A_EQ_ONE_OF #'`', #'~', #CHAR_TAB ; Apple-`, Shift-Apple-`, Apple-Tab (Cycle Windows)
+      IF A IN #'`', #'~', #CHAR_TAB ; Apple-`, Shift-Apple-`, Apple-Tab (Cycle Windows)
         jmp     CmdCycleWindows
       END_IF
     END_IF
@@ -811,13 +811,15 @@ prev_selected_icon:
 ;;; be set to the result of `GetSingleSelectedIcon`.
 .proc _CheckRenameClick
         jsr     GetSingleSelectedIcon
-    IF A = prev_selected_icon
-      IF A <> trash_icon_num
+    IF NOT_ZERO
+      IF A = prev_selected_icon
+       IF A <> trash_icon_num
         sta     icon_param
         ITK_CALL IconTK::GetRenameRect, icon_param
         MGTK_CALL MGTK::MoveTo, event_params::coords
         MGTK_CALL MGTK::InRect, tmp_rect
         jne     CmdRename
+       END_IF
       END_IF
     END_IF
         rts
@@ -1670,15 +1672,12 @@ check_header:
 
 .proc IsAlpha
         jsr     ToUpperCase
-        cmp     #'A'
-        bcc     nope
-        cmp     #'Z'+1
-        bcs     nope
-
+    IF A BETWEEN #'A', #'Z'
         lda     #0
         rts
+    END_IF
 
-nope:   lda     #$FF
+        lda     #$FF
         rts
 .endproc ; IsAlpha
 
@@ -2934,8 +2933,7 @@ stashed_name:
         ldx     stashed_name
     DO
         lda     stashed_name,x
-        BREAK_IF A < #'0'
-        BREAK_IF A >= #'9'+1
+        BREAK_IF A NOT_BETWEEN #'0', #'9'
         iny
         sta     digits,y        ; stash digits as we go
         dex
@@ -3987,7 +3985,10 @@ file_char:
         sta     typedown_buf,x
 
         ;; Collect and sort the potential type-down matches
+    IF X = #1
         jsr     GetKeyboardSelectableIconsSorted
+    END_IF
+
         lda     num_filenames
     IF NOT_ZERO
 
@@ -4033,21 +4034,19 @@ file_char:
         ldy     #0
         copy8   (ptr),y, len
 
-        ldy     #1
-cloop:  lda     (ptr),y
+cloop:  iny
+        lda     (ptr),y
         jsr     ToUpperCase
         cmp     typedown_buf,y
         bcc     next
-        beq     :+              ; TODO: `BGT` ?
+        beq     :+
         bcs     found
 :
         cpy     typedown_buf
         beq     found
 
-        iny
         cpy     len
-        bcc     cloop           ; TODO: `BLE` ?
-        beq     cloop
+        bcc     cloop
 
 next:   inc     index
         lda     index
@@ -4090,51 +4089,22 @@ typedown_buf:
 
 .proc GetKeyboardSelectableIconsSorted
         buffer := $1800
-        ptr1 := $06
-        ptr2 := $08
 
         jsr     GetKeyboardSelectableIcons
 
         RTS_IF X < #2
 
-        ;; Selection sort. In each outer iteration, the highest
-        ;; remaining element is moved to the end of the unsorted
-        ;; region, and the region is reduced by one. O(n^2)
-        dex
-        stx     outer
+        copy16  #GetNthSelectableIconName, Quicksort_GetPtrProc
+        copy16  #CompareStrings, Quicksort_CompareProc
+        copy16  #_SwapProc, Quicksort_SwapProc
 
-    DO
-        outer := *+1
-        lda     #SELF_MODIFIED_BYTE
-        jsr     GetNthSelectableIconName
-        stax    ptr2
+        txa
+        jmp     Quicksort       ; A = count
 
-        copy8   #0, inner
-      DO
-        inner := *+1
-        lda     #SELF_MODIFIED_BYTE
-        jsr     GetNthSelectableIconName
-        stax    ptr1
-
-        jsr     CompareStrings
-       IF GE
-        ;; Swap
-        ldx     inner
-        ldy     outer
+.proc _SwapProc
         swap8   buffer+1,x, buffer+1,y
-        tya
-        jsr     GetNthSelectableIconName
-        stax    ptr2
-       END_IF
-
-        inc     inner
-        lda     inner
-      WHILE A <> outer
-
-        dec     outer
-    WHILE NOT_ZERO
-
         rts
+.endproc ; _SwapProc
 .endproc ; GetKeyboardSelectableIconsSorted
 
 ;;; Assuming selectable icon buffer at $1800 is populated by the
@@ -4372,7 +4342,7 @@ repeat: jsr     GetEvent        ; no need to synthesize events
 
         lda     event_params::key
 
-    IF_A_EQ_ONE_OF #CHAR_RETURN, #CHAR_ESCAPE
+    IF A IN #CHAR_RETURN, #CHAR_ESCAPE
 done:   rts
     END_IF
 
@@ -7978,7 +7948,6 @@ records_base_ptr:
 ;;; Inputs: A=DeskTopSettings::kViewBy* for `cached_window_id`
 
 .proc SortRecords
-        ptr := $06
 
 list_start_ptr  := $801
 num_records     := $803
@@ -7993,34 +7962,17 @@ scratch_space   := $804         ; can be used by comparison funcs
 
         lda     cached_window_id
         jsr     GetFileRecordListForWindow
-        stax    ptr             ; point past the count
         stax    list_start_ptr
-        inc16   ptr
         inc16   list_start_ptr
 
-        ;; --------------------------------------------------
-        ;; Selection sort
+        copy16  #_CalcPtr, Quicksort_GetPtrProc
+        copy16  #_CompareProc, Quicksort_CompareProc
+        copy16  #_SwapProc, Quicksort_SwapProc
 
-        ptr1 := $06
-        ptr2 := $08
+        lda     num_records
+        jmp     Quicksort
 
-        ldx     num_records
-        dex
-        stx     outer
-    DO
-        outer := *+1
-        lda     #SELF_MODIFIED_BYTE
-        jsr     _CalcPtr
-        stax    ptr2
-
-        copy8   #0, inner
-
-      DO
-        inner := *+1
-        lda     #SELF_MODIFIED_BYTE
-        jsr     _CalcPtr
-        stax    ptr1
-
+.proc _CompareProc
         bit     LCBANK2
         bit     LCBANK2
         jsr     _CompareFileRecords
@@ -8028,30 +7980,18 @@ scratch_space   := $804         ; can be used by comparison funcs
         bit     LCBANK1
         bit     LCBANK1
         plp
-
-       IF GE
-        ;; Swap
-        ldx     inner
-        ldy     outer
-        swap8   cached_window_entry_list,x, cached_window_entry_list,y
-
-        lda     outer
-        jsr     _CalcPtr
-        stax    ptr2
-       END_IF
-
-        inc     inner
-        lda     inner
-      WHILE A <> outer
-
-        dec     outer
-    WHILE NOT_ZERO
-
         rts
+.endproc ; _CompareProc
+
+.proc _SwapProc
+        swap8   cached_window_entry_list,x, cached_window_entry_list,y
+        rts
+.endproc ; _SwapProc
 
 ;;; --------------------------------------------------
 ;;; Input: A = index in list being sorted
 ;;; Output: A,X = pointer to FileRecord
+;;; Assert: LCBANK1 banked in so `cached_window_entry_list` is visible
 
 .proc _CalcPtr
         ;; Map from sorting list index to FileRecord index
@@ -8186,9 +8126,13 @@ done:   rts
         copy16  #scratch, $06
         copy16  #str_file_type, $08
         jsr     CompareStrings
+        php                     ; preserve Z,C
+        pla
         jsr     PopPointers
         bit     LCBANK2
         bit     LCBANK2
+        pha
+        plp                     ; restore Z,C
 
         rts
 
@@ -8929,7 +8873,7 @@ start:
         sta     block_params::unit_num
 
         ;; Special case for RAM.DRV.SYSTEM/RAMAUX.SYSTEM
-    IF_A_EQ_ONE_OF #kRamDrvSystemUnitNum, #kRamAuxSystemUnitNum
+    IF A IN #kRamDrvSystemUnitNum, #kRamAuxSystemUnitNum
         ldax    #str_device_type_ramdisk
         ldy     #IconType::ramdisk
         rts
@@ -9860,7 +9804,7 @@ kCopyBufferSize = ((MLI - copy_buffer) / BLOCK_SIZE) * BLOCK_SIZE
 
 ;;; NOTE: These are referenced by indirect JMP and *must not*
 ;;; cross page boundaries.
-PAD_IF_NEEDED_TO_AVOID_PAGE_BOUNDARY
+PAD_IF_NEEDED_TO_AVOID_PAGE_BOUNDARY 4
 operation_lifecycle_callbacks:
 operation_enumeration_callback: .addr   SELF_MODIFIED
 operation_complete_callback:    .addr   SELF_MODIFIED
@@ -9870,6 +9814,7 @@ operation_prep_callback:        .addr   SELF_MODIFIED
 
 ;;; NOTE: These are referenced by indirect JMP and *must not*
 ;;; cross page boundaries.
+PAD_IF_NEEDED_TO_AVOID_PAGE_BOUNDARY 3
 operation_traversal_callbacks:
 op_process_selected_file_callback:      .addr   SELF_MODIFIED
 op_process_dir_entry_callback:          .addr   SELF_MODIFIED
@@ -10495,7 +10440,7 @@ retry:  jsr     GetSrcFileInfo
 
         ;; Regular file or directory?
         lda     src_file_info_params::storage_type
-    IF_A_NE_ALL_OF #ST_VOLUME_DIRECTORY, #ST_LINKED_DIRECTORY
+    IF A NOT_IN #ST_VOLUME_DIRECTORY, #ST_LINKED_DIRECTORY
 
         ;; --------------------------------------------------
         ;; File
@@ -11614,7 +11559,7 @@ retry:  jsr     GetSrcFileInfo
         RTS_IF VS
 
         ;; Traverse if necessary
-    IF_A_EQ_ONE_OF #ST_VOLUME_DIRECTORY, #ST_LINKED_DIRECTORY
+    IF A IN #ST_VOLUME_DIRECTORY, #ST_LINKED_DIRECTORY
         jsr     ProcessDirectory
     END_IF
 
@@ -11922,7 +11867,7 @@ retry:  param_call_indirect GetFileInfo, src_ptr
 .proc ShowErrorAlertImpl
         ENTRY_POINTS_FOR_BIT7_FLAG dst, src, dst_flag
 
-    IF_A_NE_ALL_OF #ERR_VOL_NOT_FOUND, #ERR_PATH_NOT_FOUND
+    IF A NOT_IN #ERR_VOL_NOT_FOUND, #ERR_PATH_NOT_FOUND
         jsr     ShowAlert
         ASSERT_EQUALS ::kAlertResultTryAgain, 0
         bne     close           ; not kAlertResultTryAgain = 0
@@ -12038,7 +11983,7 @@ common: jsr     GetSrcFileInfo
         ;; Descendant size/file count
 
         lda     src_file_info_params::storage_type
-    IF_A_EQ_ONE_OF #ST_VOLUME_DIRECTORY, #ST_LINKED_DIRECTORY
+    IF A IN #ST_VOLUME_DIRECTORY, #ST_LINKED_DIRECTORY
         jsr     SetCursorWatch
         jsr     _GetDirSize
         jsr     SetCursorPointer
@@ -13301,7 +13246,7 @@ RestoreDynamicRoutine   := LoadDynamicRoutineImpl::restore
         ;; Is AppleWorks?
         ldy     #FileEntry::file_type
         lda     (block_ptr),y
-      IF_A_NE_ALL_OF #FT_ADB, #FT_AWP, #FT_ASP
+      IF A NOT_IN #FT_ADB, #FT_AWP, #FT_ASP
 
         ;; --------------------------------------------------
         ;; Non-AppleWorks file
@@ -14903,6 +14848,7 @@ END_PARAM_BLOCK
         .include "../lib/speed.s"
         .include "../lib/bell.s"
         .include "../lib/uppercase.s"
+        .include "../lib/quicksort.s"
 
 ;;; ============================================================
 ;;; Resources (that are only used from Main, i.e. not MGTK)

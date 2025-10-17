@@ -528,7 +528,7 @@ cursor_ibeam_flag:              ; high bit set when cursor is I-beam
         sta     file_dialog_res::lb_params::key
         stx     file_dialog_res::lb_params::modifiers
 
-    IF_A_EQ_ONE_OF #CHAR_UP, #CHAR_DOWN
+    IF A IN #CHAR_UP, #CHAR_DOWN
         copy8   #0, type_down_buf
         LBTK_CALL LBTK::Key, file_dialog_res::lb_params
         rts
@@ -547,10 +547,8 @@ cursor_ibeam_flag:              ; high bit set when cursor is I-beam
         bit     extra_controls_flag
       IF NS
         ;; Hook for clients
-       IF A >= #'0'
-        IF A < #'9'+1
+       IF A BETWEEN #'0', #'9'
         jmp     (key_handler_hook)
-        END_IF
        END_IF
       END_IF
 .endif
@@ -679,22 +677,21 @@ file_char:
         lda     ($06),y
         sta     len
 
-        ldy     #1              ; compare strings (length >= 1)
-cloop:  lda     ($06),y
+        ;; compare strings (length >= 1)
+cloop:  iny
+        lda     ($06),y
         jsr     _ToUpperCase
         cmp     type_down_buf,y
         bcc     next
-        beq     :+              ; TODO: `BGT` ?
+        beq     :+
         bcs     found
 :
         cpy     type_down_buf
         beq     found
 
-        iny
         len := *+1
         cpy     #SELF_MODIFIED_BYTE
-        bcc     cloop           ; TODO: `BLE` ?
-        beq     cloop
+        bcc     cloop
 
 next:   inc     index
         lda     index
@@ -1326,6 +1323,14 @@ finish:
 
         ;; --------------------------------------------------
         ;; Selection sort
+
+        ;; Why not Quicksort? It turns out that for the limited number
+        ;; of files we have here (<= 128), with the low overhead to
+        ;; access the names (simple shift and add) this can sort all
+        ;; of the names in under 2 seconds even with O(n^2). In
+        ;; contrast, DeskTop has more complex storage which
+        ;; dramatically increases the constant overhead, so a more
+        ;; efficient sort is necessary.
 
         ptr1 := $06
         ptr2 := $08

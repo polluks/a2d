@@ -356,13 +356,12 @@ check_key_down:
         bmi     :+
         bit     BUTN1           ; Solid Apple?
         bpl     check_key
-:       cmp     #'1'            ; Apple + 1...7 = boot slot
-        bcc     check_key
-        cmp     #'7'+1
-        bcs     check_key
+:
+    IF A BETWEEN #'1', #'7'     ; Apple + 1...7 = boot slot
         and     #%00001111      ; ASCII to number
         sta     quick_boot_slot
         jmp     done_keys
+    END_IF
 
 check_key:
         cmp     #kShortcutRunDeskTop ; If key is down, try launching DeskTop
@@ -943,8 +942,7 @@ noop:   rts
 
         ;; 1-8 to select entry
 
-        RTS_IF A < #'1'
-        RTS_IF A >= #'8'+1
+        RTS_IF A NOT_BETWEEN #'1', #'8'
 
         sec
         sbc     #'1'
@@ -972,7 +970,7 @@ control_char:
         ora     num_secondary_run_list_entries
     IF NOT_ZERO
         lda     event_params::key
-      IF_A_EQ_ONE_OF #CHAR_UP, #CHAR_DOWN, #CHAR_LEFT, #CHAR_RIGHT
+      IF A IN #CHAR_UP, #CHAR_DOWN, #CHAR_LEFT, #CHAR_RIGHT
         sta     op_params::key
         OPTK_CALL OPTK::Key, op_params
         rts
@@ -1529,7 +1527,7 @@ check_type:
         jmp     ClearSelectedIndex
     END_IF
 
-    IF_A_EQ_ONE_OF #FT_AWP, #FT_ASP, #FT_ADB
+    IF A IN #FT_AWP, #FT_ASP, #FT_ADB
         param_call CheckInterpreter, str_extras_awlaunch
         bcc     check_path
         jsr     ShowAlert
