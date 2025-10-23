@@ -127,6 +127,10 @@ jump_table_lo:
         .lobytes   GetIconEntryImpl
         .lobytes   GetRenameRectImpl
         .lobytes   GetBitmapRectImpl
+        .lobytes   OffsetAllImpl
+        .lobytes   GetAllBoundsImpl
+        .lobytes   HighlightAllImpl
+        .lobytes   UnhighlightAllImpl
 
 jump_table_hi:
         .hibytes   InitToolKitImpl
@@ -146,6 +150,10 @@ jump_table_hi:
         .hibytes   GetIconEntryImpl
         .hibytes   GetRenameRectImpl
         .hibytes   GetBitmapRectImpl
+        .hibytes   OffsetAllImpl
+        .hibytes   GetAllBoundsImpl
+        .hibytes   HighlightAllImpl
+        .hibytes   UnhighlightAllImpl
 
         ASSERT_EQUALS *-jump_table_hi, jump_table_hi-jump_table_lo
 .endproc ; Dispatch
@@ -465,6 +473,57 @@ END_PARAM_BLOCK
 .endproc ; HighlightIconImpl
 
 ;;; ============================================================
+;;; HighlightAll / UnhighlightAll
+
+.proc HighlightAllImpl
+PARAM_BLOCK params, icontk::command_data
+window_id       .byte
+END_PARAM_BLOCK
+
+        ldx     num_icons
+        dex
+    DO
+        txa
+        pha
+
+        lda     icon_list,x
+        jsr     GetIconWin      ; A = window_id
+      IF A = params::window_id
+        ldy     #IconEntry::state
+        ora     #kIconEntryStateHighlighted
+        sta     (icon_ptr),y
+      END_IF
+
+        pla
+        tax
+        dex
+    WHILE POS
+        rts
+.endproc ; HighlightAllImpl
+
+;;; ============================================================
+;;; UnhighlightAll
+
+.proc UnhighlightAllImpl
+        ldx     num_icons
+        dex
+    DO
+        txa
+        pha
+
+        lda     icon_list,x
+        jsr     GetIconState
+        and     #AS_BYTE(~kIconEntryStateHighlighted)
+        sta     (icon_ptr),y
+
+        pla
+        tax
+        dex
+    WHILE POS
+        rts
+.endproc ; UnhighlightAllImpl
+
+;;; ============================================================
 ;;; FreeIcon
 
 ;;; param is pointer to icon number
@@ -480,12 +539,12 @@ END_PARAM_BLOCK
         ;; Is it in `icon_list`?
         jsr     IsInIconList
     IF NOT_ZERO
-        return  #1              ; Not found
+        return8 #1              ; Not found
     END_IF
 .endif ; DEBUG
 
         jsr     FreeIconCommon ; A = icon id
-        return  #0
+        return8 #0
 .endproc ; FreeIconImpl
 
 ;;; ============================================================
@@ -1052,7 +1111,7 @@ last_highlighted_icon:
         jsr     _CheckRealContentArea
         bcc     find_icon
 
-fail:   return  #0              ; no icon
+fail:   return8 #0              ; no icon
 
         ;; --------------------------------------------------
         ;; On desktop - A=0, note that as window_id
@@ -1256,10 +1315,10 @@ start:
     WHILE POS
 
 inside:
-        return  #1
+        return8 #1
 
 outside:
-        return  #0
+        return8 #0
 .endproc ; IconInRectImplImpl
 IconInRectImpl := IconInRectImplImpl::start
 
@@ -1277,9 +1336,15 @@ END_PARAM_BLOCK
         jsr     SetIconPtr
         jsr     CalcIconBoundingRect
 
+        ASSERT_EQUALS params::rect - params, 1
+        FALL_THROUGH_TO CopyBoundingRectIntoOutParams
+.endproc ; GetIconBoundsImpl
+
+;;; Assert: out rect is at offset 1
+.proc CopyBoundingRectIntoOutParams
         ;; Copy rect into out params
         ldx     #.sizeof(MGTK::Rect)-1
-        ldy     #(params::rect - params) + .sizeof(MGTK::Rect)-1
+        ldy     #1 + .sizeof(MGTK::Rect)-1
     DO
         copy8   bounding_rect,x, (params_addr),y
         dey
@@ -1466,12 +1531,13 @@ ret:    rts
         copy16  label_rect+MGTK::Rect::x1, label_pos+MGTK::Point::xcoord
         add16_8 label_rect+MGTK::Rect::y1, #kSystemFontHeight-1, label_pos+MGTK::Point::ycoord
 
-        ldax    bitmap_rect+MGTK::Rect::x1
-        stax    icon_paintbits_params::viewloc::xcoord
-        stax    mask_paintbits_params::viewloc::xcoord
-        ldax    bitmap_rect+MGTK::Rect::y1
-        stax    icon_paintbits_params::viewloc::ycoord
-        stax    mask_paintbits_params::viewloc::ycoord
+        ldx     #.sizeof(MGTK::Point)-1
+    DO
+        lda     bitmap_rect+MGTK::Rect::topleft,x
+        sta     icon_paintbits_params::viewloc,x
+        sta     mask_paintbits_params::viewloc,x
+        dex
+    WHILE POS
 
         ;; Set text background color
         lda     #MGTK::textbg_white
@@ -1533,7 +1599,7 @@ ret:    rts
 
         MGTK_CALL MGTK::SetTextBG, settextbg_white
 
-        return  #0
+        return8 #0
 
 .proc _Shade
         MGTK_CALL MGTK::SetPenMode, penXOR
@@ -1573,8 +1639,6 @@ win_flags:                      ; copy of IconEntry::win_flags
 .endproc ; GetIconResource
 
 ;;; ============================================================
-
-kIconLabelGapV = 2
 
 ;;; Input: `icon_ptr` points at icon
 ;;; Output: Populates `bitmap_rect` and `label_rect` and `text_buffer`
@@ -1844,6 +1908,8 @@ END_PARAM_BLOCK
         ITK_CALL IconTK::IconInRect, icon_in_rect_params
        IF NOT_ZERO
         ITK_CALL IconTK::DrawIconRaw, icon_in_rect_params::icon
+       ELSE
+        MGTK_CALL MGTK::CheckEvents
        END_IF
       END_IF
 
@@ -1853,6 +1919,100 @@ END_PARAM_BLOCK
 
         rts
 .endproc ; DrawAllImpl
+
+;;; ============================================================
+;;; OffsetAll
+
+.proc OffsetAllImpl
+PARAM_BLOCK params, icontk::command_data
+window_id       .byte
+delta_x         .word
+delta_y         .word
+END_PARAM_BLOCK
+
+        ldx     num_icons
+    DO
+        dex
+        RTS_IF NEG
+        txa
+        pha
+
+        lda     icon_list,x
+        jsr     GetIconWin      ; A = window_id, sets `icon_ptr` too
+      IF A = params::window_id
+        ldy     #IconEntry::iconx
+        add16in (icon_ptr),y, params::delta_x, (icon_ptr),y
+        iny
+        add16in (icon_ptr),y, params::delta_y, (icon_ptr),y
+      END_IF
+
+        pla
+        tax
+    WHILE POS                   ; always
+
+        rts
+.endproc ; OffsetAllImpl
+
+;;; ============================================================
+;;; GetAllBounds
+
+.proc GetAllBoundsImpl
+PARAM_BLOCK params, icontk::command_data
+window_id       .byte
+rect            .tag    MGTK::Rect ; out
+END_PARAM_BLOCK
+
+        COPY_STRUCT MGTK::Rect, initial_rect, bounding_rect
+
+        ldx     num_icons
+    DO
+        dex
+        BREAK_IF NEG
+        txa
+        pha
+
+        lda     icon_list,x
+        jsr     GetIconWin      ; A = window_id, sets `icon_ptr` too
+      IF A = params::window_id
+        jsr     CalcIconRects
+
+        ;; Hack inherited from DeskTop: treat large icons as if they
+        ;; always have a full-height bitmap. When combined with
+        ;; careful default window size and icon placement calculations
+        ;; in DeskTop means that icons stay vertically aligned as
+        ;; windows are scrolled to the top and bottom.
+        ldy     #IconEntry::win_flags
+        lda     (icon_ptr),y
+        and     #kIconEntryFlagsSmall
+       IF ZERO
+        sub16_8 bitmap_rect+MGTK::Rect::y2, #kMaxIconBitmapHeight, bitmap_rect+MGTK::Rect::y1
+       END_IF
+
+        MGTK_CALL MGTK::UnionRects, unionrects_bitmap_bounding
+        MGTK_CALL MGTK::UnionRects, unionrects_label_bounding
+      END_IF
+
+        pla
+        tax
+    WHILE POS                   ; always
+
+        ASSERT_EQUALS params::rect - params, 1
+        jmp     CopyBoundingRectIntoOutParams
+
+.params unionrects_bitmap_bounding
+        .addr   bitmap_rect
+        .addr   bounding_rect
+.endparams
+
+;;; Rect that will overwritten by anything unioned with it
+.params initial_rect
+        .word   $7FFF
+        .word   $7FFF
+        .word   $8000
+        .word   $8000
+.endparams
+
+.endproc ; GetAllBoundsImpl
 
 ;;; ============================================================
 ;;; GetIconEntry
@@ -2091,7 +2251,7 @@ reserved:       .byte   0
         MGTK_CALL MGTK::SetPortBits, portbits
         rts
 
-empty:  return #$FF
+empty:  return8 #$FF
 .endproc ; DuplicateClipStructsAndSetPortBits
 
 ;;; ============================================================

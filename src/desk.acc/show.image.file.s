@@ -203,9 +203,9 @@ on_key:
         jeq     NextFile
 
     IF A = #'S'
-        cpy     #$00             ; Y = previous `slideshow_flag` state
-        bne     InputLoop        ; Ignore (so toggle) if slideshow mode was on
-        beq     SetSlideshowMode ; always
+        tya               ; Y = previous `slideshow_flag` state
+        bmi     InputLoop        ; Ignore (so toggle) if slideshow mode was on
+        bpl     SetSlideshowMode ; always
     END_IF
 
     IF A = #' '
@@ -868,7 +868,7 @@ color_mode_flag:   .byte   0    ; bit7=0 = B&W, bit7=1 = color
 
 .proc ToggleMode
         bit     color_mode_flag
-        bpl     SetBWMode
+        bmi     SetBWMode
         FALL_THROUGH_TO SetColorMode
 .endproc ; ToggleMode
 

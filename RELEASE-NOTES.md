@@ -15,6 +15,7 @@ Project Page: https://github.com/a2stuff/a2d
 * New localization: Bulgarian
 * ProDOS "sparse" files are now copied correctly. ([#878](https://github.com/a2stuff/a2d/issues/878))
 * Issue ON_LINE call after disconnecting /RAM.
+* Fix flakiness entering/exiting MouseKeys mode.
 
 ### Launcher
 
@@ -67,6 +68,8 @@ Project Page: https://github.com/a2stuff/a2d
 * Fix copying of files when disk swapping is required.
 * Fix memory corruption following multi-select.
 * Improve type-down selection and sorted view performance.
+* Fix some edge cases around modified selection.
+* Performance improvements for scrolling and selection.
 
 ### Selector
 
@@ -104,13 +107,18 @@ Project Page: https://github.com/a2stuff/a2d
   * Allow modifiers when clicking, double-modifiers for decade. ([#693](https://github.com/a2stuff/a2d/issues/693))
   * Follow "first day of week" setting in Control Panel > International.
 * Show Image File: Allow 'S' to toggle slideshow off. ([#825](https://github.com/a2stuff/a2d/issues/825))
-* Find Files: Make mouse cursor responsive during iteration.
-* Date and Time:
+* Find Files
+  * Make mouse cursor responsive during iteration.
+  * Prevent crash on overly long paths.
+* Date and Time
   * Refresh windows if 12/24-hour setting changes. ([#835](https://github.com/a2stuff/a2d/issues/835))
   * Refresh windows if date changes. ([#843](https://github.com/a2stuff/a2d/issues/843))
 * International: Add "first day of week" setting.
 * Benchmark: Don't overflow meter if over 16MHz.
-* Map: Fix indicator updated after window is moved.
+* Map
+  * Fix indicator updated after window is moved.
+  * Support Apple-Arrow keys in edit box.
+  * Prevent mispaint when deleting if obscured.
 * Text Preview: Fix scrollbar behavior when toggling fixed/proportional.
 * Image Preview: Support lo-res and double lo-res graphics files.
 * Change Type: Prevent modifying directories.
