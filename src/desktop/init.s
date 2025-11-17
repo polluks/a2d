@@ -275,7 +275,7 @@ done:
 
         ;; --------------------------------------------------
 
-        MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::watch
+        jsr     main::SetCursorWatch ; before the rest of initialization
         MGTK_CALL MGTK::ShowCursor
 
         ;; fall through
@@ -297,12 +297,12 @@ done:
 
         copy8   #0, cached_window_id
         lda     #1
-        sta     cached_window_entry_count
+        sta     cached_window_icon_count
         sta     icon_count
         ITK_CALL IconTK::AllocIcon, get_icon_entry_params
         lda     get_icon_entry_params::id
         sta     main::trash_icon_num
-        sta     cached_window_entry_list
+        sta     cached_window_icon_list
         sta     icon_param
         ldax    get_icon_entry_params::addr
         stax    ptr
@@ -466,10 +466,8 @@ not_found:
 
         lda     get_file_info_params::file_type
         cmp     #FT_DIRECTORY
-        beq     open_dir
-        jmp     end
+        jne     end
 
-open_dir:
         MLI_CALL OPEN, open_params
         lda     open_params::ref_num
         sta     read_params::ref_num
@@ -516,11 +514,11 @@ process_block:
         ldy     #FileEntry::aux_type
         lda     (dir_ptr),y
         cmp     #<kDAFileAuxType
-        jne     next_entry
+        bne     next_entry
         iny
         lda     (dir_ptr),y
         cmp     #>kDAFileAuxType
-        jne     next_entry
+        bne     next_entry
     END_IF
 
         ;; Allow anything else
@@ -578,12 +576,12 @@ next_entry:
         ;; Room for more DAs?
         lda     desk_acc_num
         cmp     #kMaxDeskAccCount
-        jcs     close_dir
+        bcs     close_dir
 
         ;; Any more entries in dir?
         lda     entry_num
         cmp     file_count
-        jeq     close_dir
+        beq     close_dir
 
         ;; Any more entries in block?
         inc     entry_in_block
@@ -662,8 +660,8 @@ end:
       END_IF
 
 done_create:
-        ldx     cached_window_entry_count
-        copy8   cached_window_entry_list-1,x, icon_param
+        ldx     cached_window_icon_count
+        copy8   cached_window_icon_list-1,x, icon_param
         ITK_CALL IconTK::DrawIcon, icon_param
 
 next:
@@ -672,7 +670,7 @@ next:
     WHILE POS
 
         copy8   #0, cached_window_id
-        jsr     main::StoreWindowEntryTable
+        jsr     main::StoreCachedWindowIconList
 
         jmp     end_of_scope
 
@@ -964,10 +962,10 @@ unit_num:
 .proc FinalSetup
         ;; Final MGTK configuration
         MGTK_CALL MGTK::CheckEvents
-        MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
-        copy8   #0, active_window_id
+        jsr     main::SetCursorPointer ; after the rest of initialization
 
         ;; Restore state from previous session
+        copy8   #0, active_window_id
         jsr     RestoreWindows
 
         ;; Window restoration can safely trash anything before this
@@ -1066,7 +1064,7 @@ next:   jsr     PopPointers
         add16_8 data_ptr, #.sizeof(DeskTopFileItem)
         jmp     loop
 
-exit:   jmp     main::LoadDesktopEntryTable
+exit:   jmp     main::CacheDesktopIconList
 
 .proc _MaybeOpenWindow
         ;; Save stack for restore on error. If the call

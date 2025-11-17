@@ -65,14 +65,6 @@ key_mods  := * + 3
 .endparams
         .res    4, 0
 
-
-
-        .byte   0
-        .byte   0
-        .byte   0
-        .byte   0
-        .byte   0
-
 ;;; ============================================================
 ;;; Menu definition
 
@@ -196,7 +188,7 @@ colormasks:     .byte   MGTK::colormask_and, MGTK::colormask_or
         DEFINE_POINT penloc, 0, 0
 penwidth:       .byte   1
 penheight:      .byte   1
-penmode:        .byte   MGTK::pencopy
+penmode:        .byte   MGTK::pencopy ; default; good for for erasing rects
 textback:       .byte   MGTK::textbg_white
 textfont:       .addr   DEFAULT_FONT
 nextwinfo:      .addr   0
@@ -217,7 +209,7 @@ pensize_frame:  .byte   kBorderDX, kBorderDY
 
         ;; For drawing/updating the dialog title
         DEFINE_POINT point_title, kDialogWidth/2, 15
-        DEFINE_RECT rect_title, kEraseLeft, 4, kEraseRight, 15
+        DEFINE_RECT rect_erase_title, kEraseLeft, 4, kEraseRight, 15
 
         DEFINE_RECT rect_erase_select_src, 270, 38, 420, 46
 
@@ -326,15 +318,14 @@ rect:   .tag    MGTK::Rect
 .endparams
 
 device_name_buf:
-        .res 18, 0
+        .res 16, 0
 
 listbox_enabled_flag:  .byte   0 ; bit7
 
-
-;;; %0xxxxxxx = ProDOS
-;;; %10xxxxxx = DOS 3.3
-;;; %11xxxxx0 = Pascal
-;;; %11xxxxx1 = Other
+kSourceDiskFormatProDOS = %00000000 ; bit7 clear
+kSourceDiskFormatDOS33  = %10000000 ; bit6 clear
+kSourceDiskFormatPascal = %11000000 ; bits 0-3 clear
+kSourceDiskFormatOther  = %11000001
 source_disk_format:
         .byte   0
 
@@ -366,7 +357,7 @@ str_from_int:   PASCAL_STRING "000,000" ; filled in by IntToString
 
 
         DEFINE_LABEL select_quit, .sprintf(res_string_label_select_quit, res_string_dc_menu_item_quit, res_string_dc_menu_bar_item_file, ::kGlyphOpenApple, res_char_dc_menu_item_quit_shortcut), kDialogWidth/2, kTipTextY
-        DEFINE_RECT rect_select_quit, kEraseLeft, kTipTextY-(kSystemFontHeight+2), kEraseRight, kTipTextY
+        DEFINE_RECT rect_erase_tip, kEraseLeft, kTipTextY-(kSystemFontHeight+2), kEraseRight, kTipTextY
 
         DEFINE_LABEL escape_stop_copy, res_string_escape_stop_copy, kDialogWidth/2, kTipTextY
         DEFINE_LABEL error_writing, res_string_error_writing, kOverviewTextX, 102
@@ -428,7 +419,6 @@ init:
         MGTK_CALL MGTK::SetPort, grafport
 
         MGTK_CALL MGTK::SetMenu, menu_definition
-        jsr     SetCursorPointer
 
         copy8   #kMenuItemIdQuickCopy, checkitem_params::menu_item
         copy8   #MGTK::checkitem_check, checkitem_params::check
@@ -444,11 +434,13 @@ init:
         MGTK_CALL MGTK::FrameRect, rect_frame
 
 InitDialog:
+        jsr     SetCursorPointer ; after startup or after copy
+
         CLEAR_BIT7_FLAG listbox_enabled_flag
         copy8   #$FF, current_drive_selection
         copy8   #BTK::kButtonStateDisabled, dialog_ok_button::state
 
-        copy8   #$81, source_disk_format ; other
+        copy8   #kSourceDiskFormatOther, source_disk_format
 
         copy8   #MGTK::disablemenu_enable, disablemenu_params::disable
         MGTK_CALL MGTK::DisableMenu, disablemenu_params
@@ -457,7 +449,6 @@ InitDialog:
         ;; Draw dialog window
 
         jsr     SetPortForDialog
-        MGTK_CALL MGTK::SetPenMode, pencopy
         MGTK_CALL MGTK::PaintRect, rect_erase_dialog_upper
         MGTK_CALL MGTK::PaintRect, rect_erase_dialog_lower
 
@@ -473,9 +464,9 @@ InitDialog:
         jsr     UpdateOKButton
         BTK_CALL BTK::Draw, read_drive_button
         MGTK_CALL MGTK::MoveTo, slot_drive_name_label_pos
-        CALL    DrawString, AX=#slot_drive_name_label_str
+        MGTK_CALL MGTK::DrawString, slot_drive_name_label_str
         MGTK_CALL MGTK::MoveTo, select_source_label_pos
-        CALL    DrawString, AX=#select_source_label_str
+        MGTK_CALL MGTK::DrawString, select_source_label_str
         MGTK_CALL MGTK::MoveTo, select_quit_label_pos
         CALL    DrawStringCentered, AX=#select_quit_label_str
 
@@ -485,12 +476,12 @@ InitDialog:
         MGTK_CALL MGTK::OpenWindow, winfo_drive_select
         SET_BIT7_FLAG listbox_enabled_flag
 
-        jsr     SetCursorWatch
+        jsr     SetCursorWatch  ; before enumerating devices
         jsr     EnumerateDevices
         copy8   #0, DISK_COPY_INITIAL_UNIT_NUM
         jsr     GetAllBlockCounts
 
-        jsr     SetCursorPointer
+        jsr     SetCursorPointer ; after enumerating devices
         CLEAR_BIT7_FLAG selection_mode_flag
 
         LBTK_CALL LBTK::Init, lb_params
@@ -507,10 +498,9 @@ InitDialog:
         copy8   current_drive_selection, source_drive_index
 
         jsr     SetPortForDialog
-        MGTK_CALL MGTK::SetPenMode, pencopy
         MGTK_CALL MGTK::PaintRect, rect_erase_select_src
         MGTK_CALL MGTK::MoveTo, select_source_label_pos
-        CALL    DrawString, AX=#str_select_destination
+        MGTK_CALL MGTK::DrawString, str_select_destination
         jsr     DrawSourceDriveInfo
 
         ;; Prepare for destination selection
@@ -527,9 +517,10 @@ InitDialog:
         tax
         copy8   destination_index_table,x, dest_drive_index
         CLEAR_BIT7_FLAG listbox_enabled_flag
+
         jsr     SetPortForDialog
-        MGTK_CALL MGTK::SetPenMode, pencopy
         MGTK_CALL MGTK::PaintRect, rect_erase_dialog_upper
+        MGTK_CALL MGTK::PaintRect, rect_erase_tip
 
         ;; Erase the drive selection listbox
         MGTK_CALL MGTK::GetWinFrameRect, win_frame_rect_params
@@ -538,10 +529,7 @@ InitDialog:
         MGTK_CALL MGTK::SetPort, grafport
         MGTK_CALL MGTK::PaintRect, win_frame_rect_params::rect
 
-        ;; Erase tip
-        jsr     SetPortForDialog
-        MGTK_CALL MGTK::SetPenMode, pencopy
-        MGTK_CALL MGTK::PaintRect, rect_select_quit
+        jsr     SetCursorWatch  ; before copy
 
         ;; --------------------------------------------------
         ;; Prompt to insert source disk
@@ -552,14 +540,11 @@ prompt_insert_source:
         jmp     InitDialog      ; Cancel
     END_IF
 
-        copy8   #$00, source_disk_format ; ProDOS
-
         ;; --------------------------------------------------
         ;; Check source disk
 
         ldx     source_drive_index
-        copy8   drive_unitnum_table,x, main::on_line_params2::unit_num
-        jsr     main::CallOnLine2
+        CALL    main::CallOnLine2, A=drive_unitnum_table,x
         bcc     source_is_pro
 
 check_source_error:
@@ -568,11 +553,14 @@ check_source_error:
 
         ;; Source is non-ProDOS
         jsr     main::IdentifySourceNonProDOSDiskType
+        sta     source_disk_format
         jsr     DrawSourceDriveInfo
         jmp     check_source_finish
 
         ;; Source is ProDOS
 source_is_pro:
+        copy8   #kSourceDiskFormatProDOS, source_disk_format
+
         lda     main::on_line_buffer2
         and     #$0F            ; mask off name length
     IF ZERO                     ; 0 signals error
@@ -598,27 +586,24 @@ check_source_finish:
         jmp     InitDialog      ; Cancel
     END_IF
 
-        jsr     SetCursorWatch
-
         ;; --------------------------------------------------
         ;; Check destination disk
 
         ldx     dest_drive_index
-        copy8   drive_unitnum_table,x, main::on_line_params2::unit_num
-        jsr     main::CallOnLine2
-        bcc     dest_is_pro
+        CALL    main::CallOnLine2, A=drive_unitnum_table,x
+    IF CS
         cmp     #ERR_NOT_PRODOS_VOLUME
         beq     dest_ok
         jmp     try_format      ; Can't even read drive - try formatting
+    END_IF
 
-dest_is_pro:
         lda     main::on_line_buffer2
         and     #NAME_LENGTH_MASK
-        bne     dest_ok         ; 0 signals error
+    IF ZERO                     ; 0 signals error
         lda     main::on_line_buffer2+1
         cmp     #ERR_NOT_PRODOS_VOLUME
-        beq     dest_ok
-        jmp     try_format      ; Some other error - proceed with format
+        jne     try_format      ; Some other error - proceed with format
+    END_IF
 
 dest_ok:
 
@@ -630,10 +615,7 @@ dest_ok:
     IF ZERO
         ;; Not ProDOS - try to identify disk type
         ldx     dest_drive_index
-        copy8   drive_unitnum_table,x, main::block_params::unit_num
-        copy16  #0, main::block_params::block_num
-        copy16  #default_block_buffer, main::block_params::data_buffer
-        jsr     main::ReadBlock
+        CALL    main::ReadBootBlock, A=drive_unitnum_table,x
       IF CC
 
         ;; Pascal?
@@ -678,8 +660,6 @@ maybe_format:
         jmp     do_copy
 
 try_format:
-        jsr     SetCursorWatch
-
         ldx     dest_drive_index
         CALL    IsDiskII, A=drive_unitnum_table,x
         beq     format
@@ -702,12 +682,9 @@ format: CALL    DrawStatus, AX=#str_formatting
 
     IF A <> #ERR_WRITE_PROTECTED
         CALL    ShowAlertDialog, A=#kAlertMsgFormatError ; no args
-        .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
-        beq     try_format      ; Try Again
-        jmp     InitDialog      ; Cancel
-    END_IF
-
+    ELSE
         CALL    ShowAlertDialog, A=#kAlertMsgDestinationProtected ; no args
+    END_IF
         .assert kAlertResultTryAgain = 0, error, "Branch assumes enum value"
         beq     try_format      ; Try Again
         jmp     InitDialog      ; Cancel
@@ -716,22 +693,15 @@ format: CALL    DrawStatus, AX=#str_formatting
         ;; Perform the copy
 
 do_copy:
-        jsr     SetCursorWatch
-
         jsr     SetPortForDialog
-        MGTK_CALL MGTK::SetPenMode, pencopy
         MGTK_CALL MGTK::PaintRect, rect_erase_dialog_upper
 
         CALL    MaybePromptDiskSwap, X=#kAlertMsgInsertSource
 
-        jsr     SetCursorWatch
-
         jsr     main::ReadVolumeBitmap
 
         ;; Current block
-        lda     #0
-        sta     block_num_div8
-        sta     block_num_div8+1
+        copy16  #0, block_num_div8
         copy8   #7, block_num_shift ; 7 - (n % 8)
 
         ;; Blocks to copy
@@ -749,16 +719,12 @@ do_copy:
         jsr     DrawEscToStopCopyHint
 
 copy_loop:
-        jsr     SetCursorWatch
-
         jsr     DrawStatusReading
         CALL    main::CopyBlocks, C=0 ; reading
         cmp     #$01
         beq     copy_failure
 
         CALL    MaybePromptDiskSwap, X=#kAlertMsgInsertDestination
-
-        jsr     SetCursorWatch
 
         jsr     DrawStatusWriting
         CALL    main::CopyBlocks, C=1 ; writing
@@ -769,8 +735,6 @@ copy_loop:
         jmp     copy_loop
 
 copy_success:
-        jsr     SetCursorWatch
-
         jsr     main::FreeVolBitmapPages
 
         ldx     source_drive_index
@@ -864,11 +828,11 @@ loop:   jsr     SystemTask
 
 menu_command_table:
         ;; Apple menu
-        .addr   main::NoOp
-        .addr   main::NoOp
-        .addr   main::NoOp
-        .addr   main::NoOp
-        .addr   main::NoOp
+        .addr   NoOp
+        .addr   NoOp
+        .addr   NoOp
+        .addr   NoOp
+        .addr   NoOp
         ;; File menu
         .addr   main::Quit
         ;; Facilities menu
@@ -897,7 +861,20 @@ menu_offset_table:
     IF ZERO
         lda     event_params::key
       IF A <> #CHAR_ESCAPE
-        jmp     dialog_shortcuts
+        CALL    ToUpperCase, A=event_params::key
+
+       IF A = #kShortcutReadDisk
+        BTK_CALL BTK::Flash, read_drive_button
+        RETURN  A=#1
+       END_IF
+
+       IF A = #CHAR_RETURN
+        BTK_CALL BTK::Flash, dialog_ok_button
+        bmi     ignore          ; disabled
+        RETURN  A=#0
+       END_IF
+
+ignore: RETURN  A=#$FF
       END_IF
     END_IF
 
@@ -932,45 +909,41 @@ do_jump:
 
 ;;; ============================================================
 
-.proc CmdQuickCopy
-        bit     disk_copy_flag
-        bpl     ret
+.proc SetCopyModeImpl
+        ENTRY_POINTS_FOR_A quick_copy, $00, disk_copy, $80
 
+        eor     disk_copy_flag
+        RTS_IF NC               ; no-op
+
+        lda     disk_copy_flag
+        eor     #$80
+        sta     disk_copy_flag
+
+        ;; Uncheck the previous `checkitem_params::menu_item`
         copy8   #MGTK::checkitem_uncheck, checkitem_params::check
         MGTK_CALL MGTK::CheckItem, checkitem_params
 
-        copy8   #kMenuItemIdQuickCopy, checkitem_params::menu_item
+        ;; Check the other one
+        ASSERT_EQUALS 3 - auxlc::kMenuItemIdQuickCopy, auxlc::kMenuItemIdDiskCopy
+        lda     checkitem_params::menu_item
+        eor     #3
+        sta     checkitem_params::menu_item
         copy8   #MGTK::checkitem_check, checkitem_params::check
         MGTK_CALL MGTK::CheckItem, checkitem_params
 
-        CLEAR_BIT7_FLAG disk_copy_flag
+        ;; Update dialog title
         jsr     SetPortForDialog
-        MGTK_CALL MGTK::PaintRect, rect_title
+        MGTK_CALL MGTK::PaintRect, rect_erase_title
         MGTK_CALL MGTK::MoveTo, point_title
-        CALL    DrawStringCentered, AX=#label_quick_copy
-
-ret:    rts
-.endproc ; CmdQuickCopy
-
-.proc CmdDiskCopy
+        ldax    #label_quick_copy
         bit     disk_copy_flag
-        bmi     ret
-
-        copy8   #MGTK::checkitem_uncheck, checkitem_params::check
-        MGTK_CALL MGTK::CheckItem, checkitem_params
-
-        copy8   #kMenuItemIdDiskCopy, checkitem_params::menu_item
-        copy8   #MGTK::checkitem_check, checkitem_params::check
-        MGTK_CALL MGTK::CheckItem, checkitem_params
-
-        SET_BIT7_FLAG disk_copy_flag
-        jsr     SetPortForDialog
-        MGTK_CALL MGTK::PaintRect, rect_title
-        MGTK_CALL MGTK::MoveTo, point_title
-        CALL    DrawStringCentered, AX=#label_disk_copy
-
-ret:    rts
-.endproc ; CmdDiskCopy
+    IF NS
+        ldax    #label_disk_copy
+    END_IF
+        TAIL_CALL DrawStringCentered
+.endproc ; SetCopyModeImpl
+CmdQuickCopy := SetCopyModeImpl::quick_copy
+CmdDiskCopy := SetCopyModeImpl::disk_copy
 
 ;;; ============================================================
 
@@ -993,7 +966,7 @@ ret:    rts
         cmp     #winfo_dialog::kWindowId
         beq     HandleDialogClick
 
-    IF A = winfo_drive_select
+    IF A = #kListBoxWindowId
         COPY_STRUCT event_params::coords, lb_params::coords
         LBTK_CALL LBTK::Click, lb_params
 
@@ -1083,25 +1056,6 @@ params: .res    3
 
         rts
 .endproc ; MGTKRelayImpl
-
-;;; ============================================================
-
-.proc dialog_shortcuts
-        CALL    ToUpperCase, A=event_params::key
-
-    IF A = #kShortcutReadDisk
-        BTK_CALL BTK::Flash, read_drive_button
-        RETURN  A=#1
-    END_IF
-
-    IF A = #CHAR_RETURN
-        BTK_CALL BTK::Flash, dialog_ok_button
-        bmi     ignore          ; disabled
-        RETURN  A=#0
-    END_IF
-
-ignore: RETURN  A=#$FF
-.endproc ; dialog_shortcuts
 
 ;;; ============================================================
 
@@ -1254,37 +1208,19 @@ match:  RETURN  C=0
 
 ;;; ============================================================
 
-.proc DrawString
-        ptr := $0A
-
-        stax    ptr
-        ldy     #0
-        copy8   (ptr),y, ptr+2
-        inc16   ptr
-        MGTK_CALL MGTK::DrawText, ptr
-        rts
-.endproc ; DrawString
-
-;;; ============================================================
-
 .proc DrawStringCentered
-        params  := $0A
-        textptr := params
-        textlen := params+2
-        result  := params+3
+        params := $0A
+        str := params
+        width := params+2
 
-        stax    textptr
-        ldy     #0
-        copy8   (textptr),y, textlen
-        inc16   textptr
-        MGTK_CALL MGTK::TextWidth, params
-        lsr16   result
-        sub16   #0, result, result
-        lda     #0
-        sta     result+2
-        sta     result+3
-        MGTK_CALL MGTK::Move, result
-        MGTK_CALL MGTK::DrawText, params
+        stax    str
+        stax    @addr
+        MGTK_CALL MGTK::StringWidth, params
+        lsr16   width
+        sub16   #0, width, params+MGTK::Point::xcoord
+        copy16  #0, params+MGTK::Point::ycoord
+        MGTK_CALL MGTK::Move, params
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
 .endproc ; DrawStringCentered
 
@@ -1379,8 +1315,7 @@ fallback:
 
 ;;; Populates `num_drives`, `drive_unitnum_table` and `drive_name_table`
 .proc EnumerateDevices
-        copy8   #0, main::on_line_params2::unit_num
-        jsr     main::CallOnLine2
+        CALL    main::CallOnLine2, A=#0
     IF CS
         brk                     ; rude!
     END_IF
@@ -1388,9 +1323,12 @@ fallback:
         on_line_ptr := $06
 
         lda     #0
-        sta     device_index
         sta     num_drives
-loop:   lda     device_index    ; <16
+        tax                     ; X = index
+    DO
+        txa
+        pha
+
         asl     a               ; *=16 (each record is 16 bytes)
         asl     a
         asl     a
@@ -1405,7 +1343,10 @@ loop:   lda     device_index    ; <16
         ;; Check first byte of record
         ldy     #0
         lda     (on_line_ptr),y
-        RTS_IF ZERO             ; 0 indicates end of valid records
+      IF ZERO                   ; 0 indicates end of valid records
+        pla                     ; pop index off stack
+        rts
+      END_IF
 
         ;; Tentatively add to table; doesn't count until we inc `num_drives`
         pha                     ; A = unit number / name length
@@ -1415,78 +1356,70 @@ loop:   lda     device_index    ; <16
         pla                     ; A = unit number / name length
 
         and     #NAME_LENGTH_MASK
-    IF ZERO
+      IF ZERO
         ;; Not ProDOS
 
         ;; name_len=0 signifies an error, with error code in second byte
         iny                     ; Y = 1
         lda     (on_line_ptr),y
-      IF A = #ERR_DEVICE_NOT_CONNECTED
+       IF A = #ERR_DEVICE_NOT_CONNECTED
         ;; Device Not Connected - skip, unless it's a Disk II device
         dey                     ; Y = 0
         CALL    IsDiskII, A=(on_line_ptr),y ; A = unmasked unit number
         bne     next_device
 
         lda     #ERR_DEVICE_NOT_CONNECTED
-      END_IF
+       END_IF
 
-      IF A = #ERR_NOT_PRODOS_VOLUME
+       IF A = #ERR_NOT_PRODOS_VOLUME
         ldx     num_drives
-        lda     drive_unitnum_table,x
-
-        ;; Read boot block
-        sta     main::block_params::unit_num
-        copy16  #0, main::block_params::block_num
-        copy16  #default_block_buffer, main::block_params::data_buffer
-        jsr     main::ReadBlock
+        CALL    main::ReadBootBlock, A=drive_unitnum_table,x
         bcs     next_device     ; failure
 
         jsr     IsPascalBootBlock
-       IF EQ
+        IF EQ
         ;; Pascal
         CALL    GetDriveNameTableSlot, A=num_drives ; result in A,X
-        jsr     GetPascalVolName      ; A,X is buffer to populate
-        jmp     next
-       END_IF
+        jsr     GetPascalVolName ; A,X is buffer to populate
+        jmp     keep_it
+        END_IF
 
         jsr     IsDOS33BootBlock
-       IF CC
+        IF CC
         ;; DOS 3.3
         CALL    AssignDriveName, AX=#str_dos33
-        jmp     next
+        jmp     keep_it
+        END_IF
        END_IF
-      END_IF
 
         ;; Unknown
         CALL    AssignDriveName, AX=#str_unknown
-
-next:   inc     num_drives
-
-    ELSE
+        ;; "fall through" to `keep_it`
+      ELSE
         ;; Valid ProDOS volume
 
         ldx     num_drives
         lda     drive_unitnum_table,x
-      IF A = DISK_COPY_INITIAL_UNIT_NUM
+       IF A = DISK_COPY_INITIAL_UNIT_NUM
         copy8   num_drives, current_drive_selection
-      END_IF
+       END_IF
 
         CALL    AdjustOnLineEntryCase, AX=on_line_ptr
         CALL    AssignDriveName, AX=on_line_ptr
 
+        FALL_THROUGH_TO keep_it
+      END_IF
+
+keep_it:
         inc     num_drives
-    END_IF
 
 next_device:
-        inc     device_index
-        lda     device_index
-        cmp     #kMaxNumDrives+1
-        jne     loop
+        pla
+        tax
+        inx                     ; X = index
+    WHILE X <> #kMaxNumDrives+1
 
         rts
-
-device_index:
-        .byte   0
 
 .endproc ; EnumerateDevices
 
@@ -1499,86 +1432,88 @@ device_index:
         lda     current_drive_selection
         asl     a
         tax
+        src_block_count := $06
         copy16  block_count_table,x, src_block_count
 
         copy8   num_drives, num_src_drives
 
         lda     #0
         sta     num_drives
-        sta     index
-loop:   lda     index
+        tax                     ; X = index
+    DO
+        txa
+        pha
 
         ;; Compare block counts
         asl     a
         tax
         ecmp16  block_count_table,x, src_block_count
-        bne     next
-
+      IF EQ
         ;; Same - add it
-        lda     index
+        pla                     ; A = index
+        pha
         ldx     num_drives
         sta     destination_index_table,x
 
         ;; Keep going
         inc     num_drives
-next:   inc     index
-        lda     index
-        cmp     num_src_drives
-        beq     finish
-        jmp     loop
+      END_IF
+
+        pla
+        tax
+        inx
+    WHILE X <> num_src_drives
 
         ;; Clear selection
-finish: copy8   #$FF, current_drive_selection
+        copy8   #$FF, current_drive_selection
         rts
-
-index:  .byte   0
-
-src_block_count:
-        .word   0
 .endproc ; EnumerateDestinationDevices
 
 ;;; ============================================================
 
+;;; Input: A = device index
 .proc DrawDeviceListEntry
-        sta     device_index
-
-        ldx     device_index
+        pha                     ; A = index
+        tax
         CALL    PrepSDStrings, A=drive_unitnum_table,x
 
         ;; Slot
         copy8   #kListEntrySlotOffset, list_entry_pos+MGTK::Point::xcoord
         MGTK_CALL MGTK::MoveTo, list_entry_pos
-        CALL    DrawString, AX=#str_s
+        MGTK_CALL MGTK::DrawString, str_s
 
         ;; Drive
         copy8   #kListEntryDriveOffset, list_entry_pos+MGTK::Point::xcoord
         MGTK_CALL MGTK::MoveTo, list_entry_pos
-        CALL    DrawString, AX=#str_d
+        MGTK_CALL MGTK::DrawString, str_d
 
         ;; Name
         copy8   #kListEntryNameOffset, list_entry_pos+MGTK::Point::xcoord
         MGTK_CALL MGTK::MoveTo, list_entry_pos
 
-        CALL    GetDriveNameTableSlot, A=device_index
-        jmp     DrawString
-
-device_index:
-        .byte   0
+        pla                     ; A = index
+        CALL    GetDriveNameTableSlot ; into A,X
+        stax    @addr
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
+        rts
 .endproc ; DrawDeviceListEntry
 
 ;;; ============================================================
 ;;; Populate block_count_table across all devices
 
 .proc GetAllBlockCounts
-        copy8   #0, index
+        ldx     #0              ; index
     DO
-        jsr     GetBlockCount
-        inc     index
-        lda     index
-    WHILE A <> num_drives
-        rts
+        txa
+        pha
 
-index:  .byte   0
+        jsr     GetBlockCount
+
+        pla
+        tax
+        inx
+    WHILE X <> num_drives
+        rts
 .endproc ; GetAllBlockCounts
 
 ;;; ============================================================
@@ -1593,43 +1528,38 @@ index:  .byte   0
         pha
         tax                     ; X is device index
         CALL    IsDiskII, A=drive_unitnum_table,x
-        beq     disk_ii
-
+    IF EQ
+        ;; Disk II - always 280 blocks
+        pla
+        pha
+        asl     a
+        tax
+        ldxy    #280
+    ELSE
+        ;; Otherwise - use device driver
         pla
         pha
         tax
         CALL    main::DeviceDriverAddress, A=drive_unitnum_table,x ; Z=1 if firmware
-        stax    $06
-        jmp     use_driver
+        addr := $06
+        stax    addr
 
-        ;; Disk II - always 280 blocks
-disk_ii:
-        pla
-        asl     a
-        tax
-        copy16  #280, block_count_table,x
-        rts
-
-        ;; Use device driver
-use_driver:
         pla
         pha
         tax
-        lda     drive_unitnum_table,x
-        ldxy    $06
+        CALL    main::GetDeviceBlocksUsingDriver, A=drive_unitnum_table,x, XY=addr ; result in X,Y
+    END_IF
 
-        jsr     main::GetDeviceBlocksUsingDriver
-
-        stx     tmp             ; blocks available low
+        ;; X,Y = block count
+        tmp := $06
+        stx     tmp
         pla
         asl     a
         tax
-        copy8   tmp, block_count_table,x
-        tya                     ; blocks available high
-        sta     block_count_table+1,x
+        copy8   tmp, block_count_table,x ; lo
+        tya
+        sta     block_count_table+1,x    ; hi
         rts
-
-tmp:    .byte   0
 
 .endproc ; GetBlockCount
 
@@ -1658,7 +1588,7 @@ tmp:    .byte   0
         jsr     IntToStringWithSeparators
         jsr     SetPortForDialog
         MGTK_CALL MGTK::MoveTo, blocks_to_transfer_label_pos
-        CALL    DrawString, AX=#blocks_to_transfer_label_str
+        MGTK_CALL MGTK::DrawString, blocks_to_transfer_label_str
         jmp     DrawIntString
 .endproc ; DrawTotalBlocks
 
@@ -1667,7 +1597,7 @@ tmp:    .byte   0
         inc16   blocks_read
         CALL    IntToStringWithSeparators, AX=blocks_read
         MGTK_CALL MGTK::MoveTo, blocks_read_label_pos
-        CALL    DrawString, AX=#blocks_read_label_str
+        MGTK_CALL MGTK::DrawString, blocks_read_label_str
         jmp     DrawIntString
 .endproc ; IncAndDrawBlocksRead
 
@@ -1676,13 +1606,14 @@ tmp:    .byte   0
         inc16   blocks_written
         CALL    IntToStringWithSeparators, AX=blocks_written
         MGTK_CALL MGTK::MoveTo, blocks_written_label_pos
-        CALL    DrawString, AX=#blocks_written_label_str
+        MGTK_CALL MGTK::DrawString, blocks_written_label_str
         FALL_THROUGH_TO DrawIntString
 .endproc ; IncAndDrawBlocksWritten
 
 .proc DrawIntString
-        CALL    DrawString, AX=#str_from_int
-        TAIL_CALL DrawString, AX=#str_2_spaces
+        MGTK_CALL MGTK::DrawString, str_from_int
+        MGTK_CALL MGTK::DrawString, str_2_spaces
+        rts
 .endproc ; DrawIntString
 
 blocks_read:
@@ -1735,24 +1666,31 @@ remainder:      .word   0              ; (out)
 .proc DrawSourceDriveInfo
         jsr     SetPortForDialog
         MGTK_CALL MGTK::MoveTo, source_label_pos
-        CALL    DrawString, AX=#source_label_str
+        MGTK_CALL MGTK::DrawString, source_label_str
+
         ldx     source_drive_index
         CALL    PrepSDStrings, A=drive_unitnum_table,x
         MGTK_CALL MGTK::MoveTo, point_source_slot_drive
-        CALL    DrawString, AX=#str_slot_drive_pattern
+        MGTK_CALL MGTK::DrawString, str_slot_drive_pattern
+
         bit     source_disk_format
+        ASSERT_EQUALS auxlc::kSourceDiskFormatProDOS & $80, $00
         bpl     show_name       ; ProDOS
-        bvc     :+              ; DOS 3.3
+
+        ASSERT_EQUALS auxlc::kSourceDiskFormatDOS33 & $40, $00
+        bvs     ret             ; DOS 3.3
+
         lda     source_disk_format
         and     #$0F
-        beq     show_name       ; Pascal
-:       rts
+        ASSERT_EQUALS auxlc::kSourceDiskFormatPascal & $0F, $00
+        bne     ret             ; Other
 
 show_name:
-        CALL    DrawString, AX=#str_2_spaces
+        MGTK_CALL MGTK::DrawString, str_2_spaces
         COPY_STRING main::on_line_buffer2, device_name_buf
-        CALL    DrawString, AX=#device_name_buf
-        rts
+        MGTK_CALL MGTK::DrawString, device_name_buf
+
+ret:    rts
 .endproc ; DrawSourceDriveInfo
 
 ;;; ============================================================
@@ -1760,11 +1698,13 @@ show_name:
 .proc DrawDestinationDriveInfo
         jsr     SetPortForDialog
         MGTK_CALL MGTK::MoveTo, destination_label_pos
-        CALL    DrawString, AX=#destination_label_str
+        MGTK_CALL MGTK::DrawString, destination_label_str
+
         ldx     dest_drive_index
         CALL    PrepSDStrings, A=drive_unitnum_table,x
         MGTK_CALL MGTK::MoveTo, point_destination_slot_drive
-        CALL    DrawString, AX=#str_slot_drive_pattern
+        MGTK_CALL MGTK::DrawString, str_slot_drive_pattern
+
         rts
 .endproc ; DrawDestinationDriveInfo
 
@@ -1775,20 +1715,27 @@ show_name:
         MGTK_CALL MGTK::MoveTo, point_disk_copy
 
         bit     source_disk_format
+        ASSERT_EQUALS auxlc::kSourceDiskFormatProDOS & $80, $00
     IF NC                       ; ProDOS
-        CALL    DrawString, AX=#str_prodos_disk_copy
+        MGTK_CALL MGTK::DrawString, str_prodos_disk_copy
         rts
     END_IF
+
+        ASSERT_EQUALS auxlc::kSourceDiskFormatDOS33 & $40, $00
     IF VC                       ; DOS 3.3
-        CALL    DrawString, AX=#str_dos33_disk_copy
+        MGTK_CALL MGTK::DrawString, str_dos33_disk_copy
         rts
     END_IF
 
         lda     source_disk_format
         and     #$0F
+        ASSERT_EQUALS auxlc::kSourceDiskFormatPascal & $0F, $00
     IF ZERO                     ; Pascal
-        CALL    DrawString, AX=#str_pascal_disk_copy
+        MGTK_CALL MGTK::DrawString, str_pascal_disk_copy
+        rts
     END_IF
+
+        ;; Nothing if `kSourceDiskFormatOther`
 
         rts
 .endproc ; DrawCopyFormatType
@@ -1796,8 +1743,7 @@ show_name:
 .proc DrawEscToStopCopyHint
         jsr     SetPortForDialog
         MGTK_CALL MGTK::MoveTo, escape_stop_copy_label_pos
-        CALL    DrawStringCentered, AX=#escape_stop_copy_label_str
-        rts
+        TAIL_CALL DrawStringCentered, AX=#escape_stop_copy_label_str
 .endproc ; DrawEscToStopCopyHint
 
 ;;; ============================================================
@@ -1825,13 +1771,13 @@ show_name:
         lda     err_writing_flag
     IF ZERO
         MGTK_CALL MGTK::MoveTo, error_reading_label_pos
-        CALL    DrawString, AX=#error_reading_label_str
+        MGTK_CALL MGTK::DrawString, error_reading_label_str
         jsr     DrawIntString
         RETURN  A=#0
     END_IF
 
         MGTK_CALL MGTK::MoveTo, error_writing_label_pos
-        CALL    DrawString, AX=#error_writing_label_str
+        MGTK_CALL MGTK::DrawString, error_writing_label_str
         jsr     DrawIntString
         RETURN  A=#0
 
@@ -1961,11 +1907,11 @@ str_confirm_erase_suffix:
         PASCAL_STRING res_string_prompt_erase_suffix
 
 str_dest_format_fail:
-        PASCAL_STRING res_string_errmsg_dest_format_fail
+        PASCAL_STRING res_string_error_dest_format_fail
 str_format_error:
-        PASCAL_STRING res_string_errmsg_format_error
+        PASCAL_STRING res_string_error_format_error
 str_dest_protected:
-        PASCAL_STRING res_string_errmsg_dest_protected
+        PASCAL_STRING res_string_error_dest_protected
 
 ;;; This string is seen when copying over a DOS 3.3 disk.
 str_confirm_erase_dos33:
@@ -2200,8 +2146,7 @@ ShowAlertDialog := ShowAlertDialogImpl::start
 @retry:
         ;; Poll drive until something is present
         ;; (either a ProDOS disk or a non-ProDOS disk)
-        copy8   unit_num, main::on_line_params::unit_num
-        jsr     main::CallOnLine
+        CALL    main::CallOnLine, A=unit_num
         bcc     done
 
         cmp     #ERR_NOT_PRODOS_VOLUME
@@ -2271,7 +2216,7 @@ Alert := alert_dialog::Alert
 
 ;;; ============================================================
 
-        .assert * <= $F200, error, "Update memory_bitmap if code extends past $F200"
+        .assert * <= $F000, error, "Update memory_bitmap if code extends past $F000"
 .endscope ; auxlc
 
         ENDSEG SegmentAuxLC

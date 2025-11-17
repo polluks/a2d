@@ -129,7 +129,7 @@ adjust_stack:                   ; Adjust stack to account for params
         ;; * second byte's high bit is "hide cursor" flag
         ;; * rest of second byte is # bytes to copy
 
-        ldy     param_lengths+1,x ; Check param length...
+        ldy     param_lengths+1,x ; Check "hide cursor" flag
         bpl     done_hiding
 
         bit     desktop_initialized_flag
@@ -138,6 +138,9 @@ adjust_stack:                   ; Adjust stack to account for params
         pha                     ; registers and params_addr and then
         tya                     ; hide cursor
         pha
+
+        bit     disable_autohide_flag ; unless globally overridden!
+    IF NC
         lda     params_addr
         pha
         lda     params_addr+1
@@ -147,6 +150,8 @@ adjust_stack:                   ; Adjust stack to account for params
         sta     params_addr+1
         pla
         sta     params_addr
+    END_IF
+
         pla
         and     #$7F            ; clear high bit in length count
         tay
@@ -371,15 +376,17 @@ jump_table:
         .addr   GetWinFrameRectImpl ; $51 GetWinFrameRect
         .addr   RedrawDeskTopImpl   ; $52 RedrawDeskTop
         .addr   FindControlExImpl   ; $53 FindControlEx
-        .addr   PaintBitsImpl       ; $54 PaintBitsHC
-        .addr   FlashMenuBarImpl    ; $55 FlashMenuBar
-        .addr   SaveScreenRectImpl  ; $56 SaveScreenRect
-        .addr   RestoreScreenRectImpl ; $57 RestoreScreenRect
-        .addr   InflateRectImpl     ; $58 InflateRect
-        .addr   UnionRectsImpl      ; $59 UnionRects
-        .addr   MulDivImpl          ; $5A MulDiv
-        .addr   ShieldCursorImpl    ; $5B ShieldCursor
-        .addr   UnshieldCursorImpl  ; $5C UnshieldCursor
+        .addr   FlashMenuBarImpl    ; $54 FlashMenuBar
+        .addr   SaveScreenRectImpl  ; $55 SaveScreenRect
+        .addr   RestoreScreenRectImpl ; $56 RestoreScreenRect
+        .addr   InflateRectImpl     ; $57 InflateRect
+        .addr   UnionRectsImpl      ; $58 UnionRects
+        .addr   MulDivImpl          ; $59 MulDiv
+        .addr   ShieldCursorImpl    ; $5A ShieldCursor
+        .addr   UnshieldCursorImpl  ; $5B UnshieldCursor
+        .addr   StringWidthImpl     ; $5C StringWidth
+        .addr   DrawStringImpl      ; $5D DrawString
+        .addr   WaitVBLImpl         ; $5E WaitVBL
 
         ;; Entry point param lengths
         ;; (length, ZP destination, hide cursor flag)
@@ -417,7 +424,7 @@ param_lengths:
         PARAM_DEFN  8, $92, 1                ; $11 PaintRect
         PARAM_DEFN  8, $9F, 1                ; $12 FrameRect
         PARAM_DEFN  8, $92, 0                ; $13 InRect
-        PARAM_DEFN 16, $8A, 0                ; $14 PaintBits
+        PARAM_DEFN 16, $8A, 1                ; $14 PaintBits
         PARAM_DEFN  0, $00, 1                ; $15 PaintPoly
         PARAM_DEFN  0, $00, 1                ; $16 FramePoly
         PARAM_DEFN  0, $00, 0                ; $17 InPoly
@@ -502,15 +509,17 @@ param_lengths:
         PARAM_DEFN  5, $82, 0                ; $51 GetWinFrameRect
         PARAM_DEFN  0, $00, 0                ; $52 RedrawDeskTop
         PARAM_DEFN  7, $82, 0                ; $53 FindControlEx
-        PARAM_DEFN 16, $8A, 1                ; $54 PaintBitsHC
-        PARAM_DEFN  0, $00, 0                ; $55 FlashMenuBar
-        PARAM_DEFN  8, $92, 1                ; $56 SaveScreenRect
-        PARAM_DEFN  8, $92, 1                ; $57 RestoreScreenRect
-        PARAM_DEFN  6, $82, 0                ; $58 InflateRect
-        PARAM_DEFN  4, $82, 0                ; $59 UnionRects
-        PARAM_DEFN  6, $82, 0                ; $5A MulDiv
-        PARAM_DEFN 16, $8A, 0                ; $5B ShieldCursor
-        PARAM_DEFN  0, $00, 0                ; $5C UnshieldCursor
+        PARAM_DEFN  0, $00, 0                ; $54 FlashMenuBar
+        PARAM_DEFN  8, $92, 1                ; $55 SaveScreenRect
+        PARAM_DEFN  8, $92, 1                ; $56 RestoreScreenRect
+        PARAM_DEFN  6, $82, 0                ; $57 InflateRect
+        PARAM_DEFN  4, $82, 0                ; $58 UnionRects
+        PARAM_DEFN  6, $82, 0                ; $59 MulDiv
+        PARAM_DEFN  8, $92, 0                ; $5A ShieldCursor
+        PARAM_DEFN  0, $00, 0                ; $5B UnshieldCursor
+        PARAM_DEFN  2, $A1, 0                ; $5C StringWidth
+        PARAM_DEFN  0, $00, 1                ; $5D DrawString
+        PARAM_DEFN  0, $00, 0                ; $5E WaitVBL
 
 ;;; ============================================================
 ;;; Pre-Shift Tables
@@ -908,6 +917,9 @@ hires_table_hi:
         poly_yl_buffer  := $0780
         poly_yh_buffer  := $07BC
 
+        ;; Only used between `PreDrawCursor` and `FinishDrawCursor`
+        cursor_drawmask := $0700 ; 12*3 bytes
+        cursor_drawbits := $0780 ; 12*3 bytes
 
         .assert <pattern_buffer = 0, error, "pattern_buffer must be page-aligned"
 
@@ -1331,10 +1343,11 @@ fill_mode_table_onechar_high:
 .proc SetPenModeImpl
         lda     current_penmode
         ldx     #0
-    IF A >=  #4
+    IF A >= #4
         ldx     #$7F
     END_IF
         stx     fill_eor_mask
+        ;; NOTE: `UpdateThumbImpl` implicitly depends on the return value here
         rts
 .endproc ; SetPenModeImpl
 
@@ -1420,12 +1433,15 @@ set_width:                                      ; Set width for destination.
 :       txa
         ror     a
         tax
-        php
+        ldy     mod7_table+4,x
         lda     div7_table+4,x
-        clc
-        adc     #$24
-        plp
-        RETURN  Y=mod7_table+4,x
+        bcc     :+
+        adc     #$23
+        sec
+        rts
+:
+        adc     #$24            ; keep C=0 for x < 560
+        rts
 .endproc ; DivMod7
 
         ;; Set up destination (for either on-screen or off-screen bitmap.)
@@ -2433,10 +2449,8 @@ next:   php
         sty     $AB
         ldy     $A9
         bit     loop_ctr
-        bmi     :+
-        jmp     loop
-
-:       plp
+        jpl     loop
+        plp
         ldx     vertex_limit
         jmp     PaintPolyImpl::next
 .endproc ; ProcessPoly
@@ -2669,10 +2683,8 @@ skip_rect:
 
         lda     poly_maxima_links,x
 scan_next_link:
-        bmi     :+
-        jmp     scan_loop2
-
-:       inc16   scan_y
+        jpl     scan_loop2
+        inc16   scan_y
         jmp     scan_loop
 .endproc ; FillPolys
 
@@ -3014,8 +3026,7 @@ L57BF:  ldx     current_penwidth
         bne     L57E1
         cmp     x2
         bcc     L57E9
-        bne     L57E1
-        jmp     DrawLine
+        jeq     DrawLine
 
 L57E1:  lda     $A1
         ldx     $A2
@@ -3198,6 +3209,32 @@ loop:   sty     pos
 .endproc ; MeasureText
 
 ;;; ============================================================
+;;; StringWidth
+
+;;; 2 bytes of params, copied to $A1
+
+.proc StringWidthImpl
+        jsr     StringToText
+        jsr     MeasureText
+        ldy     #2              ; Store result (X,A) at params+2
+        sta     (params_addr),y
+        txa
+        iny
+        sta     (params_addr),y
+        rts
+.endproc ; StringWidthImpl
+
+;;; Convert "String" params (Pascal string at $A1) to "Text" params
+;;; (text address at $A1, length at $A3)
+.proc StringToText
+        ldy     #0
+        lda     ($A1),y
+        sta     $A3
+        inc16   $A1
+        rts
+.endproc ; StringToText
+
+;;; ============================================================
 
         ;; Turn the current penloc into left, right, top, and bottom.
         ;;
@@ -3227,6 +3264,12 @@ loop:   sty     pos
 .endproc ; PenlocToBounds
 
 ;;; ============================================================
+
+.proc DrawStringImpl
+        copy16  params_addr, $A1
+        jsr     StringToText
+        FALL_THROUGH_TO DrawTextImpl
+.endproc ; DrawStringImpl
 
 ;;; 3 bytes of params, copied to $A1
 
@@ -3567,10 +3610,8 @@ advance_x:
 
 L5BFF:  ldy     text_index
         cpy     text_len
-        beq     :+
-        jmp     next_glyph
-
-:       ldy     $A0
+        jne     next_glyph
+        ldy     $A0
 
 jmp_last_blit:
         jmp     last_blit
@@ -3580,10 +3621,8 @@ advance_byte:
         sta     left_mod14
 
         ldy     $A0
-        bne     :+
-        jmp     first_blit
-
-:       bmi     next_byte
+        jeq     first_blit
+        bmi     next_byte
         dec     width_bytes
         beq     jmp_last_blit
 
@@ -4026,19 +4065,14 @@ mouse_hook:
 cursor_hotspot_x:  .byte   $00
 cursor_hotspot_y:  .byte   $00
 
-cursor_mod7:
-        .res    1
-
-cursor_bits:
-        .res    3
-cursor_mask:
-        .res    3
-
 cursor_savebits:
         .res    3*MGTK::cursor_height           ; Saved 3 screen bytes per row.
 
-cursor_data:
-        .res    4                               ; Saved values of cursor_char..cursor_y2.
+        kCursorDrawDataSize = 3
+cursor_restore_data:
+        .res    kCursorDrawDataSize             ; Saved values of `cursor_col`..`cursor_y2`.
+cursor_draw_data:
+        .res    kCursorDrawDataSize             ; Saved values of `cursor_col`..`cursor_y2`.
 
 pointer_cursor:
         PIXELS  ".............."
@@ -4133,7 +4167,7 @@ system_cursor_table_hi: .byte   >pointer_cursor, >ibeam_cursor, >watch_cursor
 .proc SetPointerCursor
         ldx     #$FF
         stx     cursor_count
-        inx
+        inx                     ; X = 0
         stx     cursor_flag
         lda     #<pointer_cursor
         sta     params_addr
@@ -4159,6 +4193,15 @@ system_cursor_table_hi: .byte   >pointer_cursor, >ibeam_cursor, >watch_cursor
     END_IF
 
         ldax    params_addr
+
+        ;; No-op if same
+        cmp     active_cursor
+        bne     :+
+        cpx     active_cursor+1
+        bne     :+
+        bit     cursor_flag
+        bpl     finish
+:
         stax    active_cursor
         addax8  #MGTK::Cursor::mask
         stax    active_cursor_mask
@@ -4169,40 +4212,65 @@ system_cursor_table_hi: .byte   >pointer_cursor, >ibeam_cursor, >watch_cursor
         iny
         lda     (params_addr),y
         sta     cursor_hotspot_y
+
         jsr     RestoreCursorBackground
         jsr     DrawCursor
+
+finish:
         plp
 .endproc ; SetCursorImpl
 srts:   rts
 
+;;; ============================================================
 
-        cursor_bytes      := $82
-        cursor_softswitch := $83
-        cursor_y1         := $84
-        cursor_y2         := $85
+;;; Cursor updating is split into three part - a "pre-draw" phase, a
+;;; "restore" phase, and a "finish draw" phase. This is because there
+;;; is a limited time budget within the vertical blanking interval to
+;;; avoid tearing/flicker. By doing all of the computations in advance
+;;; the actual restore/draw can be kept under the budget.
+
+        cursor_bytes      := $82 ; `kCursorDrawDataSize` bytes here hold state for draw/restore
+        cursor_col        := $82 ; column (0...39)
+        cursor_y1         := $83 ; top row of cursor - 1
+        cursor_y2         := $84 ; bottom row of cursor
 
         vid_ptr           := $88
 
-.proc UpdateCursor
-        lda     cursor_count           ; hidden? if so, skip
-        bne     srts
-        bit     cursor_flag
-        bmi     srts
-        FALL_THROUGH_TO DrawCursor
-.endproc ; UpdateCursor
+;;; Do all of the calculations and shifting for the cursor bytes,
+;;; without actually drawing.
+.proc PreDrawCursor
+        ;; ZP locations
+        drawbits_index  := $92
+        savebits_index  := $93
+        cursor_bits     := $94  ; 3 bytes
+        cursor_mask     := $97  ; 3 bytes
+        cursor_mod7     := $9A
+        tmp_y           := $9B
 
-.proc DrawCursor
-        lda     #0
-        sta     cursor_count
-        sta     cursor_flag
-
+        ;; Compute rows to draw
         lda     cursor_pos::ycoord
         clc
         sbc     cursor_hotspot_y
         sta     cursor_y1
         clc
         adc     #MGTK::cursor_height
+    IF A >= #192
+        lda     #191
+    END_IF
         sta     cursor_y2
+
+        ;; Compute bytes to draw, and pre-shift table
+        sec
+        sbc     cursor_y1       ; number of lines
+        asl                     ; *= 2
+        sbc     #0              ; -1
+        sta     drawbits_index  ; index into `active_cursor`/`active_cursor_mask`
+
+        ;; Ensure we don't try to draw above screen row 0
+        lda     cursor_y1
+    IF A >= #192
+        copy8   #AS_BYTE(-1), cursor_y1
+    END_IF
 
         lda     cursor_pos::xcoord
         sec
@@ -4210,18 +4278,19 @@ srts:   rts
         tax
         lda     cursor_pos::xcoord+1
         sbc     #0
-        bpl     :+
-
+    IF NEG
         txa                            ; X-coord is negative: X-reg = X-coord + 256
         ror     a                      ; Will shift in zero:  X-reg = X-coord/2 + 128
         tax                            ; Negative mod7 table starts at 252 (since 252%7 = 0), and goes backwards
         ldy     mod7_table+252-128,x   ; Index (X-coord / 2 = X-reg - 128) relative to mod7_table+252
         lda     #$FF                   ; Char index = -1
-        bmi     set_divmod
+        bmi     set_divmod             ; always
+    END_IF
+        ;; "else"
+        jsr     DivMod7
 
-:       jsr     DivMod7
 set_divmod:
-        sta     cursor_bytes            ; char index in line
+        sta     cursor_col             ; char index in line
 
         tya
         rol     a
@@ -4230,198 +4299,286 @@ set_divmod:
         sbc     #7
 :       tay
 
-        lda     #<LOWSCR/2
-        rol     a                      ; if mod >= 7, then will be HISCR, else LOWSCR
-        eor     #1
-        sta     cursor_softswitch      ; $C0xx softswitch index
-
         sty     cursor_mod7
         copylohi shift_table_main_low,y, shift_table_main_high,y, cursor_shift_main_addr
         copylohi shift_table_aux_low,y, shift_table_aux_high,y, cursor_shift_aux_addr
 
-        ldx     #3
-:       lda     cursor_bytes,x
-        sta     cursor_data,x
-        dex
-        bpl     :-
+        ;; Set up loop invariants (for here, actual draw, and restore
+        ;; code) Note that even though we don't write to the graphics
+        ;; screen here, the pre-computed cursor mask/bits are stashed
+        ;; in a buffer on text page 1, so we need to match main/aux
+        ;; pages for when `FinishDrawCursor` reading/writing, so we
+        ;; still twiddle `LOWSCR`/`HISCR` here.
+        lda     #<LOWSCR/2
+        rol     a                      ; if mod >= 7, then will be HISCR, else LOWSCR
+        sta     switch_sta2
+        sta     finish_switch_sta2
+        eor     #1
+        sta     switch_sta1
+        sta     finish_switch_sta1
 
-        ldx     #$17
-        stx     left_bytes
-        ldx     #$23
+        ldx     #OPC_NOP
+        and     #1
+    IF NOT_ZERO
+        ldx     #OPC_DEY
+    END_IF
+        stx     switch_dey
+        stx     finish_switch_dey
+
+        ;; Stash calculations for later use in `FinishDrawCursor` and `RestoreCursorBackground`
+        COPY_BYTES kCursorDrawDataSize, cursor_bytes, cursor_draw_data
+
+        ;; --------------------------------------------------
+        ;; Iterate from bottom of cursor to the top
+
+        ldx     #(MGTK::cursor_height * 3) - 1 ; index into `cursor_savebits`
         ldy     cursor_y2
-dloop:  cpy     #192
-        bcc     :+
-        jmp     drnext
-
-:       lda     hires_table_lo,y
-        sta     vid_ptr
-        lda     hires_table_hi,y
-        ora     #$20
-        sta     vid_ptr+1
+    DO
         sty     cursor_y2
-        stx     left_mod14
+        stx     savebits_index
 
-        ldy     left_bytes
-        ldx     #$01
-:
-active_cursor           := * + 1
-        lda     $FFFF,y
+        ;; Look up the cursor bits/mask for this row, stash in `cursor_bits`/`cursor_mask`
+        ldy     drawbits_index
+        ldx     #MGTK::cursor_width - 1
+      DO
+        active_cursor := * + 1
+        lda     SELF_MODIFIED,y
         sta     cursor_bits,x
-active_cursor_mask      := * + 1
-        lda     $FFFF,y
+        active_cursor_mask := * + 1
+        lda     SELF_MODIFIED,y
         sta     cursor_mask,x
         dey
         dex
-        bpl     :-
-        lda     #0
+      WHILE POS
+        sty     drawbits_index
+        lda     #0              ; third byte starts off empty
         sta     cursor_bits+2
         sta     cursor_mask+2
 
-        ldy     cursor_mod7
-        beq     no_shift
+        ;; If needed, expand `cursor_bits`/`cursor_mask` to 3 bytes
+        ldx     cursor_mod7
+      IF NOT ZERO
+        ASSERT_EQUALS cursor_bits + 3, cursor_mask
+        ;; Enter this loop with A=`cursor_mask+2` from above (i.e. 0)
+        ldx     #(3 + 3) - 1    ; do both bits and mask in the loop
+       DO
+        ldy     cursor_bits-1,x
 
-        ldy     #5
-:       ldx     cursor_bits-1,y
+        cursor_shift_main_addr := * + 1
+        ora     SELF_MODIFIED,y
+        sta     cursor_bits,x
 
-cursor_shift_main_addr           := * + 1
-        ora     $FF80,x
-        sta     cursor_bits,y
-
-cursor_shift_aux_addr           := * + 1
-        lda     $FF00,x
-        dey
-        bne     :-
+        cursor_shift_aux_addr := * + 1
+        lda     SELF_MODIFIED,y
+        dex
+       WHILE NOT ZERO
         sta     cursor_bits
+      END_IF
 
-no_shift:
-        ldx     left_mod14
-        ldy     cursor_bytes
-        lda     cursor_softswitch
-        jsr     SetSwitch
-        bcs     :+
+        ;; Now record `cursor_mask` and `cursor_bits` into
+        ;; `cursor_drawmask` and `cursor_drawbits` for
+        ;; `FinishDrawCursor` to use later.
 
-        lda     (vid_ptr),y
-        sta     cursor_savebits,x
+        ldx     savebits_index
+        ldy     cursor_col
 
-        lda     cursor_mask
-        ora     (vid_ptr),y
-        eor     cursor_bits
-        sta     (vid_ptr),y
-        dex
-:
-        jsr     SwitchPage
-        bcs     :+
+        ;; First byte
+        switch_sta1 := *+1
+        sta     $C0FF
+        lda     #0
+        jsr     do_byte
 
-        lda     (vid_ptr),y
-        sta     cursor_savebits,x
-        lda     cursor_mask+1
+        ;; Third byte (on same page)
+        iny
+        lda     #2
+        jsr     do_byte
 
-        ora     (vid_ptr),y
-        eor     cursor_bits+1
-        sta     (vid_ptr),y
-        dex
-:
-        jsr     SwitchPage
-        bcs     :+
-
-        lda     (vid_ptr),y
-        sta     cursor_savebits,x
-
-        lda     cursor_mask+2
-        ora     (vid_ptr),y
-        eor     cursor_bits+2
-        sta     (vid_ptr),y
-        dex
-:
-        ldy     cursor_y2
-drnext:
-        dec     left_bytes
-        dec     left_bytes
+        ;; Second byte
+        switch_dey := *
         dey
-        cpy     cursor_y1
-        beq     lowscr_rts
-        jmp     dloop
+        switch_sta2 := *+1
+        sta     $C0FF
+        lda     #1
+        jsr     do_byte
+
+        ldy     cursor_y2
+        dey
+    WHILE Y <> cursor_y1
+        sta     LOWSCR
+        rts
+
+do_byte:
+        cpy     #40
+      IF CC
+        sty     tmp_y
+        tay
+
+        ;; The shifted mask/bits are stashed in a buffer on text page 1
+        ;; (main or aux, depending on page switching)
+
+        .assert cursor_drawmask >= $400 && cursor_drawmask <= $800, error, "on text page"
+        lda     cursor_mask,y
+        sta     cursor_drawmask,x
+
+        .assert cursor_drawbits >= $400 && cursor_drawbits <= $800, error, "on text page"
+        lda     cursor_bits,y
+        sta     cursor_drawbits,x
+
+        ldy     tmp_y
+        dex
+      END_IF
+        rts
+.endproc ; PreDrawCursor
+
+active_cursor        := PreDrawCursor::active_cursor
+active_cursor_mask   := PreDrawCursor::active_cursor_mask
+
+;;; Entry point for simple drawing, without worrying about vertical
+;;; blanking.
+.proc DrawCursor
+        jsr     PreDrawCursor
+        FALL_THROUGH_TO FinishDrawCursor
 .endproc ; DrawCursor
-drts:   rts
 
-active_cursor        := DrawCursor::active_cursor
-active_cursor_mask   := DrawCursor::active_cursor_mask
+;;; Assumes `PreDrawCursor` has been called. This does the actual
+;;; drawing using the stashed `cursor_draw_data`, `cursor_drawmask`
+;;; and `cursor_drawbits`. Prepares `cursor_savebits` and
+;;; `cursor_restore_data` for next call to `RestoreCursorBackground`.
+.proc FinishDrawCursor
+        lda     #0
+        sta     cursor_count
+        sta     cursor_flag
 
+        ;; Unstash calculations from `DrawCursor`
+        ldx     #kCursorDrawDataSize-1
+    DO
+        lda     cursor_draw_data,x
+        sta     cursor_bytes,x  ; for us to use
+        sta     cursor_restore_data,x ; for next `RestoreCursorBackground` call
+        dex
+    WHILE POS
 
-.proc RestoreCursorBackground
-        lda     cursor_count    ; already hidden?
-        bne     drts
-        bit     cursor_flag
-        bmi     drts
+        ;; SMC `RestoreCursorBackground` to match us
+        copy8   switch_sta2, restore_switch_sta2
+        copy8   switch_sta1, restore_switch_sta1
+        copy8   switch_dey, restore_switch_dey
 
-        COPY_BYTES 4, cursor_data, cursor_bytes
+        ;; --------------------------------------------------
+        ;; Iterate from bottom of cursor to the top
 
-        ldx     #$23
+        ldx     #(MGTK::cursor_height * 3) - 1 ; index into `cursor_savebits`
         ldy     cursor_y2
     DO
-      IF Y < #192
-
         lda     hires_table_lo,y
         sta     vid_ptr
         lda     hires_table_hi,y
         ora     #$20
         sta     vid_ptr+1
+
         sty     cursor_y2
+        ldy     cursor_col
 
-        ldy     cursor_bytes
-        lda     cursor_softswitch
+        ;; First byte
+        switch_sta1 := *+1
+        sta     $C0FF
+        jsr     do_byte
 
-        jsr     SetSwitch
-       IF CC
-        lda     cursor_savebits,x
-        sta     (vid_ptr),y
-        dex
-       END_IF
+        ;; Third byte (on same page)
+        iny
+        jsr     do_byte
 
-        jsr     SwitchPage
-       IF CC
-        lda     cursor_savebits,x
-        sta     (vid_ptr),y
-        dex
-       END_IF
-
-        jsr     SwitchPage
-       IF CC
-        lda     cursor_savebits,x
-        sta     (vid_ptr),y
-        dex
-       END_IF
+        ;; Second byte
+        switch_dey := *
+        dey
+        switch_sta2 := *+1
+        sta     $C0FF
+        jsr     do_byte
 
         ldy     cursor_y2
-      END_IF
-
         dey
     WHILE Y <> cursor_y1
-.endproc ; RestoreCursorBackground
-lowscr_rts:
         sta     LOWSCR
         rts
 
-
-.proc SwitchPage
-        lda     set_switch_sta_addr
-        eor     #1
-        cmp     #<LOWSCR
-        beq     SetSwitch
-        iny
-        FALL_THROUGH_TO SetSwitch
-.endproc ; SwitchPage
-
-.proc SetSwitch
-        sta     switch_sta_addr
-switch_sta_addr := *+1
-        sta     $C0FF
-        cpy     #$28
+do_byte:
+        cpy     #40
+    IF CC
+        lda     (vid_ptr),y
+        sta     cursor_savebits,x
+        ora     cursor_drawmask,x
+        eor     cursor_drawbits,x
+        sta     (vid_ptr),y
+        dex
+    END_IF
         rts
-.endproc ; SetSwitch
+.endproc ; FinishDrawCursor
+finish_switch_sta1 := FinishDrawCursor::switch_sta1
+finish_switch_sta2 := FinishDrawCursor::switch_sta2
+finish_switch_dey := FinishDrawCursor::switch_dey
 
-set_switch_sta_addr := SetSwitch::switch_sta_addr
+;;; Erase the previously drawn cursor, using `cursor_restore_data`
+;;; calculated in `PreDrawCursor` and the `cursor_savebits` captured
+;;; in `FinishDrawCursor`.
+.proc RestoreCursorBackground
+        lda     cursor_count    ; already hidden?
+        bne     ret
+        bit     cursor_flag
+        bmi     ret
 
+        ;; Unstash calculations from `FinishDrawCursor`
+        COPY_BYTES kCursorDrawDataSize, cursor_restore_data, cursor_bytes
+
+        ;; --------------------------------------------------
+        ;; Iterate from bottom of cursor to the top
+
+        ldx     #(MGTK::cursor_height * 3) - 1 ; index into `cursor_savebits`
+        ldy     cursor_y2
+    DO
+        lda     hires_table_lo,y
+        sta     vid_ptr
+        lda     hires_table_hi,y
+        ora     #$20
+        sta     vid_ptr+1
+
+        sty     cursor_y2
+
+        ldy     cursor_col
+
+        ;; First byte
+        switch_sta1 := *+1
+        sta     $C0FF
+        jsr     do_byte
+
+        ;; Third byte (on same page)
+        iny
+        jsr     do_byte
+
+        ;; Second byte
+        switch_dey := *
+        dey
+        switch_sta2 := *+1
+        sta     $C0FF
+        jsr     do_byte
+
+        ldy     cursor_y2
+        dey
+    WHILE Y <> cursor_y1
+        sta     LOWSCR
+ret:    rts
+
+do_byte:
+        cpy     #40
+      IF CC
+        lda     cursor_savebits,x
+        sta     (vid_ptr),y
+        dex
+      END_IF
+        rts
+
+.endproc ; RestoreCursorBackground
+restore_switch_sta1 := RestoreCursorBackground::switch_sta1
+restore_switch_sta2 := RestoreCursorBackground::switch_sta2
+restore_switch_dey := RestoreCursorBackground::switch_dey
 
 ;;; ============================================================
 ;;; ShowCursor
@@ -4517,14 +4674,28 @@ cursor_throttle:
         ;; --------------------------------------------------
 
 mouse_moved:
-        jsr     RestoreCursorBackground
+        ;; Updated position
         ldx     #2
-        stx     cursor_flag
 :       lda     mouse_x,x
         sta     cursor_pos,x
         dex
         bpl     :-
-        jsr     UpdateCursor
+
+        lda     cursor_count
+        bne     no_move
+
+        ;; Pre-calculate the cursor coordinates, shifted bits and mask bytes
+        jsr     PreDrawCursor
+
+        jsr     WaitVBLImpl
+
+        ;; NTSC VBI budget is 4550 cycles (70 rows x 65 cycles/row)
+        ;; The below is ~3778 cycles, which is sufficient to avoid
+        ;; tearing. It can be reduced to at least ~2903 by inlining,
+        ;; at the expense of size.
+
+        jsr     RestoreCursorBackground
+        jsr     FinishDrawCursor
 
 no_move:
 .endproc ; MoveCursor
@@ -4732,15 +4903,44 @@ savesize        .word
         inx
         stx     mouse_scale_x
 
+        ldax    #vbl_iie_proc   ; default
         bit     subid
     IF VC
         ;; Per Technical Note: Apple IIc #1: Mouse Differences on IIe and IIc
-        ;; https://web.archive.org/web/2007/http://web.pdx.edu/~heiss/technotes/aiic/tn.aiic.1.html
-        stx     mouse_scale_y
-        inx                              ; default scaling for IIc/IIc+
-        stx     mouse_scale_x
-        ;; TODO: Save a byte by doing `INC mouse_scale_y; INC mouse_scale_x` instead
+        ;; https://web.archive.org/web/2007/http://web.pdx.edu/~heiss/technotes/aiic/tn.aiic.1.htm
+        inc     mouse_scale_x
+        inc     mouse_scale_y
+
+        ldax    #vbl_iic_proc
+    ELSE
+        ;; IIe or IIgs?
+        bit     RDLCRAM
+        php
+        bit     ROMIN2          ; Bank ROM
+
+        CALL    IDROUTINE, C=1
+      IF CC
+        ;; IIgs
+        ldax    #vbl_iigs_proc
+      END_IF
+
+        ldy     IDBYTEMACIIE
+      IF Y = #$02
+        ;; Macintosh IIe Option Card
+        ;; RDVBLBAR exists and per @mgcaret allows 60Hz timing but is
+        ;; not sync'd to the actual video refresh, so ignore it. It is
+        ;; also buggy on v2.2.2d1 per @peterferrie and never fires so
+        ;; we would hang.
+        ldax    #vbl_none_proc
+      END_IF
+
+        plp
+      IF NS
+        bit     LCBANK1         ; Bank RAM back in if needed
+        bit     LCBANK1
+      END_IF
     END_IF
+        stax    vbl_proc_addr
 
         ldx     slot_num
         jsr     FindMouse
@@ -4805,7 +5005,7 @@ no_irq:
         sta     current_window+1
 
 reset_desktop:
-        jsr     SaveParamsAndStack
+        jsr     SaveParamsAndStack ; restored by call below
         jsr     SetDesktopPort
 
         ;; TODO: Consider clearing `KBDSTRB` to avoid lingering keypresses.
@@ -4813,7 +5013,7 @@ reset_desktop:
         ;; Fills the desktop background on startup (menu left black)
         MGTK_CALL MGTK::SetPattern, desktop_pattern
         MGTK_CALL MGTK::PaintRect, desktop_mapinfo+MGTK::MapInfo::maprect
-        jmp     RestoreParamsActivePort
+        jmp     RestoreParamsAndStack
 .endproc ; StartDeskTopImpl
 
         DEFINE_ALLOC_INTERRUPT_PARAMS alloc_interrupt_params, InterruptHandler
@@ -4937,11 +5137,11 @@ invalid_hook:
 .proc CallBeforeEventsHook
         lda     before_events_hook+1
     IF NOT ZERO
-        jsr     SaveParamsAndStack
+        jsr     SaveParamsAndStack ; restored by call below
 
         jsr     before_events_hook_jmp
         php
-        jsr     RestoreParamsActivePort
+        jsr     RestoreParamsAndStack
         plp
     END_IF
 
@@ -4954,11 +5154,11 @@ before_events_hook_jmp:
 .proc CallAfterEventsHook
         lda     after_events_hook+1
         beq     :+
-        jsr     SaveParamsAndStack
+        jsr     SaveParamsAndStack ; restored by call below
 
         jsr     after_events_hook_jmp
         php
-        jsr     RestoreParamsActivePort
+        jsr     RestoreParamsAndStack
         plp
 :       rts
 .endproc ; CallAfterEventsHook
@@ -4973,31 +5173,33 @@ stack_ptr_save:
         .res    1
 
 
-.proc HideCursorSaveParams
+.proc HideCursorAndSaveParams
         jsr     HideCursorImpl
         FALL_THROUGH_TO SaveParamsAndStack
-.endproc ; HideCursorSaveParams
+.endproc ; HideCursorAndSaveParams
 
 .proc SaveParamsAndStack
         copy16  params_addr, params_addr_save
-        lda     stack_ptr_stash
-        sta     stack_ptr_save
+        copy8   stack_ptr_stash, stack_ptr_save
         lsr     preserve_zp_flag
         rts
 .endproc ; SaveParamsAndStack
 
 
-.proc ShowCursorAndRestore
+.proc ShowCursorAndRestoreParams
         jsr     ShowCursorImpl
-        FALL_THROUGH_TO RestoreParamsActivePort
-.endproc ; ShowCursorAndRestore
+        FALL_THROUGH_TO RestoreParamsAndStack
+.endproc ; ShowCursorAndRestoreParams
 
-.proc RestoreParamsActivePort
+.proc RestoreParamsAndStack
+        ;; Note that `FindWindowImpl` has an optimized copy of this
+        ;; code that doesn't bother restoring stack and port.
         asl     preserve_zp_flag
         copy16  params_addr_save, params_addr
+
         ldax    active_port
         FALL_THROUGH_TO SetAndPreparePort
-.endproc ; RestoreParamsActivePort
+.endproc ; RestoreParamsAndStack
 
 .proc SetAndPreparePort
         stax    $82
@@ -5079,20 +5281,15 @@ mouse_state  .word
 .endproc ; AttachDriverImpl
 
 ;;; ============================================================
-;;; PeekEvent
+;;; PeekEvent / GetEvent
 
-.proc PeekEventImpl
-        clc
-        .byte   OPC_BCS         ; mask next byte (sec)
-        FALL_THROUGH_TO GetEventImpl
-.endproc ; PeekEventImpl
+.proc PeekOrGetEventImpl
+peek:   clc
+        .byte   OPC_BCS         ; mask next byte
+get:    sec
 
+        ;; C=0 for `PeekEvent`, C=1 for `GetEvent`
 
-;;; ============================================================
-;;; GetEvent
-
-.proc GetEventImpl
-        sec                     ; masked if `PeekEvent` is called
         php
         bit     use_interrupts
         bpl     :+
@@ -5130,7 +5327,9 @@ ret:    plp
         bpl     :+
         cli
 :       rts
-.endproc ; GetEventImpl
+.endproc ; PeekOrGetEventImpl
+PeekEventImpl := PeekOrGetEventImpl::peek
+GetEventImpl := PeekOrGetEventImpl::get
 
 ;;; ============================================================
 
@@ -5732,7 +5931,7 @@ draw_menu_impl:
         sta     savebehind_usage+1
 
         jsr     GetMenuCount    ; into menu_count
-        jsr     HideCursorSaveParams
+        jsr     HideCursorAndSaveParams ; restored by call below
         jsr     SetStandardPort
 
         ldax    menu_bar_rect_addr
@@ -5744,7 +5943,7 @@ draw_menu_impl:
         jsr     SetPenloc
 
         ldx     #0
-menuloop:
+    DO
         jsr     GetMenu
         ldax    current_penloc_x
         stax    curmenu::x_penloc
@@ -5756,22 +5955,22 @@ menuloop:
         stx     max_width
         stx     max_width+1
 
-itemloop:
+      DO
         jsr     GetMenuItem
         bit     curmenuitem::options
-        bvs     filler                  ; bit 6 - is filler
+        bvs     filler          ; bit 6 - is filler
 
         ldax    curmenuitem::name
         jsr     DoMeasureText
         stax    temp
 
         lda     curmenuitem::options
-        and     #3                      ; OA+SA
+        and     #3              ; OA+SA
         ora     curmenuitem::shortcut1
-    IF ZERO
+       IF ZERO
         lda     shortcut_x_adj
         bne     has_shortcut
-    END_IF
+       END_IF
 
         lda     non_shortcut_x_adj
 has_shortcut:
@@ -5785,14 +5984,13 @@ has_shortcut:
         sbc     max_width
         lda     temp+1
         sbc     max_width+1
-    IF POS
-        copy16  temp, max_width          ; calculate max width
-    END_IF
+       IF POS
+        copy16  temp, max_width ; calculate max width
+       END_IF
 
 filler: ldx     menu_item_index
         inx
-        cpx     menu_item_count
-        bne     itemloop
+      WHILE X <> menu_item_count
 
         add16_8 max_width, offset_text
 
@@ -5845,10 +6043,9 @@ filler: ldx     menu_item_index
 
         ldx     menu_index
         inx
-        cpx     menu_count
-        jne     menuloop
+    WHILE X <> menu_count
 
-        jsr     ShowCursorAndRestore
+        jsr     ShowCursorAndRestoreParams
         sec
         lda     savebehind_size
         sbc     savebehind_usage
@@ -6012,10 +6209,10 @@ found:  rts
         jsr     FindMenuByIdOrFail
 
 do_hilite:
-        jsr     HideCursorSaveParams
+        jsr     SaveParamsAndStack ; restored by call below
         jsr     SetStandardPort
         jsr     HiliteMenu
-        jmp     ShowCursorAndRestore
+        jmp     RestoreParamsAndStack
 .endproc ; HiliteMenuImpl
 
         ;; Highlight/Unhighlight top level menu item
@@ -6197,7 +6394,7 @@ menu_item  .byte
         END_PARAM_BLOCK
 
         jsr     GetMenuCount
-        jsr     SaveParamsAndStack
+        jsr     SaveParamsAndStack ; restored by calls below
         jsr     SetStandardPort
 
         lda     #0
@@ -6263,7 +6460,7 @@ event_loop:
       IF NS
         ;; Menu selection or cancel
         jsr     close_menu
-        jsr     RestoreParamsActivePort
+        jsr     RestoreParamsAndStack
 
         lda     sel_menu_item_index
        IF ZERO
@@ -6343,7 +6540,7 @@ handle_click:
         ;; --------------------------------------------------
         ;; Exit menu loop
 restore:
-        jsr     RestoreParamsActivePort
+        jsr     RestoreParamsAndStack
 
         lda     #0
         ldx     cur_hilited_menu_item
@@ -6407,7 +6604,7 @@ close_menu:
         ldx     menu_index
         jsr     GetMenu
         jsr     SetStandardPort
-        jmp     RestoreMenuSavebehind
+        jmp     RestoreMenuSavebehind ; calls `ShowCursorImpl`
 
         ;; --------------------------------------------------
 
@@ -6725,15 +6922,14 @@ row:    ldy     savebehind_mapwidth
 dmrts:  rts
 
 
-.proc HideMenu
+.proc HideOrDrawMenuBarImpl
+
+hide_menu:
         clc
-        .byte   OPC_BCS         ; mask next byte (sec)
-        FALL_THROUGH_TO DrawMenuBar
-.endproc ; HideMenu
+        .byte   OPC_BCS         ; mask next byte
+draw_menu_bar:
+        sec
 
-
-.proc DrawMenuBar
-        sec                     ; masked if `HideMenu` is called
         lda     cur_open_menu_id
         beq     dmrts
         php
@@ -6744,7 +6940,7 @@ dmrts:  rts
         jsr     HiliteMenu
 
         plp
-        bcc     RestoreMenuSavebehind
+        bcc     RestoreMenuSavebehind ; calls `ShowCursorImpl`
 
         jsr     SetUpMenuSavebehind
         jsr     DoSavebehind
@@ -6847,11 +7043,11 @@ no_shortcut:
 next:   ldx     menu_item_index
         inx
         cpx     menu_item_count
-        beq     :+
-        jmp     loop
-:       jmp     ShowCursorImpl
-.endproc ; DrawMenuBar
-
+        jne     loop
+        jmp     ShowCursorImpl
+.endproc ; HideOrDrawMenuBarImpl
+HideMenu := HideOrDrawMenuBarImpl::hide_menu
+DrawMenuBar := HideOrDrawMenuBarImpl::draw_menu_bar
 
 .proc MovetoMenuitem
         ldx     menu_item_index
@@ -6926,11 +7122,10 @@ hmrts:  rts
         sty     menu_fill_rect+MGTK::Rect::y1
         ldy     menu_item_y_table,x
         sty     menu_fill_rect+MGTK::Rect::y2
-        jsr     HideCursorImpl
 
         jsr     SetFillModeXOR
         MGTK_CALL MGTK::PaintRect, menu_fill_rect
-        jmp     ShowCursorImpl
+        rts
 .endproc ; HiliteMenuItem
 
 ;;; ============================================================
@@ -7809,7 +8004,7 @@ which_area  .byte
 window_id   .byte
         END_PARAM_BLOCK
 
-        jsr     SaveParamsAndStack
+        jsr     SaveParamsAndStack ; restored by explicit code below
 
         MGTK_CALL MGTK::InRect, menu_bar_rect ; check if in menubar
         beq     not_menubar
@@ -7820,7 +8015,7 @@ return_no_window:
 return_result:
         phax
 
-        ;; `RestoreParamsActivePort` isn't needed, and is
+        ;; `RestoreParamsAndStack` isn't needed, and is
         ;; very slow, so do the minimum here.
         asl     preserve_zp_flag
         copy16  params_addr_save, params_addr
@@ -7954,13 +8149,14 @@ do_select_win:
         pha
         lda     window+1
         pha
-        jsr     HideCursorSaveParams
+        jsr     HideCursorAndSaveParams ; restored by call below
         jsr     SetDesktopPort
 
         jsr     TopWindow
-        beq     :+
+    IF NOT ZERO
         jsr     EraseWinframe
-:       pla
+    END_IF
+        pla
         sta     current_window+1
         pla
         sta     current_window
@@ -7971,7 +8167,7 @@ do_select_win:
 
         jsr     SetDesktopPort
         jsr     DrawWindow
-        jmp     ShowCursorAndRestore
+        jmp     ShowCursorAndRestoreParams
 .endproc ; SelectWindowImpl
 
 do_select_win   := SelectWindowImpl::do_select_win
@@ -8018,36 +8214,38 @@ update_port:
         bne     win
 
         ;; Desktop
-        jsr     HideCursorSaveParams
+        jsr     HideCursorAndSaveParams ; restored via code below and `EndUpdateImpl`
         jsr     SetDesktopPort
         MGTK_CALL MGTK::SetPortBits, set_port_params
         copy16  active_port, previous_port
         ldax    update_port_addr
         jsr     assign_and_prepare_port
-        asl     preserve_zp_flag
+        asl     preserve_zp_flag ; since `RestoreParamsAndStack` is not called
         rts
 
         ;; Window
 win:    jsr     WindowByIdOrExit
 
         lda     current_winfo::id
-        cmp     target_window_id
-        bne     :+
+    IF A = target_window_id
         inc     matched_target
+    END_IF
 
-:       jsr     HideCursorSaveParams
+        jsr     HideCursorAndSaveParams ; restored via code below and `EndUpdateImpl`
         jsr     SetDesktopPort
         lda     matched_target
-        bne     :+
+    IF ZERO
         MGTK_CALL MGTK::SetPortBits, set_port_params
+    END_IF
 
-:       jsr     DrawWindow
+        jsr     DrawWindow
         jsr     SetDesktopPort
         lda     matched_target
-        bne     :+
+    IF ZERO
         MGTK_CALL MGTK::SetPortBits, set_port_params
+    END_IF
 
-:       jsr     GetWindow
+        jsr     GetWindow
         copy16  active_port, previous_port
 
         jsr     PrepareWinport
@@ -8055,7 +8253,7 @@ win:    jsr     WindowByIdOrExit
         ldax    update_port_addr
         jsr     assign_and_prepare_port
 
-        asl     preserve_zp_flag
+        asl     preserve_zp_flag ; since `RestoreParamsAndStack` is not called
         plp
         RTS_IF CS
 
@@ -8230,22 +8428,18 @@ in_close_box:  .byte   0
         beq     end
 
         jsr     GetWinGoAwayRect
-        jsr     SaveParamsAndStack
+        jsr     SaveParamsAndStack ; restored by call below
         jsr     SetDesktopPort
 
         lda     #$80
 toggle: sta     in_close_box
 
         jsr     SetFillModeXOR
-
-        jsr     HideCursorImpl
         MGTK_CALL MGTK::PaintRect, winrect
-        jsr     ShowCursorImpl
 
 loop:   jsr     GetAndReturnEvent
-        cmp     #MGTK::EventKind::button_up
-        beq     :+
 
+    IF A <> #MGTK::EventKind::button_up
         MGTK_CALL MGTK::MoveTo, cursor_pos
         jsr     InWinRect
         eor     in_close_box
@@ -8253,8 +8447,9 @@ loop:   jsr     GetAndReturnEvent
         lda     in_close_box
         eor     #$80
         jmp     toggle
+    END_IF
 
-:       jsr     RestoreParamsActivePort
+        jsr     RestoreParamsAndStack
         ldy     #0
         lda     in_close_box
         asl
@@ -8324,7 +8519,7 @@ drag_or_grow:
         bpl     :+
         jsr     KbdWinDragOrGrow
 
-:       jsr     HideCursorSaveParams
+:       jsr     HideCursorAndSaveParams ; Restored by `EraseWindow` or in `canceled`
         jsr     WinframeToSetPort
 
         jsr     SetFillModeXOR
@@ -8354,7 +8549,7 @@ no_change:
         bpl     :-
 
 canceled:
-        jsr     ShowCursorAndRestore
+        jsr     ShowCursorAndRestoreParams
         lda     #0
 return_moved:
         ldy     #params::moved - params
@@ -8363,22 +8558,23 @@ return_moved:
 
 changed:
         ldy     #MGTK::Winfo::port
-:       lda     current_winport - MGTK::Winfo::port,y
+    DO
+        lda     current_winport - MGTK::Winfo::port,y
         sta     (window),y
         iny
-        cpy     #MGTK::Winfo::port + 16
-        bne     :-
+    WHILE Y <> #MGTK::Winfo::port + .sizeof(MGTK::MapInfo)
         jsr     HideCursorImpl
 
         lda     current_winfo::id
         jsr     EraseWindow
-        jsr     HideCursorSaveParams
+        jsr     HideCursorAndSaveParams ; restored by call below
 
         bit     movement_cancel
-        bvc     :+
+    IF VS
         jsr     SetInput
+    END_IF
 
-:       jsr     ShowCursorAndRestore
+        jsr     ShowCursorAndRestoreParams
         lda     #$80
         bne     return_moved
 
@@ -8510,7 +8706,7 @@ DragWindowImpl_drag_or_grow := DragWindowImpl::drag_or_grow
 .proc CloseWindowImpl
         jsr     WindowByIdOrExit
 
-        jsr     HideCursorSaveParams
+        jsr     HideCursorAndSaveParams ; restored by `EraseWindow` or explicitly below
 
         jsr     WinframeToSetPort
         php                     ; Save C=1 if valid port
@@ -8535,11 +8731,11 @@ DragWindowImpl_drag_or_grow := DragWindowImpl::drag_or_grow
         jsr     SetDesktopPort
         jsr     DrawWindowPreserveContent
       END_IF
-        jmp     ShowCursorAndRestore
+        jmp     ShowCursorAndRestoreParams
     END_IF
 
         lda     #0
-        beq     EraseWindow
+        beq     EraseWindow     ; always
 .endproc ; CloseWindowImpl
 
 ;;; ============================================================
@@ -8596,7 +8792,7 @@ matched_target:
         MGTK_CALL MGTK::SetPattern, desktop_pattern
         MGTK_CALL MGTK::PaintRect, set_port_maprect
 
-        jsr     ShowCursorAndRestore
+        jsr     ShowCursorAndRestoreParams
 
         php
         sei
@@ -8817,10 +9013,10 @@ toggle: eor     params::activate
         RTS_IF A = (window),y   ; no-op if no change
         sta     (window),y
 
-        jsr     HideCursorSaveParams
+        jsr     HideCursorAndSaveParams ; restored by call below
         lda     params::activate
         jsr     DrawOrEraseScrollbar
-        jmp     ShowCursorAndRestore
+        jmp     ShowCursorAndRestoreParams
 .endproc ; ActivateCtlImpl
 
 
@@ -8984,7 +9180,7 @@ return_winrect_jmp:
 ;;; 4 bytes of params, copied to current_penloc
 
 .proc FindControlImpl
-        jsr     SaveParamsAndStack
+        jsr     SaveParamsAndStack ; restore via `FindWindow::return_result`
 
         jsr     TopWindow
         bne     :+
@@ -9111,7 +9307,7 @@ which_part      .byte
 window_id       .byte
         END_PARAM_BLOCK
 
-        jsr     SaveParamsAndStack
+        jsr     SaveParamsAndStack ; restored by `FindControlImpl::ep`
 
         ;; Needed for FindControl
         COPY_STRUCT MGTK::Point, params::mousex, current_penloc
@@ -9229,16 +9425,14 @@ got_ctl:lda     params::which_ctl
         lda     winrect+1,x
         sta     initial_pos+1
 
-        jsr     SaveParamsAndStack
+        jsr     SaveParamsAndStack ; restored by call below (in `drag_done`)
         jsr     SetDesktopPort
 
         jsr     SetFillModeXOR
         MGTK_CALL MGTK::SetPattern, light_speckles_pattern
 
-        jsr     HideCursorImpl
 drag_loop:
         jsr     FrameWinRect
-        jsr     ShowCursorImpl
 
 no_change:
         jsr     GetAndReturnEvent
@@ -9248,7 +9442,6 @@ no_change:
         jsr     CheckIfChanged
         beq     no_change
 
-        jsr     HideCursorImpl
         jsr     FrameWinRect
 
         jsr     TopWindow
@@ -9303,9 +9496,8 @@ in_bound2:
         bcc     drag_loop               ; always
 
 drag_done:
-        jsr     HideCursorImpl
         jsr     FrameWinRect
-        jsr     ShowCursorAndRestore
+        jsr     RestoreParamsAndStack
 
         ;; Did position change?
         ldx     #0
@@ -9497,10 +9689,11 @@ check_win:
         RTS_IF A = (window),y   ; no-op if no change
         sta     (window),y
 
-        jsr     HideCursorSaveParams
+        jsr     HideCursorAndSaveParams ; restored by call below
         jsr     SetStandardPort
+        ;; TODO: Clarify dependency on `SetStandardPort`'s return value
         jsr     DrawOrEraseScrollbar
-        jmp     ShowCursorAndRestore
+        jmp     ShowCursorAndRestoreParams
 .endproc ; UpdateThumbImpl
 
 ;;; ============================================================
@@ -10431,21 +10624,21 @@ rect       .tag MGTK::Rect
 .proc RedrawDeskTopImpl
         COPY_STRUCT desktop_mapinfo, set_port_params
 
-        ;; Restored by `EraseWindow`
-        jsr     HideCursorSaveParams
+        jsr     HideCursorAndSaveParams ; restored by `EraseWindow`
 
         lda     #0              ; window to erase (none)
         jmp     EraseWindow
 .endproc ; RedrawDeskTopImpl
 
 ;;; ============================================================
+;;; FlashMenuBar
 
 .proc FlashMenuBarImpl
-        jsr     SaveParamsAndStack
+        jsr     SaveParamsAndStack ; restored by call below
         jsr     SetStandardPort
         jsr     SetFillModeXOR
         MGTK_CALL MGTK::PaintRect, menu_bar_rect
-        jmp     RestoreParamsActivePort
+        jmp     RestoreParamsAndStack
 .endproc ; FlashMenuBarImpl
 
 ;;; ============================================================
@@ -10678,74 +10871,102 @@ finish:
 ;;; ============================================================
 ;;; ShieldCursor
 
-;;; 16 bytes of params, copied to $8A
+;;; 8 bytes of params, copied to $92
 
 .proc ShieldCursorImpl
-        ;; Input is a `MapInfo`
-        left   := $8A
-        top    := $8C
-        bitmap := $8E           ; unused
-        stride := $90           ; unused
-        hoff   := $92           ; unused (TODO: should it be?)
-        voff   := $94           ; unused (TODO: should it be?)
-        width  := $96
-        height := $98
+        SET_BIT7_FLAG disable_autohide_flag
 
-        right   := width
-        bottom  := height
+        jsr     ClipRect
+        RTS_IF CC
 
-        kSlop = 14    ; Two DHR bytes worth of pixels
-
-        jsr     CheckRect
-
-        ;; Offset passed rect by current port
+        ;; Convert to rect offset by current port
         ldx     #2              ; loop over dimensions
     DO
-        add16   left,x, current_winport::viewloc+MGTK::Point::xcoord,x, left,x
+        add16   left,x, x_offset,x, left,x
+        add16   right,x, x_offset,x, right,x
         dex
         dex
     WHILE POS
 
-        ;; Offset passed rect by hotspot
-        add16_8 left, cursor_hotspot_x
-        add16_8 top, cursor_hotspot_y
+        ;; Keep in sync with algorithms in `PreDrawCursor`
+        ;; TODO: Factor out common code.
 
-        ;; Compute the far edges
-        ldx     #2              ; loop over dimensions
-    DO
-        add16   left,x, width,x, right,x
-        dex
-        dex
-    WHILE POS
+        ;; --------------------------------------------------
+        ;; Y tests
 
-        ;; Account for cursor size and render slop
-        sub16_8 left, #MGTK::cursor_width * 7 + kSlop
-        add16_8 right, #kSlop
-        sub16_8 top, #MGTK::cursor_height
+        cursor_y1 := $8A
+        cursor_y2 := $8B
 
-        ldx     #2              ; loop over dimensions
-    DO
-        lda     cursor_pos+1,x
-        cmp     left+1,x
-        bmi     outside
-        bne     :+
-        lda     cursor_pos,x
-        cmp     left,x
+        ;; Determine cursor rows
+        lda     cursor_pos::ycoord
+        sec
+        sbc     cursor_hotspot_y
+        pha                     ; A = y1 unclamped
+     IF CC
+        lda     #0              ; clamp on underflow
+     END_IF
+        sta     cursor_y1
+        pla                     ; A = y1 unclamped
+        clc
+        adc     #MGTK::cursor_height-1
+        sta     cursor_y2
+
+        ;; top row of rect > bottom byte of cursor?
+        lda     cursor_y2
+        cmp     top
         bcc     outside
-:
-        lda     cursor_pos+1,x
-        cmp     right+1,x
-        bmi     :+
-        bne     outside
-        lda     cursor_pos,x
-        cmp     right,x
-        bcc     :+
-        bne     outside
-:
-        dex
-        dex
-    WHILE POS
 
+        ;; bottom row or rect < top row of cursor?
+        lda     bottom
+        cmp     cursor_y1
+        bcc     outside
+
+        ;; --------------------------------------------------
+        ;; X tests
+
+        cursor_b1 := $8A
+        cursor_b2 := $8B
+
+        ;; Determine cursor columns
+        lda     cursor_pos::xcoord
+        sec
+        sbc     cursor_hotspot_x
+        tax
+        lda     cursor_pos::xcoord+1
+        sbc     #0
+    IF NEG
+        lda     #$FF            ; this is what cursor logic uses
+        bmi     store           ; always
+    END_IF
+        ;; "else"
+        jsr     DivMod7
+store:
+        sta     cursor_b1
+        pha
+        clc
+        adc     #2              ; cursor save/restore is 3 bytes wide
+        sta     cursor_b2
+        pla
+    IF NEG
+        inc     cursor_b1       ; min of 0
+    END_IF
+
+        ;; left byte of rect > right byte of cursor?
+        ldx     left
+        lda     left+1
+        jsr     DivMod7
+        cmp     cursor_b2
+        beq     inside
+        bcs     outside
+
+        ;; right byte of rect < left byte of cursor?
+        ldx     right
+        lda     right+1
+        jsr     DivMod7
+        cmp     cursor_b1
+        bcc     outside
+
+inside:
         SET_BIT7_FLAG cursor_shielded_flag
         jmp     HideCursorImpl
 
@@ -10754,13 +10975,102 @@ ret:    rts
 .endproc ; ShieldCursorImpl
 
 .proc UnshieldCursorImpl
-        rol     cursor_shielded_flag
+        CLEAR_BIT7_FLAG disable_autohide_flag
+        asl     cursor_shielded_flag
         bcc     ShieldCursorImpl::ret
         jmp     ShowCursorImpl
 .endproc ; UnshieldCursorImpl
 
+;;; bit7 set if the cursor was hidden by a `ShieldCursor` call.
 cursor_shielded_flag:
         .byte   0
+
+;;; bit7 set between `ShieldCursor` and `UnshieldCursor` regardless of
+;;; whether or not the cursor was hidden.
+disable_autohide_flag:
+        .byte   0
+
+;;; ============================================================
+
+.proc WaitVBLImpl
+        php
+        sei
+
+        proc_addr := *+1
+        jsr     iie_proc
+
+        plp
+        rts
+
+;;; --------------------------------------------------
+;;; IIe
+
+iie_proc:
+:       bit RDVBLBAR            ; wait for end of VBL (if in it)
+        bpl     :-
+:       bit RDVBLBAR            ; wait for start of next VBL
+        bmi     :-
+
+ret:    rts
+
+;;; --------------------------------------------------
+;;;IIgs
+
+iigs_proc:
+:       bit RDVBLBAR            ; wait for end of VBL (if in it)
+        bmi     :-
+:       bit RDVBLBAR            ; wait for start of next VBL
+        bpl     :-
+        rts
+
+;;; --------------------------------------------------
+;;; IIc
+
+iic_proc:
+        ;; See Apple IIc Tech Note #9: Detecting VBL
+        ;; https://web.archive.org/web/2007/http://web.pdx.edu/~heiss/technotes/aiic/tn.aiic.9.html
+
+        ;; "Note that IOUDis must have been turned off by writing to
+        ;; $C07F then ENVBL accessed at $C05B in order to poll for
+        ;; $C019 on the IIc."
+
+        lda     IOUDISON        ; = RDIOUDIS
+        pha                     ; save IOUDIS state
+        sta     IOUDISOFF
+
+        lda     RDVBLMSK
+        pha                     ; save VBL interrupt state
+        sta     ENVBL
+
+        ;; "After reading $C019 once the high bit has been set to flag
+        ;; VBL, the high bit remains set. A program polling VBL at
+        ;; $C019 would have to access either PTrig at $C070 or
+        ;; RdIOUDis at $C07E to reset the high-bit for $C019."
+
+        ;; TODO: Determine if this is necessary; it's possible that the
+        ;; `IOUDISON` access above makes this redundant.
+        bit     IOUDISON        ; = RDIOUDIS
+
+:       bit     RDVBLBAR        ; poll
+        bpl     :-
+
+        pla                     ; restore VBL interrupt state
+    IF NC
+        sta     DISVBL
+    END_IF
+
+        pla                     ; restore IOUDIS state
+    IF NC
+        sta     IOUDISON
+    END_IF
+        rts
+
+.endproc
+vbl_proc_addr := WaitVBLImpl::proc_addr
+vbl_iie_proc := WaitVBLImpl::iie_proc
+vbl_iigs_proc := WaitVBLImpl::iigs_proc
+vbl_iic_proc := WaitVBLImpl::iic_proc
+vbl_none_proc := WaitVBLImpl::ret
 
 ;;; ============================================================
 

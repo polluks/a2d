@@ -19,7 +19,6 @@
         .include "apple2.inc"
         .include "../inc/apple2.inc"
         .include "../inc/macros.inc"
-        .include "../inc/prodos.inc"
         .include "../mgtk/mgtk.inc"
         .include "../toolkits/btk.inc"
         .include "../common.inc"
@@ -132,6 +131,8 @@ reserved:       .byte   0
         DEFINE_RECT maprect, 0, 0, 20, 10
         REF_MAPINFO_MEMBERS
 .endparams
+
+        DEFINE_RECT shield_params, 0,0,0,0
 
 frame1:
         PIXELS  "............##......."
@@ -341,21 +342,17 @@ hit:    copy8   winfo::window_id, screentowindow_params::window_id
 ;;; Input: A,X = string address
 
 .proc DrawTitleString
-        text_params     := $6
-        text_addr       := text_params + 0
-        text_length     := text_params + 2
-        text_width      := text_params + 3
+        params := $6
+        str := $6
+        width := $8
 
-        stax    text_addr       ; input is length-prefixed string
-        ldy     #0
-        copy8   (text_addr),y, text_length
-        inc16   text_addr       ; point past length
-        MGTK_CALL MGTK::TextWidth, text_params
-
-        sub16   #kDAWidth, text_width, title_label_pos::xcoord
+        stax    str
+        stax    @addr
+        MGTK_CALL MGTK::StringWidth, params
+        sub16   #kDAWidth, width, title_label_pos::xcoord
         lsr16   title_label_pos::xcoord ; /= 2
         MGTK_CALL MGTK::MoveTo, title_label_pos
-        MGTK_CALL MGTK::DrawText, text_params
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
 .endproc ; DrawTitleString
 
@@ -373,9 +370,7 @@ hit:    copy8   winfo::window_id, screentowindow_params::window_id
         add16_8   #kRunPosX, run_pos, frame_params::viewloc::xcoord
 
         MGTK_CALL MGTK::SetPenMode, notpencopy
-        MGTK_CALL MGTK::ShieldCursor, frame_params
-        MGTK_CALL MGTK::PaintBits, frame_params ; cursor conditionally hidden
-        MGTK_CALL MGTK::UnshieldCursor
+        jsr     _Paint
 
         inc     frame_counter
         lda     frame_counter
@@ -389,17 +384,30 @@ hit:    copy8   winfo::window_id, screentowindow_params::window_id
         copy8   #0, run_pos
 
         MGTK_CALL MGTK::SetPenMode, penXOR
-        MGTK_CALL MGTK::ShieldCursor, frame_params
-        MGTK_CALL MGTK::PaintBits, frame_params ; cursor conditionally hidden
-        MGTK_CALL MGTK::UnshieldCursor
+        jsr     _Paint
     END_IF
+        rts
+
+.proc _Paint
+        ldax    frame_params::viewloc::xcoord
+        stax    shield_params::x1
+        addax   frame_params::maprect::x2, shield_params::x2
+        ldax    frame_params::viewloc::ycoord
+        stax    shield_params::y1
+        addax   frame_params::maprect::y2, shield_params::y2
+
+        MGTK_CALL MGTK::ShieldCursor, shield_params
+        MGTK_CALL MGTK::PaintBits, frame_params
+        MGTK_CALL MGTK::UnshieldCursor
+
+        rts
+.endproc ; _Paint
 
 .endproc ; AnimFrame
 
 ;;; ============================================================
 
         .include "../lib/uppercase.s"
-        .include "../lib/drawstring.s"
 
 ;;; ============================================================
 

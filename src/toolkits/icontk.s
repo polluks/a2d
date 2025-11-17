@@ -33,7 +33,7 @@ clip_bounds     .tag    MGTK::Rect  ; Used for clipped drawing
 
 bitmap_rect     .tag    MGTK::Rect  ; populated by `CalcIconRects`
 label_rect      .tag    MGTK::Rect  ; populated by `CalcIconRects`
-bounding_rect   .tag    MGTK::Rect  ; populated by `CalcIconRects`
+bounding_rect   .tag    MGTK::Rect  ; populated by `CalcIconBoundingRect`
 rename_rect     .tag    MGTK::Rect  ; populated by `CalcIconRects`
 
 ;;; For size calculation, not actually used
@@ -469,7 +469,7 @@ END_PARAM_BLOCK
         sta     (icon_ptr),y
 
         pla                     ; A = icon
-        jmp     MaybeMoveIconToTop
+        bne     MaybeMoveIconToTop ; always
 .endproc ; HighlightIconImpl
 
 ;;; ============================================================
@@ -965,10 +965,10 @@ same_window:
         jne     exit_canceled   ; don't move
 
         jsr     _CheckRealContentArea
-        jcs     exit_canceled   ; don't move
+        bcs     exit_canceled   ; don't move
 
         CALL    IsIconFixed, A=last_highlighted_icon ; Z=0 if fixed
-        jne     exit_canceled   ; don't move
+        bne     exit_canceled   ; don't move
 
         ;; --------------------------------------------------
         ;; Probably a move within the same window...
@@ -1445,7 +1445,7 @@ END_PARAM_BLOCK
         ;; Pointer to IconEntry
         CALL    SetIconPtr, A=params::icon
 
-        jsr     CalcIconRects
+        jsr     CalcIconBoundingRect
 
         ;; Stash some flags
         ldy     #IconEntry::state
@@ -1472,10 +1472,19 @@ END_PARAM_BLOCK
         ldy     #.sizeof(MGTK::MapInfo) - .sizeof(MGTK::Point)
         copy16in (res_ptr),y, mask_paintbits_params::mapbits
 
-        ;; Determine if we want clipping, based on icon type and flags.
+        ;; Avoid cursor flashing
+        MGTK_CALL MGTK::ShieldCursor, bounding_rect
+        jsr     rest
+        MGTK_CALL MGTK::UnshieldCursor
+        rts
 
+rest:
+        ;; Determine if we want clipping, based on icon type and flags.
         bit     clip_icons_flag
         bpl     _DoPaint        ; no clipping, just paint
+
+        ;; Needed for `SetPortForXyzIcon`
+        jsr     CalcIconBoundingRectFromBitmapAndLabelRects
 
         ;; Set up clipping structs and port
         lda     clip_window_id
@@ -1499,6 +1508,15 @@ END_PARAM_BLOCK
     WHILE NS
 
 ret:    rts
+
+.params shield_cursor_params
+        DEFINE_POINT viewloc, 0, 0
+mapbits:        .addr   MGTK::screen_mapbits
+mapwidth:       .byte   MGTK::screen_mapwidth
+reserved:       .byte   0
+        DEFINE_RECT maprect, 0, 0, 0, 0
+        REF_MAPINFO_MEMBERS
+.endparams
 
 
 .proc _DoPaint
@@ -1526,8 +1544,6 @@ ret:    rts
         sta     settextbg_params
         MGTK_CALL MGTK::SetTextBG, settextbg_params
 
-        MGTK_CALL MGTK::HideCursor
-
         ;; --------------------------------------------------
         ;; Icon
 
@@ -1547,7 +1563,7 @@ ret:    rts
     ELSE
         MGTK_CALL MGTK::SetPenMode, penOR
     END_IF
-        MGTK_CALL MGTK::PaintBitsHC, mask_paintbits_params
+        MGTK_CALL MGTK::PaintBits, mask_paintbits_params
 
         ;; Shade again (restores background)
         ASSERT_EQUALS ::kIconEntryStateDimmed, $80
@@ -1564,7 +1580,7 @@ ret:    rts
     ELSE
         MGTK_CALL MGTK::SetPenMode, penBIC
     END_IF
-        MGTK_CALL MGTK::PaintBitsHC, icon_paintbits_params
+        MGTK_CALL MGTK::PaintBits, icon_paintbits_params
 
         ;; --------------------------------------------------
         ;; Label
@@ -1572,7 +1588,6 @@ ret:    rts
         MGTK_CALL MGTK::MoveTo, label_pos
 
         MGTK_CALL MGTK::DrawText, drawtext_params
-        MGTK_CALL MGTK::ShowCursor
 
         MGTK_CALL MGTK::SetTextBG, settextbg_white
 
@@ -1709,6 +1724,8 @@ stash_rename_rect:
 .proc CalcIconBoundingRect
         jsr     CalcIconRects
 
+from_bitmap_and_label_rects:
+
         COPY_BLOCK bitmap_rect, bounding_rect
 
         ;; Union of rectangles (expand `bounding_rect` to encompass `label_rect`)
@@ -1716,6 +1733,7 @@ stash_rename_rect:
 
         rts
 .endproc ; CalcIconBoundingRect
+CalcIconBoundingRectFromBitmapAndLabelRects := CalcIconBoundingRect::from_bitmap_and_label_rects
 
 .params unionrects_label_bounding
         .addr   label_rect
@@ -1730,10 +1748,39 @@ kIconPolySize = (8 * .sizeof(MGTK::Point)) + 2
 .proc CalcIconPoly
         jsr     CalcIconBoundingRect
 
+        .assert bitmap_rect < $100, error, "assumes zero page"
+        .assert label_rect < $100, error, "assumes zero page"
+
         ldy     #IconEntry::win_flags
         lda     (icon_ptr),y
         and     #kIconEntryFlagsSmall
     IF NOT_ZERO
+        ;; Small icon
+        ldy     #.sizeof(MGTK::Point)*8-1
+      DO
+        ldx     smicon_poly_map,y
+        copy8   $00,x, poly::vertices,y
+        dey
+      WHILE POS
+        rts
+   END_IF
+
+        ;; Regular icon
+        ldy     #.sizeof(MGTK::Point)*8-1
+   DO
+        ldx     icon_poly_map,y
+        copy8   $00,x, poly::vertices,y
+        dey
+   WHILE POS
+        rts
+
+.macro MAP_POINT xsrc, ysrc
+        .byte   xsrc+0
+        .byte   xsrc+1
+        .byte   ysrc+0
+        .byte   ysrc+1
+.endmacro
+
         ;; ----------------------------------------
         ;; Small icon
 
@@ -1744,30 +1791,16 @@ kIconPolySize = (8 * .sizeof(MGTK::Point)) + 2
         ;;        +-----------------------+
         ;;      v7                         v6
 
-        ;; Start off making all (except v6) the same
-        ldx     #.sizeof(MGTK::Point)-1
-    DO
-        lda     bitmap_rect+MGTK::Rect::topleft,x
-        sta     poly::v0,x
-        sta     poly::v1,x
-        sta     poly::v2,x
-        sta     poly::v3,x
-        sta     poly::v4,x
-        sta     poly::v5,x
-        sta     poly::v7,x
-        dex
-    WHILE POS
-
-        ;; Then tweak remaining vertices on right/bottom
-        ldax    label_rect+MGTK::Rect::x2
-        stax    poly::v5::xcoord
-        stax    poly::v6::xcoord
-
-        ldax    bitmap_rect+MGTK::Rect::y2
-        stax    poly::v6::ycoord
-        stax    poly::v7::ycoord
-
-    ELSE
+smicon_poly_map:
+        MAP_POINT bitmap_rect+MGTK::Rect::x1, bitmap_rect+MGTK::Rect::y1 ; v0
+        MAP_POINT bitmap_rect+MGTK::Rect::x1, bitmap_rect+MGTK::Rect::y1 ; v1
+        MAP_POINT bitmap_rect+MGTK::Rect::x1, bitmap_rect+MGTK::Rect::y1 ; v2
+        MAP_POINT bitmap_rect+MGTK::Rect::x1, bitmap_rect+MGTK::Rect::y1 ; v3
+        MAP_POINT bitmap_rect+MGTK::Rect::x1, bitmap_rect+MGTK::Rect::y1 ; v4
+        MAP_POINT label_rect+MGTK::Rect::x2,  bitmap_rect+MGTK::Rect::y1 ; v5
+        MAP_POINT label_rect+MGTK::Rect::x2,  bitmap_rect+MGTK::Rect::y2 ; v6
+        MAP_POINT bitmap_rect+MGTK::Rect::x1, bitmap_rect+MGTK::Rect::y2 ; v7
+        ASSERT_RECORD_TABLE_SIZE smicon_poly_map, 8, .sizeof(MGTK::Point)
 
         ;; ----------------------------------------
         ;; Normal icon
@@ -1782,40 +1815,17 @@ kIconPolySize = (8 * .sizeof(MGTK::Point)) + 2
         ;;         |                      |
         ;;      v5 +----------------------+ v4
 
-        ;; Even vertexes are (mostly) direct copies from rects
+icon_poly_map:
+        MAP_POINT bitmap_rect+MGTK::Rect::x1, bitmap_rect+MGTK::Rect::y1 ; v0
+        MAP_POINT bitmap_rect+MGTK::Rect::x2, bitmap_rect+MGTK::Rect::y1 ; v1
+        MAP_POINT bitmap_rect+MGTK::Rect::x2, label_rect+MGTK::Rect::y1 ; v2
+        MAP_POINT label_rect+MGTK::Rect::x2,  label_rect+MGTK::Rect::y1 ; v3
+        MAP_POINT label_rect+MGTK::Rect::x2,  label_rect+MGTK::Rect::y2 ; v4
+        MAP_POINT label_rect+MGTK::Rect::x1,  label_rect+MGTK::Rect::y2 ; v5
+        MAP_POINT label_rect+MGTK::Rect::x1,  label_rect+MGTK::Rect::y1 ; v6
+        MAP_POINT bitmap_rect+MGTK::Rect::x1, label_rect+MGTK::Rect::y1 ; v7
+        ASSERT_RECORD_TABLE_SIZE icon_poly_map, 8, .sizeof(MGTK::Point)
 
-        ;; v0/v2 (and extend bitmap rect down to top of text)
-        COPY_STRUCT MGTK::Point, bitmap_rect+MGTK::Rect::topleft, poly::v0
-        copy16  bitmap_rect+MGTK::Rect::x2, poly::v2::xcoord
-        copy16  label_rect+MGTK::Rect::y1, poly::v2::ycoord
-
-        ;; v6/v4
-        COPY_STRUCT MGTK::Point, label_rect+MGTK::Rect::topleft, poly::v6
-        COPY_STRUCT MGTK::Point, label_rect+MGTK::Rect::bottomright, poly::v4
-
-        ;; Odd vertexes are combinations
-
-        ;; v1
-        copy16  poly::v2::xcoord, poly::v1::xcoord
-        copy16  poly::v0::ycoord, poly::v1::ycoord
-
-        ;; v7
-        copy16  poly::v0::xcoord, poly::v7::xcoord
-        copy16  poly::v2::ycoord, poly::v7::ycoord
-
-        ;; v3
-        copy16  poly::v4::xcoord, poly::v3::xcoord
-        copy16  poly::v6::ycoord, poly::v3::ycoord
-
-        ;; v5
-        copy16  poly::v6::xcoord, poly::v5::xcoord
-        copy16  poly::v4::ycoord, poly::v5::ycoord
-
-        ;; ----------------------------------------
-
-    END_IF
-
-        rts
 .endproc ; CalcIconPoly
 
 ;;; Copy name from IconEntry (`icon_ptr`) to text_buffer,
@@ -2038,6 +2048,8 @@ END_PARAM_BLOCK
         MGTK_CALL MGTK::SetPattern, white_pattern
     END_IF
 
+        MGTK_CALL MGTK::ShieldCursor, bounding_rect
+
         bit     clip_icons_flag
     IF NC
         MGTK_CALL MGTK::PaintPoly, poly
@@ -2049,13 +2061,16 @@ END_PARAM_BLOCK
         bit     more_drawing_needed_flag
       WHILE NS
     END_IF
+
+        MGTK_CALL MGTK::UnshieldCursor
+
         FALL_THROUGH_TO _RedrawIconsAfterErase
 
 ;;; ============================================================
 ;;; After erasing an icon, redraw any overlapping icons
 
 .proc _RedrawIconsAfterErase
-        COPY_BLOCK bounding_rect, icon_in_rect_params::rect
+        COPY_STRUCT MGTK::Rect, bounding_rect, icon_in_rect_params::rect
 
         ldx     num_icons
     DO
@@ -2146,9 +2161,8 @@ reserved:       .byte   0
 ;;; ============================================================
 
 ;;; Sets `res_ptr`
+;;; Assert: `CalcIconBoundingRect` has been called
 .proc SetPortForVolIcon
-        jsr     CalcIconBoundingRect
-
         ;; Will need to clip to screen bounds
         COPY_STRUCT MGTK::Rect, desktop_bounds, portbits::maprect
 
@@ -2158,9 +2172,8 @@ reserved:       .byte   0
 ;;; ============================================================
 
 ;;; Sets `res_ptr`
+;;; Assert: `CalcIconBoundingRect` has been called
 .proc SetPortForWinIcon
-        jsr     CalcIconBoundingRect
-
         ;; Get window clip rect (in screen space)
         copy8   clip_window_id, getwinport_params::window_id
         MGTK_CALL MGTK::GetWinPort, getwinport_params ; into `icon_grafport`

@@ -57,8 +57,8 @@ Exec:
         ;; Prompt for device
 .scope
         CLEAR_BIT7_FLAG has_input_field_flag
-        CALL    main::OpenPromptWindow, A=#kPromptButtonsOKCancel
-        jsr     main::SetPortForDialogWindow
+        CALL    main::OpenPromptDialog, A=#kPromptButtonsOKCancel
+        jsr     main::SetPortForPromptDialog
 
         ldax    #aux::label_format_disk
         bit     erase_flag
@@ -71,12 +71,12 @@ Exec:
         bne     skip_select
 
         MGTK_CALL MGTK::MoveTo, vol_picker_select_pos
-        ldax    #aux::str_select_format
         bit     erase_flag
     IF NS
-        ldax    #aux::str_select_erase
+        MGTK_CALL MGTK::DrawString, aux::str_select_erase
+    ELSE
+        MGTK_CALL MGTK::DrawString, aux::str_select_format
     END_IF
-        jsr     main::DrawString
 
         jsr     main::SetPenModeNotCopy
         MGTK_CALL MGTK::MoveTo, vol_picker_line1_start
@@ -129,8 +129,7 @@ skip_select:
         ;; NOTE: Assertion violation if not found
 
         txa
-        jsr     GetDeviceNameForIndex
-        jsr     main::DrawString
+        jsr     DrawDeviceNameForIndex
 
         CALL    main::DrawDialogLabel, Y=#4, AX=#aux::str_new_volume
 
@@ -143,11 +142,11 @@ loop2:
         bmi     loop2           ; not done
         bne     cancel          ; cancel
 
-        jsr     main::SetCursorPointerWithFlag
+        jsr     main::SetCursorPointer ; after volume name prompt (might be I-beam)
 
         ;; Check for conflicting name
         CALL    CheckConflictingVolumeName, XY=#text_input_buf, A=unit_num
-    IF_CS
+    IF CS
         CALL    ShowAlert, A=#ERR_DUPLICATE_FILENAME
         jmp     loop2
     END_IF
@@ -169,7 +168,7 @@ loop2:
         FORMAT_MESSAGE 1, aux::str_confirm_erase_format
         CALL    ShowAlertParams, Y=#AlertButtonOptions::OKCancel, AX=#text_input_buf
         cmp     #kAlertResultOK
-        jne     cancel
+        bne     cancel
 .endscope
 
         ;; Confirmed!
@@ -199,7 +198,7 @@ retry:
         jsr     SetPortAndClear
         CALL    main::DrawDialogLabel, Y=#1, AX=#aux::str_formatting
         CALL    main::DrawDialogLabel, Y=#7, AX=#aux::str_tip_prodos
-        jsr     main::SetCursorWatch
+        jsr     main::SetCursorWatch ; before format
 
         unit_num := *+1
         lda     #SELF_MODIFIED_BYTE
@@ -209,10 +208,10 @@ retry:
         CALL    FormatUnit, A=unit_num
         bcs     l12
 l9:
-        TAIL_CALL ::FormatEraseOverlay::EraseDisk::EP2, A=unit_num
+        TAIL_CALL ::FormatEraseOverlay::EraseDisk::EP2, A=unit_num ; (re)sets cursor
 
 l12:    pha
-        jsr     main::SetCursorPointer
+        jsr     main::SetCursorPointer ; after format
         pla
     IF A = #ERR_WRITE_PROTECTED
 
@@ -228,10 +227,7 @@ l12:    pha
 
 finish:
         pha
-        jsr     main::SetCursorPointer
-        MGTK_CALL MGTK::CloseWindow, winfo_prompt_dialog
-        jsr     main::ClearUpdates
-
+        jsr     main::ClosePromptDialog
         ldx     unit_num
         pla
         rts
@@ -254,14 +250,14 @@ retry:
         jsr     SetPortAndClear
         CALL    main::DrawDialogLabel, Y=#1, AX=#aux::str_erasing
         CALL    main::DrawDialogLabel, Y=#7, AX=#aux::str_tip_prodos
-        jsr     main::SetCursorWatch
+        jsr     main::SetCursorWatch ; before writing header
 
         ldxy    #main::filename_buf
         unit_num := *+1
         lda     #SELF_MODIFIED_BYTE
         jsr     WriteHeaderBlocks
         pha
-        jsr     main::SetCursorPointer
+        jsr     main::SetCursorPointer ; after writing header
         pla
     IF ZERO
         lda     #$00
@@ -282,10 +278,7 @@ retry:
 
 finish:
         pha
-        jsr     main::SetCursorPointer
-        MGTK_CALL MGTK::CloseWindow, winfo_prompt_dialog
-        jsr     main::ClearUpdates
-
+        jsr     main::ClosePromptDialog
         ldx     unit_num
         pla
         rts
@@ -294,7 +287,7 @@ finish:
 ;;; ============================================================
 
 .proc SetPortAndClear
-        jsr     main::SetPortForDialogWindow
+        jsr     main::SetPortForPromptDialog
         MGTK_CALL MGTK::PaintRect, aux::clear_dialog_labels_rect
         rts
 .endproc ; SetPortAndClear
@@ -355,8 +348,7 @@ no:     RETURN  A=#$80
         index := *+1
         sbc     #SELF_MODIFIED_BYTE
 
-        jsr     GetDeviceNameForIndex
-        jmp     main::DrawString
+        jmp     DrawDeviceNameForIndex
 .endproc ; DrawEntryCallback
 
 .proc SelChangeCallback
@@ -366,12 +358,13 @@ no:     RETURN  A=#$80
 ;;; ============================================================
 
 ;;; Input: A = index in `DEVLST`
-;;; Output: A,X = device name
-.proc GetDeviceNameForIndex
+.proc DrawDeviceNameForIndex
         asl     a
         tay
-        RETURN  AX=device_name_table,y
-.endproc ; GetDeviceNameForIndex
+        copy16  device_name_table,y, @addr
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
+        rts
+.endproc ; DrawDeviceNameForIndex
 
 ;;; ============================================================
 ;;; Gets the selected unit number from `DEVLST`

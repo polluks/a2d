@@ -168,6 +168,7 @@ start:
         dex
     WHILE POS
 
+        MGTK_CALL MGTK::GetCursorAdr, saved_cursor_addr
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
 
         ;; --------------------------------------------------
@@ -206,7 +207,7 @@ start:
     END_IF
         stax    alert_bitmap_params::mapbits
         MGTK_CALL MGTK::SetPenMode, pencopy
-        MGTK_CALL MGTK::PaintBitsHC, alert_bitmap_params
+        MGTK_CALL MGTK::PaintBits, alert_bitmap_params
 
         ;; --------------------------------------------------
         ;; Draw appropriate buttons
@@ -271,7 +272,7 @@ advance:
     WHILE A <> #' '
 
         ;; Does this much fit?
-test:   sty     textwidth_params::length
+        sty     textwidth_params::length
         MGTK_CALL MGTK::TextWidth, textwidth_params
         cmp16   textwidth_params::width, #kWrapWidth
     IF LT
@@ -285,7 +286,7 @@ test:   sty     textwidth_params::length
         copy8   len, textwidth_params::length
         MGTK_CALL MGTK::MoveTo, pos_prompt2
         MGTK_CALL MGTK::DrawText, textwidth_params
-        jmp     done
+        beq     done            ; always
     END_IF
 
         ;; Split string over two lines.
@@ -379,7 +380,7 @@ finish_cancel:
         jmp     finish
       END_IF
 
-        jmp     event_loop
+        bne     event_loop      ; always
     END_IF
         pla
 .endif ; AD_YESNOALL
@@ -414,13 +415,13 @@ HandleButtonDown:
         MGTK_CALL MGTK::MoveTo, event_coords
 
         bit     alert_params::buttons ; high bit clear = OK only
-        jpl     check_ok_rect
+        bpl     check_ok_rect
 
         ;; Cancel
         MGTK_CALL MGTK::InRect, cancel_button+BTK::ButtonRecord::rect
     IF NOT_ZERO
         BTK_CALL BTK::Track, cancel_button
-        jne     was_no_button
+        bne     was_no_button
         lda     #kAlertResultCancel
         ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
         bne     finish          ; always
@@ -487,19 +488,21 @@ was_no_button:
 ;;; ============================================================
 
 finish:
+        pha
+
 .ifdef AD_SAVEBG
         bit     alert_params::options
     IF VS                       ; V = use save area
-        pha
         MGTK_CALL MGTK::RestoreScreenRect, alert_rect
-        pla
     END_IF
 .else
-        pha
         MGTK_CALL MGTK::SetPenMode, pencopy
         MGTK_CALL MGTK::PaintRect, alert_rect
-        pla
 .endif ; AD_SAVEBG
+
+        MGTK_CALL MGTK::SetCursor, SELF_MODIFIED, saved_cursor_addr
+
+        pla
         rts
 
 ;;; ============================================================

@@ -118,7 +118,6 @@ selection_requirement_flags:
         sta     type_down_buf
         sta     only_show_dirs_flag
 .ifdef FD_EXTENDED
-        sta     cursor_ibeam_flag
         sta     extra_controls_flag
 .endif
 
@@ -178,10 +177,11 @@ key_handler_hook:
         jsr     _MoveToWindowCoords
         MGTK_CALL MGTK::InRect, file_dialog_res::line_edit_rect
         ASSERT_EQUALS MGTK::inrect_outside, 0
-        beq     out
-        jsr     _SetCursorIBeam
-        jmp     EventLoop
-out:    jsr     _UnsetCursorIBeam
+       IF NOT ZERO
+        MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
+       ELSE
+        jsr     _SetCursorPointer
+       END_IF
         ;; Fall through to JMP
       END_IF
 .endif
@@ -331,31 +331,6 @@ ret:    rts
         LBTK_CALL LBTK::Init, file_dialog_res::lb_params
         jmp     _UpdateDynamicButtons
 .endproc ; UpdateListFromPathAndSelectFile
-.endif
-
-;;; ============================================================
-
-.ifdef FD_EXTENDED
-.proc _SetCursorIBeam
-        bit     cursor_ibeam_flag
-    IF NC
-        MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
-        SET_BIT7_FLAG cursor_ibeam_flag
-    END_IF
-        rts
-.endproc ; _SetCursorIBeam
-
-.proc _UnsetCursorIBeam
-        bit     cursor_ibeam_flag
-    IF NS
-        jsr     _SetCursorPointer
-        CLEAR_BIT7_FLAG cursor_ibeam_flag
-    END_IF
-        rts
-.endproc ; _UnsetCursorIBeam
-
-cursor_ibeam_flag:              ; high bit set when cursor is I-beam
-        .byte   0
 .endif
 
 ;;; ============================================================
@@ -561,7 +536,7 @@ cursor_ibeam_flag:              ; high bit set when cursor is I-beam
         bit     extra_controls_flag
       IF NC
         jsr     _CheckTypeDown
-        jeq     exit
+        beq     exit
       END_IF
 .endif
 
@@ -809,12 +784,6 @@ found:  RETURN  A=index
         MGTK_CALL MGTK::SetPort, file_dialog_res::winfo::port
         MGTK_CALL MGTK::SetPenMode, file_dialog_res::notpencopy
 
-.ifdef FD_EXTENDED
-        bit     extra_controls_flag
-    IF NS
-        MGTK_CALL MGTK::FrameRect, file_dialog_res::line_edit_rect
-    END_IF
-.endif
         MGTK_CALL MGTK::SetPenSize, file_dialog_res::pensize_frame
 .ifndef FD_EXTENDED
         MGTK_CALL MGTK::FrameRect, file_dialog_res::dialog_frame_rect
@@ -827,6 +796,13 @@ found:  RETURN  A=index
     END_IF
 .endif
         MGTK_CALL MGTK::SetPenSize, file_dialog_res::pensize_normal
+
+.ifdef FD_EXTENDED
+        bit     extra_controls_flag
+    IF NS
+        MGTK_CALL MGTK::FrameRect, file_dialog_res::line_edit_rect
+    END_IF
+.endif
 
         ;; Draw title
         copy16  file_dialog_res::winfo::maprect::x2, file_dialog_res::pos_title::xcoord
@@ -887,58 +863,37 @@ found:  RETURN  A=index
         MGTK_CALL MGTK::CloseWindow, file_dialog_res::winfo_listbox
         MGTK_CALL MGTK::CloseWindow, file_dialog_res::winfo
 .ifdef FD_EXTENDED
-        jsr     _UnsetCursorIBeam
+        jsr     _SetCursorPointer
 .endif
         rts
 .endproc ; CloseWindow
 
 ;;; ============================================================
 
-.proc DrawString
-        ptr := $06
-        params := $06
-
-        stax    ptr
-        ldy     #0
-        lda     (ptr),y
-        beq     ret
-        sta     params+2
-        inc16   params
-        MGTK_CALL MGTK::DrawText, params
-ret:    rts
-.endproc ; DrawString
-
-;;; ============================================================
-
 .proc _DrawStringCentered
-        ptr := $06
         params := $06
+        str := params
+        width := params+2
 
-        stax    ptr
-        ldy     #0
-        lda     (ptr),y
-        beq     ret
-        sta     params+2
-        inc16   params
-        MGTK_CALL MGTK::TextWidth, params
-        lsr16   params+3               ; width
-        sub16   #0, params+3, params+3 ; deltax
-        copy16  #0, params+5           ; deltay
-        MGTK_CALL MGTK::Move, params+3
-        MGTK_CALL MGTK::DrawText, params
-ret:    rts
+        stax    str
+        stax    @addr
+        MGTK_CALL MGTK::StringWidth, params
+        lsr16   width
+        sub16   #0, width, params+MGTK::Point::xcoord
+        copy16  #0, params+MGTK::Point::ycoord
+        MGTK_CALL MGTK::Move, params
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
+        rts
 .endproc ; _DrawStringCentered
 
 ;;; ============================================================
 
 .ifdef FD_EXTENDED
 .proc DrawLineEditLabel
-        phax
-
+        stax    @addr
         MGTK_CALL MGTK::MoveTo, file_dialog_res::line_edit_label_pos
-
-        plax
-        jmp     DrawString
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
+        rts
 .endproc ; DrawLineEditLabel
 .endif
 
@@ -1040,6 +995,8 @@ found:  CALL    AdjustOnLineEntryCase, AX=#on_line_buffer
 ;;; ============================================================
 
 .proc _ReadDir
+        MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::watch
+
         jsr     _IsRootPath
         jeq     _ReadDrives
 
@@ -1063,7 +1020,7 @@ err:    jsr     _SetRootPath
         lda     dir_read_buf+SubdirectoryHeader::file_count
         and     #$7F            ; TODO: max of 128 entries, but this is still weird
         sta     num_file_names
-        jeq     close
+        beq     close
 
         ptr := $06
         copy16  #dir_read_buf+.sizeof(SubdirectoryHeader), ptr
@@ -1130,6 +1087,7 @@ done_entry:
 
 close:  MLI_CALL CLOSE, close_params
         jsr     _SortFileNames
+        jsr     _SetCursorPointer
         RETURN  C=0
 
 next:   lda     entry_in_block
@@ -1159,8 +1117,6 @@ entries_per_block:
         DEFINE_ON_LINE_PARAMS on_line_drives_params, 0, dir_read_buf
 
 .proc _ReadDrives
-        MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::watch
-
         MLI_CALL ON_LINE, on_line_drives_params
 
         ptr := $06
@@ -1195,11 +1151,7 @@ next:   add16_8 ptr, #16        ; advance to next
 
 finish:
         jsr     _SortFileNames
-
         jsr     _SetCursorPointer
-.ifdef FD_EXTENDED
-        CLEAR_BIT7_FLAG cursor_ibeam_flag
-.endif
 
         RETURN  C=0
 .endproc ; _ReadDrives
@@ -1508,7 +1460,7 @@ selected_index := file_dialog_res::listbox_rec::selected_index
     WHILE POS
         copy16  #kListViewNameX, file_dialog_res::item_pos+MGTK::Point::xcoord
         MGTK_CALL MGTK::MoveTo, file_dialog_res::item_pos
-        CALL    DrawString, AX=#file_dialog_res::filename_buf
+        MGTK_CALL MGTK::DrawString, file_dialog_res::filename_buf
 
         ;; Folder glyph?
         copy16  #kListViewIconX, file_dialog_res::item_pos+MGTK::Point::xcoord
@@ -1525,7 +1477,9 @@ selected_index := file_dialog_res::listbox_rec::selected_index
     ELSE
         ldax    #file_dialog_res::str_file
     END_IF
-        jmp     DrawString
+        stax    @addr
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
+        rts
 .endproc ; DrawListEntryProc
 
 ;;; ============================================================

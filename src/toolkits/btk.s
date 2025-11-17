@@ -204,10 +204,23 @@ ret:
 
         jsr     _SetPort
         jsr     _Invert
+
+        ldx     #5
+    DO
+        txa
+        pha
+        MGTK_CALL MGTK::WaitVBL
+        pla
+        tax
+        dex
+    WHILE NOT ZERO
+
+
         FALL_THROUGH_TO _Invert
 .endproc ; FlashImpl
 
 .proc _Invert
+        MGTK_CALL MGTK::SetPattern, solid_pattern
         MGTK_CALL MGTK::SetPenMode, penXOR
         MGTK_CALL MGTK::InflateRect, shrink_rect
         MGTK_CALL MGTK::PaintRect, rect
@@ -286,18 +299,8 @@ skip_port:
 
 ;;; Inputs: A,X points at string
 .proc _DrawString
-PARAM_BLOCK dt_params, btk::zp_scratch
-textptr .addr
-textlen .byte
-END_PARAM_BLOCK
-        stax    dt_params::textptr
-        ldy     #0
-        lda     (dt_params::textptr),y
-    IF NOT_ZERO
-        sta     dt_params::textlen
-        inc16   dt_params::textptr
-        MGTK_CALL MGTK::DrawText, dt_params
-    END_IF
+        stax    @addr
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
 .endproc ; _DrawString
 
@@ -317,25 +320,13 @@ END_PARAM_BLOCK
 ;;; Inputs: A,X points at string
 ;;; Output: A,X = width
 .proc _MeasureString
-PARAM_BLOCK tw_params, btk::zp_scratch
-textptr .addr
-textlen .byte
+PARAM_BLOCK sw_params, btk::zp_scratch
+str     .addr
 width   .word
 END_PARAM_BLOCK
-        stax    tw_params::textptr
-
-        ldy     #0
-        lda     (tw_params::textptr),y
-    IF ZERO
-        lda     #0
-        tax
-        rts
-    END_IF
-
-        sta     tw_params::textlen
-        inc16   tw_params::textptr
-        MGTK_CALL MGTK::TextWidth, tw_params
-        RETURN  AX=tw_params::width
+        stax    sw_params::str
+        MGTK_CALL MGTK::StringWidth, sw_params
+        RETURN  AX=sw_params::width
 .endproc ; _MeasureString
 
 ;;; ============================================================
@@ -499,7 +490,7 @@ unchecked_rb_bitmap:
         stax    rb_params::mapbits
 
         MGTK_CALL MGTK::SetPenMode, notpencopy
-        MGTK_CALL MGTK::PaintBitsHC, rb_params
+        MGTK_CALL MGTK::PaintBits, rb_params
         rts
 .endproc ; _DrawRadioBitmap
 
@@ -586,7 +577,7 @@ unchecked_cb_bitmap:
         stax    cb_params::mapbits
 
         MGTK_CALL MGTK::SetPenMode, notpencopy
-        MGTK_CALL MGTK::PaintBitsHC, cb_params
+        MGTK_CALL MGTK::PaintBits, cb_params
         rts
 .endproc ; _DrawCheckboxBitmap
 

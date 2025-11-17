@@ -27,6 +27,8 @@ Exec:
         beq     DoAdd
         jmp     Init
 
+;;; ============================================================
+
 .proc Exit
         pha
         lda     clean_flag
@@ -171,7 +173,7 @@ dialog_loop:
         bmi     dialog_loop
         lda     selector_action
         cmp     #SelectorAction::edit
-        jeq     DoEdit
+        beq     DoEdit
 
         cmp     #SelectorAction::delete
         beq     DoDelete
@@ -183,14 +185,10 @@ dialog_loop:
 ;;; ============================================================
 
 .proc DoDelete
-        jsr     main::SetCursorWatch
-
         CALL    RemoveEntry, A=shortcut_picker_record::selected_index
     IF ZS                       ; Z set on success
         inc     clean_flag      ; mark as "dirty"
     END_IF
-
-        jsr     main::SetCursorPointer
         jmp     DoCancel
 .endproc ; DoDelete
 
@@ -317,7 +315,6 @@ reuse_same_index:
         jmp     CloseWindow
     END_IF
 
-        jsr     main::SetCursorPointer
         jmp     Exit
 
 flags:  .byte   0
@@ -407,22 +404,18 @@ clean_flag:                     ; high bit set if "clean", cleared if "dirty"
 ;;; ============================================================
 
 .proc DrawTitleCentered
-        text_params     := $6
-        text_addr       := text_params + 0
-        text_length     := text_params + 2
-        text_width      := text_params + 3
+        params := $06
+        str := params
+        width := params+2
 
-        stax    text_addr       ; input is length-prefixed string
-        ldy     #0
-        lda     (text_addr),y
-        sta     text_length
-        inc16   text_addr       ; point past length byte
-        MGTK_CALL MGTK::TextWidth, text_params
+        stax    str
+        stax    @addr
+        MGTK_CALL MGTK::StringWidth, params
 
-        sub16   #winfo_entry_picker::kWidth, text_width, pos_dialog_title::xcoord
+        sub16   #winfo_entry_picker::kWidth, width, pos_dialog_title::xcoord
         lsr16   pos_dialog_title::xcoord ; /= 2
         MGTK_CALL MGTK::MoveTo, pos_dialog_title
-        MGTK_CALL MGTK::DrawText, text_params
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
 .endproc ; DrawTitleCentered
 
@@ -437,7 +430,7 @@ clean_flag:                     ; high bit set if "clean", cleared if "dirty"
         jsr     main::GetEvent
 
         cmp     #MGTK::EventKind::button_down
-        jeq     handle_button
+        beq     handle_button
 
         cmp     #MGTK::EventKind::key_down
         bne     EventLoop
@@ -508,10 +501,10 @@ handle_button:
         lda     event_params::key
 
         cmp     #CHAR_RETURN
-        jeq     HandleKeyReturn
+        beq     HandleKeyReturn
 
         cmp     #CHAR_ESCAPE
-        jeq     HandleKeyEscape
+        beq     HandleKeyEscape
 
         lda     num_primary_run_list_entries
         ora     num_secondary_run_list_entries
@@ -603,7 +596,7 @@ entries_flag_table:
 
 .proc AssignEntryData
         cmp     #8
-        jcs     AssignSecondaryRunListEntryData
+        bcs     AssignSecondaryRunListEntryData
 
         sta     index
         tya                     ; flags
@@ -694,11 +687,9 @@ index:  .byte   0
 
         sta     index
         cmp     #8
-        bcc     run_list
-        jmp     secondary_run_list
+        jcs     secondary_run_list
 
         ;; Primary run list
-run_list:
 .scope
         tax
         inx
@@ -953,55 +944,65 @@ filename:
         DEFINE_CLOSE_PARAMS close_params
 
 .proc WriteFileToOriginalPrefix
+        jsr     main::SetCursorWatch ; before writing
+        jsr     rest
+        jmp     main::SetCursorPointer ; after writing
+rest:
+        ;; --------------------------------------------------
+
+
         CALL    main::CopyDeskTopOriginalPrefix, AX=#filename_buffer
-        inc     filename_buffer ; Append '/' separator
-        ldx     filename_buffer
+
+        ldx     filename_buffer ; Append '/' separator
+        inx
         lda     #'/'
         sta     filename_buffer,x
 
-        ldx     #$00            ; Append filename
-        ldy     filename_buffer
+        ldy     #0              ; Append filename
     DO
         inx
         iny
-        copy8   filename,x, filename_buffer,y
-    WHILE X <> filename
-        sty     filename_buffer
+        copy8   filename,y, filename_buffer,x
+    WHILE Y <> filename
+        stx     filename_buffer
 
         copy8   #0, second_try_flag
 
-retry:  MLI_CALL CREATE, create_origpfx_params
+retry_create_and_open:
+        MLI_CALL CREATE, create_origpfx_params
         MLI_CALL OPEN, open_origpfx_params
-        bcc     write
-
+    IF CS
         ;; First time - ask if we should even try.
         lda     second_try_flag
-    IF ZERO
+      IF ZERO
         inc     second_try_flag
         CALL    ShowAlert, A=#kErrSaveChanges
         cmp     #kAlertResultOK
-        beq     retry
+        beq     retry_create_and_open
         bne     cancel          ; always
-    END_IF
+      END_IF
 
         ;; Second time - prompt to insert.
         CALL    ShowAlert, A=#kErrInsertSystemDisk
         cmp     #kAlertResultOK
-        beq     retry
+        beq     retry_create_and_open
 
 cancel: rts
+    END_IF
 
-write:  lda     open_origpfx_params::ref_num
+        lda     open_origpfx_params::ref_num
         sta     write_params::ref_num
         sta     close_params::ref_num
 
-@retry: MLI_CALL WRITE, write_params
-        bcc     close
+retry_write:
+        MLI_CALL WRITE, write_params
+    IF CS
         jsr     ShowAlert
         ASSERT_EQUALS ::kAlertResultTryAgain, 0
-        beq     @retry          ; `kAlertResultTryAgain` = 0
+        beq     retry_write     ; `kAlertResultTryAgain` = 0
+    END_IF
 
-close:  MLI_CALL CLOSE, close_params
+        MLI_CALL CLOSE, close_params
         rts
 
 second_try_flag:                ; 0 or 1, updated with INC
@@ -1012,6 +1013,12 @@ second_try_flag:                ; 0 or 1, updated with INC
 ;;; Read SELECTOR.LIST file (using current prefix)
 
 .proc ReadFile
+        jsr     main::SetCursorWatch ; before reading
+        jsr     rest
+        jmp     main::SetCursorPointer ; after reading
+rest:
+        ;; --------------------------------------------------
+
 retry:  MLI_CALL OPEN, open_curpfx_params
         bcc     read
         cmp     #ERR_FILE_NOT_FOUND
@@ -1054,25 +1061,35 @@ not_found:
 ;;; Write SELECTOR.LIST file (using current prefix)
 
 .proc WriteFile
-@retry:
+        jsr     main::SetCursorWatch ; before writing
+        jsr     rest
+        jmp     main::SetCursorPointer ; after writing
+rest:
+        ;; --------------------------------------------------
+
+retry_create_and_open:
         MLI_CALL CREATE, create_curpfx_params
         MLI_CALL OPEN, open_curpfx_params
-        bcc     write
+    IF CS
         CALL    ShowAlert, A=#kErrInsertSystemDisk
         cmp     #kAlertResultOK
-        beq     @retry
+        beq     retry_create_and_open
         RETURN  A=#$FF
+    END_IF
 
-write:  lda     open_curpfx_params::ref_num
+        lda     open_curpfx_params::ref_num
         sta     write_params::ref_num
         sta     close_params::ref_num
-@retry: MLI_CALL WRITE, write_params
-        bcc     close
+
+retry_write:
+        MLI_CALL WRITE, write_params
+    IF CS
         jsr     ShowAlert
         ASSERT_EQUALS ::kAlertResultTryAgain, 0
-        beq     @retry          ; `kAlertResultTryAgain` = 0
+        beq     retry_write     ; `kAlertResultTryAgain` = 0
+    END_IF
 
-close:  MLI_CALL CLOSE, close_params
+        MLI_CALL CLOSE, close_params
         rts
 .endproc ; WriteFile
 
@@ -1099,7 +1116,8 @@ close:  MLI_CALL CLOSE, close_params
         ptr1 := $06
         stax    ptr1
         CALL    main::CopyPtr1ToBuf, AX=#text_buffer2
-        TAIL_CALL main::DrawString, AX=#text_buffer2
+        MGTK_CALL MGTK::DrawString, text_buffer2
+        rts
 .endproc ; DrawEntryCallback
 
 .proc SelChangeCallback

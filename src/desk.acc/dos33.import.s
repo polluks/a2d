@@ -12,6 +12,7 @@
         .include "../inc/dos33.inc"
         .include "../mgtk/mgtk.inc"
         .include "../common.inc"
+        .include "../lib/alert_dialog.inc"
         .include "../desktop/desktop.inc"
         .include "../toolkits/btk.inc"
         .include "../toolkits/lbtk.inc"
@@ -90,6 +91,17 @@ pensize_frame:  .byte   kBorderDX, kBorderDY
 grafport_win:   .tag    MGTK::GrafPort
 
 control_block:  .tag    ControlBlock
+
+;;; ============================================================
+;;; Alerts
+
+.params AlertNoWindowsOpen
+        .addr   str_alert_no_windows_open
+        .byte   AlertButtonOptions::OK
+        .byte   AlertOptions::Beep | AlertOptions::SaveBack
+.endparams
+str_alert_no_windows_open:
+        PASCAL_STRING res_string_alert_no_windows_open
 
 ;;; ============================================================
 
@@ -178,13 +190,12 @@ port:           .addr   grafport_win
         copy8   #BTK::kButtonStateDisabled, ok_button::state
 
         MGTK_CALL MGTK::OpenWindow, winfo_picker
-        MGTK_CALL MGTK::OpenWindow, winfo_picker_listbox
 
         MGTK_CALL MGTK::HideCursor
         jsr     DrawWindow
-        MGTK_CALL MGTK::ShowCursor
-
+        MGTK_CALL MGTK::OpenWindow, winfo_picker_listbox
         LBTK_CALL LBTK::Init, lb_params
+        MGTK_CALL MGTK::ShowCursor
 
         MGTK_CALL MGTK::FlushEvents
         FALL_THROUGH_TO InputLoop
@@ -232,18 +243,23 @@ port:           .addr   grafport_win
         lda     event_params::key
         jsr     ToUpperCase
 
-        cmp     #kShortcutCloseWindow
-        jeq     Exit
+      IF A = #kShortcutCloseWindow
+        BTK_CALL BTK::Flash, cancel_button
+        jmp     Exit
+      END_IF
 
         jmp     InputLoop
     END_IF
 
         ;; Not modified
     IF A = #CHAR_ESCAPE
+        BTK_CALL BTK::Flash, cancel_button
+        copy8   #$FF, listbox_rec::selected_index
         jmp     Exit
     END_IF
 
     IF A = #CHAR_RETURN
+        BTK_CALL BTK::Flash, ok_button
         jmp     Exit
     END_IF
 
@@ -311,7 +327,7 @@ done:   jmp     InputLoop
         MGTK_CALL MGTK::SetPenSize, pensize_normal
 
         MGTK_CALL MGTK::MoveTo, prompt_label_pos
-        CALL    DrawString, AX=#prompt_label_str
+        MGTK_CALL MGTK::DrawString, prompt_label_str
 
         BTK_CALL BTK::Draw, ok_button
         BTK_CALL BTK::Draw, cancel_button
@@ -348,7 +364,8 @@ str_template:
         adc     #0
         sta     str_template + kDriveOffset
 
-        TAIL_CALL DrawString, AX=#str_template
+        MGTK_CALL MGTK::DrawString, str_template
+        rts
 .endproc ; DrawListEntryProc
 
 .proc OnSelChange
@@ -485,13 +502,12 @@ remainder:      .word   0                 ; (out)
         copy8   #BTK::kButtonStateDisabled, import_button::state
 
         MGTK_CALL MGTK::OpenWindow, winfo_catalog
-        MGTK_CALL MGTK::OpenWindow, winfo_catalog_listbox
 
         MGTK_CALL MGTK::HideCursor
         jsr     DrawWindow
-        MGTK_CALL MGTK::ShowCursor
-
+        MGTK_CALL MGTK::OpenWindow, winfo_catalog_listbox
         LBTK_CALL LBTK::Init, lb_params
+        MGTK_CALL MGTK::ShowCursor
 
         MGTK_CALL MGTK::FlushEvents
         FALL_THROUGH_TO InputLoop
@@ -541,18 +557,22 @@ remainder:      .word   0                 ; (out)
         lda     event_params::key
         jsr     ToUpperCase
 
-        cmp     #kShortcutCloseWindow
-        jeq     ExitOK
+      IF A = #kShortcutCloseWindow
+        BTK_CALL BTK::Flash, close_button
+        jmp     ExitOK
+      END_IF
 
         jmp     InputLoop
     END_IF
 
         ;; Not modified
     IF A = #CHAR_ESCAPE
+        BTK_CALL BTK::Flash, close_button
         jmp     ExitOK
     END_IF
 
     IF A = #CHAR_RETURN
+        BTK_CALL BTK::Flash, import_button
         jmp     Import
     END_IF
 
@@ -633,12 +653,12 @@ done:   jmp     InputLoop
         MGTK_CALL MGTK::FrameRect, progress_frame
 
         MGTK_CALL MGTK::MoveTo, disk_vol_label_pos
-        CALL    DrawString, AX=#disk_vol_label_str
+        MGTK_CALL MGTK::DrawString, disk_vol_label_str
 
         lda     control_block+ControlBlock::volume_number
         ldx     #0
         jsr     To3DigitString
-        CALL    DrawString, AX=#str_from_int
+        MGTK_CALL MGTK::DrawString, str_from_int
 
         BTK_CALL BTK::Draw, import_button
         BTK_CALL BTK::Draw, close_button
@@ -678,7 +698,7 @@ done:   rts
     IF NS
         copy16  #kLockedX, pt::xcoord
         MGTK_CALL MGTK::MoveTo, pt
-        CALL    DrawString, AX=#str_locked
+        MGTK_CALL MGTK::DrawString, str_locked
     END_IF
 
         ;; Type
@@ -689,7 +709,7 @@ done:   rts
         and     #$7F
         jsr     clz
         copy8   type_table,x, str_type+1
-        CALL    DrawString, AX=#str_type
+        MGTK_CALL MGTK::DrawString, str_type
 
         ;; Size
         copy16  #kSizeX, pt::xcoord
@@ -700,13 +720,14 @@ done:   rts
         dey
         lda     (ptr),y
         jsr     To3DigitString
-        CALL    DrawString, AX=#str_from_int
+        MGTK_CALL MGTK::DrawString, str_from_int
 
         ;; Name
         copy16  #kNameX, pt::xcoord
         MGTK_CALL MGTK::MoveTo, pt
-        add16_8 ptr, #CatalogEntry::Name
-        TAIL_CALL DrawString, AX=ptr
+        add16_8 ptr, #CatalogEntry::Name, @addr
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
+        rts
 .endproc ; DrawListEntryProc
 
 str_locked:     PASCAL_STRING "*"
@@ -800,7 +821,6 @@ str_from_int:   PASCAL_STRING "000000" ; filled in by IntToString
 ;;; ============================================================
 
         .include "../lib/uppercase.s"
-        .include "../lib/drawstring.s"
         .include "../lib/get_next_event.s"
         .include "../lib/doubleclick.s"
         .include "../lib/inttostring.s"
@@ -828,7 +848,7 @@ start:
         ;; Get active window's path
         jsr     GetWinPath
     IF NOT_ZERO
-        TAIL_CALL JUMP_TABLE_SHOW_ALERT, A=#kErrNoWindowsOpen
+        TAIL_CALL JUMP_TABLE_SHOW_ALERT_PARAMS, AX=#aux::AlertNoWindowsOpen
     END_IF
 
         CLEAR_BIT7_FLAG dirty_flag
@@ -920,12 +940,15 @@ index:  .byte   0
 
         lda     RWTS_SECTOR_BUF + dos33::VTOC::FirstCatTrack
         ldx     RWTS_SECTOR_BUF + dos33::VTOC::FirstCatSector
-sector_loop:
+    DO
+        ;; For each sector
         jsr     do_read
         jcs     exit_error
 
         ldy     #dos33::FirstFileOffset
-file_loop:
+
+      DO
+        ;; For each file
         sty     cur_cat_sector_offset ; +$00 `FileEntry::Track`
         lda     RWTS_SECTOR_BUF,y
         jeq     exit_success    ; $00 = entry free, so done
@@ -945,18 +968,18 @@ file_loop:
 
         iny                     ; +$03 `FileEntry::Name`
         ldx     #0
-    DO
+       DO
         lda     RWTS_SECTOR_BUF,y
         and     #$7F            ; strip high bit
         sta     entry_buf+aux::CatalogEntry::Name+1,x
         iny
         inx
-    WHILE X <> #dos33::MaxFilenameLen
+       WHILE X <> #dos33::MaxFilenameLen
 
-    DO
+       DO
         dex
         lda     entry_buf+aux::CatalogEntry::Name+1,x
-    WHILE A = #' '
+       WHILE A = #' '
         inx
         stx     entry_buf+aux::CatalogEntry::Name
 
@@ -979,12 +1002,12 @@ next_file:
         clc
         adc     #.sizeof(dos33::FileEntry)
         tay
-        jcc     file_loop
+      WHILE CC
 
 next_sector:
         lda     RWTS_SECTOR_BUF + dos33::NextCatSectorTrack
         ldx     RWTS_SECTOR_BUF + dos33::NextCatSectorSector
-        jne     sector_loop
+    WHILE NOT ZERO
 
 exit_success:
         rts

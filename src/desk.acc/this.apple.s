@@ -129,7 +129,7 @@ reserved:       .res    1
         DEFINE_BITMAP iii, 55, 25
         DEFINE_BITMAP iie, 51, 26
         DEFINE_BITMAP iic, 46, 28
-        DEFINE_BITMAP iigs, 39, 26
+        DEFINE_BITMAP iigs, 80, 26
         DEFINE_BITMAP iie_card, 56, 22
         DEFINE_BITMAP laser128, 48, 30
         DEFINE_BITMAP ace500, 49, 30
@@ -246,32 +246,32 @@ iic_bits:
         PIXELS  ".############################################."
 
 iigs_bits:
-        PIXELS  ".####################################."
-        PIXELS  "##..................................##"
-        PIXELS  "##..##############################..##"
-        PIXELS  "##..##..........................##..##"
-        PIXELS  "##..##..##..##..##..##..........##..##"
-        PIXELS  "##..##..........................##..##"
-        PIXELS  "##..##..##..##..................##..##"
-        PIXELS  "##..##..........................##..##"
-        PIXELS  "##..##..##......................##..##"
-        PIXELS  "##..##..........................##..##"
-        PIXELS  "##..##..........................##..##"
-        PIXELS  "##..##..........................##..##"
-        PIXELS  "##..##..........................##..##"
-        PIXELS  "##..##############################..##"
-        PIXELS  "##..................................##"
-        PIXELS  ".####################################."
-        PIXELS  "..##..............................##.."
-        PIXELS  "..##..............................##.."
-        PIXELS  "..##..............................##.."
-        PIXELS  "..##..............................##.."
-        PIXELS  "..##..##..######..................##.."
-        PIXELS  "..##..............................##.."
-        PIXELS  "..##################################.."
-        PIXELS  "..##..............................##.."
-        PIXELS  "..##..............................##.."
-        PIXELS  "...################################..."
+        PIXELS  ".......................####################################..................."
+        PIXELS  "......................##..................................##.................."
+        PIXELS  "......................##..##############################..##.................."
+        PIXELS  "......................##..##..........................##..##.................."
+        PIXELS  "......................##..##..##..##..##..##..........##..##.................."
+        PIXELS  "......................##..##..........................##..##.................."
+        PIXELS  "......................##..##..##..##..................##..##.................."
+        PIXELS  "......................##..##..........................##..##.................."
+        PIXELS  "......................##..##..##......................##..##.................."
+        PIXELS  "......................##..##..........................##..##.................."
+        PIXELS  "......................##..##..........................##..##.................."
+        PIXELS  "......................##..##..........................##..##.................."
+        PIXELS  "......................##..##..........................##..##.................."
+        PIXELS  "......................##..##############################..##.................."
+        PIXELS  "......................##..................................##.................."
+        PIXELS  ".......##############..####################################..................."
+        PIXELS  "......##............##..##..............................##...................."
+        PIXELS  "......##..########..##..##..............................##...................."
+        PIXELS  "......##............##..##..............................##...................."
+        PIXELS  ".####################...##..............................##...................."
+        PIXELS  "##..................##..##..##..######..................##.......####........."
+        PIXELS  "##..................##..##..............................##.....##....#........"
+        PIXELS  "##....##########....##..##################################...##.....########.."
+        PIXELS  "##..................##..##..............................#####.....##........##"
+        PIXELS  "##..................##..##..............................##........##........##"
+        PIXELS  ".####################....################################.........############"
 
 iie_card_bits:
         PIXELS  "...###########################################.........."
@@ -1244,34 +1244,35 @@ egg:    .byte   0
 
         copy16  model_pix_ptr, bits_addr
         JUMP_TABLE_MGTK_CALL MGTK::SetPenMode, aux::notpencopy
-        JUMP_TABLE_MGTK_CALL MGTK::PaintBitsHC, SELF_MODIFIED, bits_addr
+        JUMP_TABLE_MGTK_CALL MGTK::PaintBits, SELF_MODIFIED, bits_addr
 
         JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::model_pos
-        CALL    DrawString, AX=model_str_ptr
+        CALL    DrawStringFromMain, AX=model_str_ptr
 
         JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::pdver_pos
-        CALL    DrawString, AX=#str_prodos_version
+        CALL    DrawStringFromMain, AX=#str_prodos_version
 
         JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::line1
         JUMP_TABLE_MGTK_CALL MGTK::LineTo, aux::line2
 
         JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::mem_pos
-        CALL    DrawString, AX=#str_memory_prefix
-        CALL    DrawString, AX=#str_from_int
+        CALL    DrawStringFromMain, AX=#str_memory_prefix
+        CALL    DrawStringFromMain, AX=#str_from_int
         bit     memory_is_mb_flag
     IF NS
-        CALL    DrawString, AX=#str_memory_mb_suffix
+        CALL    DrawStringFromMain, AX=#str_memory_mb_suffix
     ELSE
-        CALL    DrawString, AX=#str_memory_kb_suffix
+        CALL    DrawStringFromMain, AX=#str_memory_kb_suffix
     END_IF
-        CALL    DrawString, AX=#str_cpu_prefix
+        CALL    DrawStringFromMain, AX=#str_cpu_prefix
         jsr     CPUId
-        jsr     DrawString
+        jsr     DrawStringFromMain
 
         copy8   #7, slot
         copy8   #1<<7, mask
 
-loop:   lda     slot
+    DO
+        lda     slot
         asl
         tax
         copy16  slot_pos_table,x, slot_pos
@@ -1279,7 +1280,7 @@ loop:   lda     slot
         lda     slot
         ora     #'0'
         sta     str_slot_n + kStrSlotNOffset
-        CALL    DrawString, AX=#str_slot_n
+        CALL    DrawStringFromMain, AX=#str_slot_n
 
         ;; Possibilities:
         ;; * ProDOS thinks there's a card - may be firmware or no firmware
@@ -1289,7 +1290,7 @@ loop:   lda     slot
         ;; Check ProDOS slot bit mask
         lda     SLTBYT
         and     mask
-    IF NOT_ZERO
+      IF NOT_ZERO
         ;; ProDOS thinks there's a card...
         CALL    ProbeSlot, A=slot ; check for matching firmware
         bcs     draw
@@ -1300,7 +1301,7 @@ loop:   lda     slot
 
         ldax    #str_unknown
         bne     draw            ; always
-    END_IF
+      END_IF
 
         CALL    ProbeSlotNoFirmware, A=slot
         bcs     draw
@@ -1308,50 +1309,50 @@ loop:   lda     slot
         ldax    #str_empty
 
 draw:   php
-        jsr     DrawString
+        jsr     DrawStringFromMain
         plp
-    IF VS
+      IF VS
         ;; V=1 means smartport - print out the names
         CALL    SetSlotPtr, A=slot
         jsr     ShowSmartPortDeviceNames
-    END_IF
+      END_IF
 
         ;; Special case for Slot 2
         lda     slot
-    IF A = #2
+      IF A = #2
         jsr     SetSlotPtr
         CALL    WithInterruptsDisabled, AX=#DetectTheCricket
-      IF CS
-        CALL    DrawString, AX=#str_list_separator
-        CALL    DrawString, AX=#str_cricket
+       IF CS
+        CALL    DrawStringFromMain, AX=#str_list_separator
+        CALL    DrawStringFromMain, AX=#str_cricket
+       END_IF
       END_IF
-    END_IF
 
         ;; Special case for Slot 3 cards
         lda     slot
-    IF A = #3
+      IF A = #3
         bit     ROMIN2
         jsr     DetectLeChatMauveEve
         php
         bit     LCBANK1
         bit     LCBANK1
         plp
-      IF ZC
-        CALL    DrawString, AX=#str_list_separator
-        CALL    DrawString, AX=#str_lcmeve
-      ELSE
+       IF ZC
+        CALL    DrawStringFromMain, AX=#str_list_separator
+        CALL    DrawStringFromMain, AX=#str_lcmeve
+       ELSE
         CALL    SetSlotPtr, A=slot
         CALL    WithInterruptsDisabled, AX=#DetectUthernet2
-       IF CS
-        CALL    DrawString, AX=#str_list_separator
-        CALL    DrawString, AX=#str_uthernet2
+        IF CS
+        CALL    DrawStringFromMain, AX=#str_list_separator
+        CALL    DrawStringFromMain, AX=#str_uthernet2
+        END_IF
        END_IF
       END_IF
-    END_IF
 
         lsr     mask
         dec     slot
-        jne     loop
+    WHILE NOT ZERO
 
         JUMP_TABLE_MGTK_CALL MGTK::ShowCursor
         rts
@@ -2298,12 +2299,12 @@ device_loop:
         ;; Need a comma?
         bit     empty_flag
     IF NC
-        CALL    DrawString, AX=#str_list_separator
+        CALL    DrawStringFromMain, AX=#str_list_separator
     END_IF
         CLEAR_BIT7_FLAG empty_flag ; saw a unit!
 
         ;; Draw the device name
-        CALL    DrawString, AX=#str_current
+        CALL    DrawStringFromMain, AX=#str_current
 
         ;; Next!
 next:   lda     status_params::unit_num
@@ -2318,7 +2319,7 @@ finish:
         ;; If no units, populate with "(none)"
         bit     empty_flag
     IF NS
-        CALL    DrawString, AX=#str_none
+        CALL    DrawStringFromMain, AX=#str_none
     END_IF
 
         rts
@@ -2364,7 +2365,7 @@ num_devices:
         txa
         ora     #'0'
         sta     str_duplicate_suffix + kDuplicateCountOffset
-        CALL    DrawString, AX=#str_duplicate_suffix
+        CALL    DrawStringFromMain, AX=#str_duplicate_suffix
         copy8   #0, duplicate_count
     END_IF
         rts
@@ -2394,7 +2395,7 @@ ShowSmartPortDeviceNames := ShowSmartPortDeviceNamesImpl::start
 ;;; Copies string main>aux before drawing
 ;;; Input: A,X = address of length-prefixed string
 
-.proc DrawString
+.proc DrawStringFromMain
         params  := $06
         textptr := $06
         textlen := $08
@@ -2414,7 +2415,7 @@ ShowSmartPortDeviceNames := ShowSmartPortDeviceNamesImpl::start
         JUMP_TABLE_MGTK_CALL MGTK::DrawText, params
     END_IF
         rts
-.endproc ; DrawString
+.endproc ; DrawStringFromMain
 
 ;;; ============================================================
 

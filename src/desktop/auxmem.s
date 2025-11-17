@@ -320,11 +320,11 @@ str_move_moving:
 str_exists_prompt:
         PASCAL_STRING res_string_prompt_overwrite
 str_large_copy_prompt:
-        PASCAL_STRING res_string_errmsg_too_large_to_copy
+        PASCAL_STRING res_string_error_too_large_to_copy
 str_large_move_prompt:
-        PASCAL_STRING res_string_errmsg_too_large_to_move
+        PASCAL_STRING res_string_error_too_large_to_move
 str_no_overwrite_dir:
-        PASCAL_STRING res_string_errmsg_overwrite_dir
+        PASCAL_STRING res_string_error_overwrite_dir
 
         ;; "Delete" dialog strings
 str_delete_confirm_singular_format:
@@ -418,14 +418,14 @@ str_k_available_format:
 str_ramcard_full:
         PASCAL_STRING res_string_download_error_ramcard_full
 str_warning_selector_list_full:
-        PASCAL_STRING res_string_warning_selector_list_full
+        PASCAL_STRING res_string_alert_selector_list_full
 ;;; The same string is used for both of these cases as the second case
 ;;; (a single directory with too many items) is very difficult to hit.
-str_warning_too_many_files:     ; alt: `res_string_warning_too_many_files`
+str_warning_too_many_files:     ; alt: `res_string_alert_too_many_files`
 str_warning_window_must_be_closed:
-        PASCAL_STRING res_string_warning_window_must_be_closed
+        PASCAL_STRING res_string_alert_window_must_be_closed
 str_warning_too_many_windows:
-        PASCAL_STRING res_string_warning_too_many_windows
+        PASCAL_STRING res_string_alert_too_many_windows
 str_alert_confirm_running:
         PASCAL_STRING res_string_alert_confirm_running
 str_alert_bad_replacement:
@@ -438,10 +438,8 @@ str_alert_cannot_open:
         PASCAL_STRING res_string_alert_cannot_open
 str_alert_name_too_long:
         PASCAL_STRING res_string_alert_name_too_long
-str_alert_insert_source_disk:
-        PASCAL_STRING res_string_alert_insert_source_disk
-str_alert_insert_destination:
-        PASCAL_STRING res_string_alert_insert_destination
+str_alert_insert_disk_format:
+        PASCAL_STRING res_string_alert_insert_disk
 str_alert_unreadable_format:
         PASCAL_STRING res_string_alert_unreadable_format
 
@@ -464,36 +462,34 @@ str_alert_unreadable_format:
 ;;; Messages
 
 err_unknown:                    ; kErrUnknown
-        PASCAL_STRING res_string_errmsg_00
+        PASCAL_STRING res_string_error_unknown
 
-err_27:  PASCAL_STRING res_string_errmsg_27
-err_28:  PASCAL_STRING res_string_errmsg_28
-err_2B:  PASCAL_STRING res_string_errmsg_2B
-err_40:  PASCAL_STRING res_string_errmsg_40
-err_44:  PASCAL_STRING res_string_errmsg_44
-err_45:  PASCAL_STRING res_string_errmsg_45
-err_46:  PASCAL_STRING res_string_errmsg_46
-err_47:  PASCAL_STRING res_string_errmsg_47
-err_48:  PASCAL_STRING res_string_errmsg_48
-err_49:  PASCAL_STRING res_string_errmsg_49
-err_4E:  PASCAL_STRING res_string_errmsg_4E
-err_52:  PASCAL_STRING res_string_errmsg_52
-err_57:  PASCAL_STRING res_string_errmsg_57
+err_27: PASCAL_STRING res_string_err27_io_error ; I/O Error
+err_28: PASCAL_STRING res_string_err28_device_not_connected ; Device Not Connected
+err_2B: PASCAL_STRING res_string_err2B_write_protected ; Writed Protected
+err_40: PASCAL_STRING res_string_err40_invalid_pathname ; Invalid Pathname
+err_44: PASCAL_STRING res_string_err44_path_not_found ; Path Not Found
+err_45: PASCAL_STRING res_string_err45_vol_not_found ; Volume Not Found
+err_46: PASCAL_STRING res_string_err46_file_not_found ; File Not Found
+err_47: PASCAL_STRING res_string_err47_duplicate_filename ; Duplicate Filename
+err_48: PASCAL_STRING res_string_err48_overrun_error ; Overrun Error (Disk Full)
+err_49: PASCAL_STRING res_string_err49_volume_dir_full ; Volume Directory Full
+err_4E: PASCAL_STRING res_string_err4E_access_error ; Access Error
+err_52: PASCAL_STRING res_string_err52_not_prodos_volume ; Not ProDOS Volume
+err_57: PASCAL_STRING res_string_err57_duplicate_volume ; Duplicate Volume
 
 ;;; Below are internal (not ProDOS MLI) error codes.
 err_insert_system_disk:         ; kErrInsertSystemDisk
-        PASCAL_STRING res_string_warning_insert_system_disk
+        PASCAL_STRING res_string_alert_insert_system_disk
 err_save_changes:               ; kErrSaveChanges
-        PASCAL_STRING res_string_warning_save_changes
-err_no_windows:                 ; kErrNoWindowsOpen
-        PASCAL_STRING res_string_alert_no_windows_open
+        PASCAL_STRING res_string_alert_save_changes
 err_duplicate_volumes:          ; kErrDuplicateVolName
         PASCAL_STRING res_string_alert_duplicate_volume_names
 err_no_basic_system:            ; kErrBasicSysNotFound
         PASCAL_STRING res_string_alert_basic_system_not_found
 
         ;; number of alert messages
-        kNumAlerts = 19
+        kNumAlerts = 18
 
         ;; message number-to-index table
         ;; (look up by scan to determine index)
@@ -510,7 +506,6 @@ alert_table:
         ;; Internal error codes:
         .byte   kErrInsertSystemDisk
         .byte   kErrSaveChanges
-        .byte   kErrNoWindowsOpen
         .byte   kErrDuplicateVolName
         .byte   kErrBasicSysNotFound
         ASSERT_TABLE_SIZE alert_table, kNumAlerts
@@ -522,7 +517,6 @@ message_table_low:
         .byte   <err_47,<err_48,<err_49,<err_4E,<err_52,<err_57
         .byte   <err_insert_system_disk
         .byte   <err_save_changes
-        .byte   <err_no_windows
         .byte   <err_duplicate_volumes
         .byte   <err_no_basic_system
         ASSERT_TABLE_SIZE message_table_low, kNumAlerts
@@ -533,7 +527,6 @@ message_table_high:
         .byte   >err_47,>err_48,>err_49,>err_4E,>err_52,>err_57
         .byte   >err_insert_system_disk
         .byte   >err_save_changes
-        .byte   >err_no_windows
         .byte   >err_duplicate_volumes
         .byte   >err_no_basic_system
         ASSERT_TABLE_SIZE message_table_high, kNumAlerts
@@ -556,7 +549,6 @@ alert_options_table:
 
         .byte   AlertButtonOptions::OKCancel       ; kErrInsertSystemDisk
         .byte   AlertButtonOptions::OKCancel       ; kErrSaveChanges
-        .byte   AlertButtonOptions::OK             ; kErrNoWindowsOpen
         .byte   AlertButtonOptions::OK             ; kErrDuplicateVolName
         .byte   AlertButtonOptions::OK             ; kErrBasicSysNotFound
         ASSERT_TABLE_SIZE alert_options_table, kNumAlerts

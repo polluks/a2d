@@ -11,6 +11,47 @@
 ;;; ============================================================
 
 ;;; --------------------------------------------------
+;;; Structure
+;;; --------------------------------------------------
+
+;;; IF
+    IF NS
+        nop
+    END_IF
+
+;;; IF / ELSE
+    IF NS
+        nop
+    ELSE
+        nop
+    END_IF
+
+;;; IF / ELSE_IF
+    IF NS
+        nop
+    ELSE_IF CS
+        nop
+    END_IF
+
+;;; IF / multiple ELSE_IF
+    IF NS
+        nop
+    ELSE_IF CS
+        nop
+    ELSE_IF VS
+        nop
+    END_IF
+
+;;; IF / ELSE_IF / ELSE
+    IF NS
+        nop
+    ELSE_IF CS
+        nop
+    ELSE
+        nop
+    END_IF
+
+;;; --------------------------------------------------
 ;;; Flag Tests
 ;;; --------------------------------------------------
 
@@ -581,6 +622,31 @@ kSet = 1
         TAIL_CALL target, A=#2
         RETURN  A=#3
         beq     @cheap
+
+
+;;; --------------------------------------------------
+;;; Long (backwards) branches
+;;; --------------------------------------------------
+
+    DO
+.repeat 120
+        nop
+.endrepeat
+        ;; Should be `BMI`
+        CONTINUE_IF NS
+
+        ;; Should be `BCS`
+    WHILE CS
+
+    DO
+.repeat 130
+        nop
+.endrepeat
+        ;; Should be `BPL` / `JMP`
+        CONTINUE_IF NS
+
+        ;; Should be `BCC` / `JMP`
+    WHILE CS
 
 ;;; ============================================================
 ;;; Errors

@@ -121,7 +121,7 @@ grow_box_bitmap:
         MGTK_CALL MGTK::SetPenMode, notpencopy
         sub16_8 winfo::maprect::x2, #kGrowBoxWidth, grow_box_params::viewloc::xcoord
         sub16_8 winfo::maprect::y2, #kGrowBoxHeight, grow_box_params::viewloc::ycoord
-        MGTK_CALL MGTK::PaintBitsHC, grow_box_params
+        MGTK_CALL MGTK::PaintBits, grow_box_params
         rts
 .endproc ; DrawGrowBox
 
@@ -360,18 +360,19 @@ finish: jmp     InputLoop
         copy16  #object_deltas, delta_ptr
         ldx     #kNumObjects-1
 
-loop:   txa
+    DO
+        txa
         pha
 
         ;; --------------------------------------------------
         ;; Stash old coords
 
         ldy     #0
-    DO
+      DO
         lda     (pos_ptr),y
         pha
         iny
-    WHILE Y <> #4
+      WHILE Y <> #4
 
         ;; --------------------------------------------------
         ;; Update X coordinate and maybe delta
@@ -380,22 +381,22 @@ loop:   txa
         add16in (pos_ptr),y, (delta_ptr),y, tmpw
 
         scmp16  tmpw, #0
-    IF NEG
+      IF NEG
         copy16  #0, tmpw
 
         ldy     #MGTK::Point::xcoord
         sub16in #0, (delta_ptr),y, (delta_ptr),y
-    END_IF
+      END_IF
 
         sub16   winfo::maprect+MGTK::Rect::x2, #kObjectWidth-1, dim
 
         scmp16  dim, tmpw
-    IF NEG
+      IF NEG
         copy16  dim, tmpw
 
         ldy     #MGTK::Point::xcoord
         sub16in #0, (delta_ptr),y, (delta_ptr),y
-    END_IF
+      END_IF
 
         ldy     #MGTK::Point::xcoord
         copy16in tmpw, (pos_ptr),y
@@ -407,21 +408,21 @@ loop:   txa
         add16in (pos_ptr),y, (delta_ptr),y, tmpw
 
         scmp16  tmpw, #0
-    IF NEG
+      IF NEG
         copy16  #0, tmpw
 
         ldy     #MGTK::Point::ycoord
         sub16in #0, (delta_ptr),y, (delta_ptr),y
-    END_IF
+      END_IF
 
         sub16   winfo::maprect+MGTK::Rect::y2, #kObjectHeight-1, dim
         scmp16  dim, tmpw
-    IF NEG
+      IF NEG
         copy16  dim, tmpw
 
         ldy     #MGTK::Point::ycoord
         sub16in #0, (delta_ptr),y, (delta_ptr),y
-    END_IF
+      END_IF
 
         ldy     #MGTK::Point::ycoord
         copy16in tmpw, (pos_ptr),y
@@ -431,24 +432,20 @@ loop:   txa
 
         ;; New coords
         ldy     #.sizeof(MGTK::Point)-1
-    DO
+      DO
         copy8   (pos_ptr),y, object_params::viewloc,y
         dey
-    WHILE POS
-        MGTK_CALL MGTK::ShieldCursor, object_params
-        MGTK_CALL MGTK::PaintBits, object_params
-        MGTK_CALL MGTK::UnshieldCursor
+      WHILE POS
+        jsr     _Paint
 
         ;; Old coords
         ldy     #.sizeof(MGTK::Point)-1
-    DO
+      DO
         pla
         sta     object_params::viewloc,y
         dey
-    WHILE POS
-        MGTK_CALL MGTK::ShieldCursor, object_params
-        MGTK_CALL MGTK::PaintBits, object_params
-        MGTK_CALL MGTK::UnshieldCursor
+      WHILE POS
+        jsr     _Paint
 
         ;; --------------------------------------------------
         ;; Next
@@ -459,9 +456,27 @@ loop:   txa
         pla
         tax
         dex
-        jpl     loop
+    WHILE POS
 
         rts
+
+.proc _Paint
+        ldax    object_params::viewloc::xcoord
+        stax    shield_rect::x1
+        addax   object_params::maprect::x2, shield_rect::x2
+
+        ldax    object_params::viewloc::ycoord
+        stax    shield_rect::y1
+        addax   object_params::maprect::y2, shield_rect::y2
+
+        MGTK_CALL MGTK::ShieldCursor, shield_rect
+        MGTK_CALL MGTK::PaintBits, object_params
+        MGTK_CALL MGTK::UnshieldCursor
+        rts
+
+        DEFINE_RECT shield_rect, 0,0,0,0
+.endproc ; _Paint
+
 .endproc ; AnimateObjects
 
 ;;; ============================================================

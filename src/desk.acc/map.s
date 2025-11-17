@@ -257,8 +257,6 @@ position_marker_bitmap:
 ;;; ============================================================
 ;;; Line Edit
 
-cursor_ibeam_flag: .byte   0    ; bit7
-
 kBufSize = 16                       ; max length = 15, length
 buf_search:     .res    kBufSize, 0 ; search term
 
@@ -540,22 +538,12 @@ notpencopy:     .byte   MGTK::notpencopy
 
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
         MGTK_CALL MGTK::InRect, input_rect
-        bne     inside
-
-outside:
-        bit     cursor_ibeam_flag
-        bpl     done
-        CLEAR_BIT7_FLAG cursor_ibeam_flag
+    IF ZERO
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
-        jmp     done
-
-inside:
-        bit     cursor_ibeam_flag
-        bmi     done
-        SET_BIT7_FLAG cursor_ibeam_flag
+    ELSE
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
-
-done:   jmp     InputLoop
+    END_IF
+        jmp     InputLoop
 .endproc ; HandleMouseMove
 
 ;;; ============================================================
@@ -575,12 +563,12 @@ done:   jmp     InputLoop
         MGTK_CALL MGTK::SetPenSize, pensize_frame
         MGTK_CALL MGTK::FrameRect, frame_rect
         MGTK_CALL MGTK::SetPenSize, pensize_normal
-        MGTK_CALL MGTK::PaintBitsHC, map_params
+        MGTK_CALL MGTK::PaintBits, map_params
 
         MGTK_CALL MGTK::MoveTo, lat_label_pos
-        CALL    DrawString, AX=#lat_label_str
+        MGTK_CALL MGTK::DrawString, lat_label_str
         MGTK_CALL MGTK::MoveTo, long_label_pos
-        CALL    DrawString, AX=#long_label_str
+        MGTK_CALL MGTK::DrawString, long_label_str
 
         jsr     DrawLatLong
 
@@ -612,15 +600,15 @@ done:   jmp     InputLoop
 
         CALL    IntToString, AX=tmp
         MGTK_CALL MGTK::MoveTo, pos_lat
-        CALL    DrawString, AX=#str_from_int
-        CALL    DrawString, AX=#str_degree_suffix
+        MGTK_CALL MGTK::DrawString, str_from_int
+        MGTK_CALL MGTK::DrawString, str_degree_suffix
         bit     sflag
     IF NC
-        CALL    DrawString, AX=#str_n
+        MGTK_CALL MGTK::DrawString, str_n
     ELSE
-        CALL    DrawString, AX=#str_s
+        MGTK_CALL MGTK::DrawString, str_s
     END_IF
-        CALL    DrawString, AX=#str_spaces
+        MGTK_CALL MGTK::DrawString, str_spaces
 
         ;; Longitude
         copy16  long, tmp
@@ -633,15 +621,15 @@ done:   jmp     InputLoop
 
         CALL    IntToString, AX=tmp
         MGTK_CALL MGTK::MoveTo, pos_long
-        CALL    DrawString, AX=#str_from_int
-        CALL    DrawString, AX=#str_degree_suffix
+        MGTK_CALL MGTK::DrawString, str_from_int
+        MGTK_CALL MGTK::DrawString, str_degree_suffix
         bit     sflag
     IF NC
-        CALL    DrawString, AX=#str_e
+        MGTK_CALL MGTK::DrawString, str_e
     ELSE
-        CALL    DrawString, AX=#str_w
+        MGTK_CALL MGTK::DrawString, str_w
     END_IF
-        CALL    DrawString, AX=#str_spaces
+        MGTK_CALL MGTK::DrawString, str_spaces
 
         jsr     UpdateCoordsFromLatLong
         jmp     ShowPositionIndicator
@@ -682,7 +670,7 @@ HidePositionIndicator := ShowPositionIndicator
         eor     #$80
         sta     indicator_flag
         MGTK_CALL MGTK::SetPenMode, penXOR
-        MGTK_CALL MGTK::PaintBitsHC, position_marker_params
+        MGTK_CALL MGTK::PaintBits, position_marker_params
         rts
 .endproc ; XDrawPositionIndicator
 
@@ -720,7 +708,6 @@ blink_counter:
 
 ;;; ============================================================
 
-        .include "../lib/drawstring.s"
         .include "../lib/inttostring.s"
         .include "../lib/get_next_event.s"
 

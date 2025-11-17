@@ -83,12 +83,6 @@ params:  .res    3
 .endproc ; MLIRelayImpl
 
 ;;; ============================================================
-
-.proc NoOp
-        rts
-.endproc ; NoOp
-
-;;; ============================================================
 ;;; Quit back to ProDOS (which will launch DeskTop)
 
 .proc Quit
@@ -132,20 +126,20 @@ params:  .res    3
         lda     auxlc::drive_unitnum_table,x
         sta     unit_number
         jsr     auxlc::IsDiskII
-        beq     disk_ii
-
+    IF NE
         ;; Get driver address
         CALL    DeviceDriverAddress, A=unit_number
         stax    $06
 
+        ;; TODO: Is this safe with `ALTZPON` ???
         lda     #DRIVER_COMMAND_FORMAT
         sta     DRIVER_COMMAND
         lda     unit_number
         sta     DRIVER_UNIT_NUMBER
         jmp     ($06)
+    END_IF
 
         ;; Use Disk II-specific code
-disk_ii:
         unit_number := *+1
         lda     #SELF_MODIFIED_BYTE
         jmp     FormatDiskII
@@ -154,16 +148,9 @@ disk_ii:
 ;;; ============================================================
 ;;; Eject Disk via SmartPort
 
-.proc EjectDiskImpl
-
-        DEFINE_SP_CONTROL_PARAMS control_params, 0, list, $04 ; For Apple/UniDisk 3.3: Eject disk
-
-list:   .word   0               ; 0 items in list
-
-start:
+.proc EjectDisk
         jsr     FindSmartportDispatchAddress
-        bcs     done
-
+    IF CC
         stax    dispatch
         sty     control_params::unit_number
 
@@ -172,45 +159,40 @@ start:
         jsr     SELF_MODIFIED
         .byte   SPCall::Control
         .addr   control_params
+    END_IF
+        rts
 
-done:   rts
+        DEFINE_SP_CONTROL_PARAMS control_params, 0, list, $04 ; For Apple/UniDisk 3.5: Eject disk
 
-.endproc ; EjectDiskImpl
-EjectDisk := EjectDiskImpl::start
+list:   .word   0               ; 0 items in list
+
+.endproc ; EjectDisk
 
 ;;; ============================================================
 ;;; Identify the disk type by reading the first block.
 ;;; NOTE: Not used for ProDOS disks.
 ;;; Inputs: `source_drive_index` must be set
-;;; Outputs: sets `source_disk_format`
+;;; Outputs: A = `auxlc::kSourceDiskFormatXYZ`
 .proc IdentifySourceNonProDOSDiskType
         ldx     auxlc::source_drive_index
-        lda     auxlc::drive_unitnum_table,x
-        sta     block_params::unit_num
-        lda     #$00
-        sta     block_params::block_num
-        sta     block_params::block_num+1
-        jsr     ReadBlock
+        CALL    ReadBootBlock, A=auxlc::drive_unitnum_table,x
         bcs     fail
 
         ;; Pascal?
         jsr     auxlc::IsPascalBootBlock
     IF CC
         CALL    auxlc::GetPascalVolName, AX=#on_line_buffer2
-        copy8   #$C0, auxlc::source_disk_format ; Pascal
-        rts
+        RETURN  A=#auxlc::kSourceDiskFormatPascal
     END_IF
 
         ;; DOS 3.3?
         jsr     auxlc::IsDOS33BootBlock
     IF CC
-        copy8   #$80,auxlc::source_disk_format ; DOS 3.3
-        rts
+        RETURN  A=#auxlc::kSourceDiskFormatDOS33
     END_IF
 
         ;; Anything else
-fail:   copy8   #$81, auxlc::source_disk_format ; Other
-        rts
+fail:   RETURN  A=#auxlc::kSourceDiskFormatOther
 .endproc ; IdentifySourceNonProDOSDiskType
 
 ;;; ============================================================
@@ -228,7 +210,9 @@ fail:   copy8   #$81, auxlc::source_disk_format ; Other
         lsr16   block_count_div8
         lsr16   block_count_div8
         copy16  block_count_div8, auxlc::block_count_div8
+
         bit     auxlc::source_disk_format
+        ASSERT_EQUALS auxlc::kSourceDiskFormatProDOS & $80, $00
         bmi     :+              ; not ProDOS
         bit     auxlc::disk_copy_flag
         bmi     :+
@@ -256,7 +240,7 @@ fail:   copy8   #$81, auxlc::source_disk_format ; Other
         count := $06         ; no longer needed
 
         sty     count
-loop:
+    DO
         CALL    MarkUsedInMemoryBitmap, A=page
         inc     page
         inc     page
@@ -264,8 +248,7 @@ loop:
         inc     count
 
         lda     auxlc::block_count_div8+1
-        cmp     count
-        bcs     loop
+    WHILE A >= count
         rts
 .endscope
 
@@ -306,13 +289,10 @@ loop:
 ;;; Inputs: A=%DSSSnnnn (drive/slot part of unit number)
 ;;; Outputs: A=$80 if "removable", 0 otherwise
 
-.proc IsDriveEjectableImpl
-
-        DEFINE_SP_STATUS_PARAMS status_params, 1, dib_buffer, 3 ; Return Device Information Block (DIB)
+.proc IsDriveEjectable
 
         dib_buffer := $220
 
-start:
         jsr     FindSmartportDispatchAddress
     IF CC
         stax    dispatch
@@ -335,9 +315,8 @@ start:
 
         RETURN  A=#0
 
-.endproc ; IsDriveEjectableImpl
-
-IsDriveEjectable := IsDriveEjectableImpl::start
+        DEFINE_SP_STATUS_PARAMS status_params, 1, dib_buffer, 3 ; Return Device Information Block (DIB)
+.endproc ; IsDriveEjectable
 
 ;;; ============================================================
 
@@ -718,7 +697,7 @@ bit_shift_table:
         sta     page_num
         lda     #0
         sta     count
-loop:
+    DO
         CALL    _MarkFreeInMemoryBitmap, A=page_num
         inc     page_num
         inc     page_num
@@ -728,7 +707,7 @@ loop:
         lda     auxlc::block_count_div8+1
         count := *+1
         cmp     #SELF_MODIFIED_BYTE
-        bcs     loop
+    WHILE GE
         rts
 
 .proc _MarkFreeInMemoryBitmap
@@ -943,12 +922,18 @@ done:   rts
 
 ;;; ============================================================
 
+;;; Input: A = `unit_num`
+;;; Output: C = 0 on success, C = 1 on error
 .proc CallOnLine2
+        sta     on_line_params2::unit_num
         MLI_CALL ON_LINE, on_line_params2
         rts
 .endproc ; CallOnLine2
 
+;;; Input: A = `unit_num`
+;;; Output: C = 0 on success, C = 1 on error
 .proc CallOnLine
+        sta     on_line_params::unit_num
         MLI_CALL ON_LINE, on_line_params
         rts
 .endproc ; CallOnLine
@@ -957,6 +942,14 @@ done:   rts
         MLI_CALL WRITE_BLOCK, block_params
         rts
 .endproc ; WriteBlock
+
+;;; Input: A = `unit_num`
+.proc ReadBootBlock
+        sta     block_params::unit_num
+        copy16  #0, block_params::block_num
+        copy16  #default_block_buffer, block_params::data_buffer
+        FALL_THROUGH_TO ReadBlock
+.endproc ; ReadBootBlock
 
 .proc ReadBlock
         MLI_CALL READ_BLOCK, block_params
@@ -1009,7 +1002,7 @@ memory_bitmap:
         .byte   %00000000       ; $C0-$CF - I/O
         .byte   %00000000       ; $D0-$DF - Disk Copy code
         .byte   %00000000       ; $E0-$EF - Disk Copy code
-        .byte   %01111111       ; $F0-$FF - free $F2 and up
+        .byte   %11111111       ; $F0-$FF - free $F0 and up
 
         ;; Aux memory - LCBANK2
         .byte   %11111111       ; $D0-$DF - free

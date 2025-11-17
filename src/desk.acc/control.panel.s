@@ -14,10 +14,8 @@
         .include "apple2.inc"
         .include "../inc/apple2.inc"
         .include "../inc/macros.inc"
-        .include "../inc/prodos.inc"
         .include "../mgtk/mgtk.inc"
         .include "../toolkits/btk.inc"
-        .include "../lib/alert_dialog.inc"
         .include "../common.inc"
         .include "../desktop/desktop.inc"
 
@@ -440,6 +438,7 @@ reserved:       .byte   0
         DEFINE_RECT maprect, 0, 0, kCaretBmpWidth - 1, kCaretBmpHeight - 1
         REF_MAPINFO_MEMBERS
 .endparams
+        DEFINE_RECT_SZ caret_blink_shield_params, kCaretBmpPosX, kCaretBmpPosY, kCaretBmpWidth, kCaretBmpHeight
 
 caret_blink_caret_bitmap:
         PIXELS  "##"
@@ -989,8 +988,8 @@ notpencopy:     .byte   MGTK::notpencopy
         BTK_CALL BTK::Draw, pattern_button
 
         MGTK_CALL MGTK::FrameRect, fatbits_frame
-        MGTK_CALL MGTK::PaintBitsHC, larr_params
-        MGTK_CALL MGTK::PaintBitsHC, rarr_params
+        MGTK_CALL MGTK::PaintBits, larr_params
+        MGTK_CALL MGTK::PaintBits, rarr_params
 
         MGTK_CALL MGTK::SetPenMode, penXOR
         MGTK_CALL MGTK::FrameRect, preview_frame
@@ -1008,8 +1007,7 @@ notpencopy:     .byte   MGTK::notpencopy
         ;; Double-Click Speed
 
         MGTK_CALL MGTK::MoveTo, dblclick_speed_label_pos
-        CALL    DrawString, AX=#dblclick_speed_label_str
-
+        MGTK_CALL MGTK::DrawString, dblclick_speed_label_str
 
         ;; Arrows
 .scope
@@ -1024,7 +1022,7 @@ notpencopy:     .byte   MGTK::notpencopy
         dey
       WHILE POS
 
-        MGTK_CALL MGTK::PaintBitsHC, darrow_params
+        MGTK_CALL MGTK::PaintBits, darrow_params
         add16_8 addr, #.sizeof(MGTK::Point)
         inc     arrow_num
         lda     arrow_num
@@ -1039,43 +1037,43 @@ notpencopy:     .byte   MGTK::notpencopy
         and     #DeskTopSettings::kOptionsShowShortcuts
     IF NOT_ZERO
         MGTK_CALL MGTK::MoveTo, dblclick_shortcut1_label_pos
-        CALL    DrawString, AX=#dblclick_shortcut1_label_str
+        MGTK_CALL MGTK::DrawString, dblclick_shortcut1_label_str
         MGTK_CALL MGTK::MoveTo, dblclick_shortcut2_label_pos
-        CALL    DrawString, AX=#dblclick_shortcut2_label_str
+        MGTK_CALL MGTK::DrawString, dblclick_shortcut2_label_str
         MGTK_CALL MGTK::MoveTo, dblclick_shortcut3_label_pos
-        CALL    DrawString, AX=#dblclick_shortcut3_label_str
+        MGTK_CALL MGTK::DrawString, dblclick_shortcut3_label_str
     END_IF
 
 
         jsr     UpdateDblclickButtons
 
-        MGTK_CALL MGTK::PaintBitsHC, dblclick_params
+        MGTK_CALL MGTK::PaintBits, dblclick_params
 
         ;; ==============================
         ;; Mouse Tracking Speed
 
         MGTK_CALL MGTK::MoveTo, mouse_tracking_label_pos
-        CALL    DrawString, AX=#mouse_tracking_label_str
+        MGTK_CALL MGTK::DrawString, mouse_tracking_label_str
 
         BTK_CALL BTK::RadioDraw, tracking_slow_button
         BTK_CALL BTK::RadioDraw, tracking_fast_button
         jsr     UpdateTrackingButtons
 
-        MGTK_CALL MGTK::PaintBitsHC, mouse_tracking_params
+        MGTK_CALL MGTK::PaintBits, mouse_tracking_params
 
         ;; ==============================
         ;; Caret Blinking
 
         MGTK_CALL MGTK::MoveTo, caret_blink1_label_pos
-        CALL    DrawString, AX=#caret_blink1_label_str
+        MGTK_CALL MGTK::DrawString, caret_blink1_label_str
 
         MGTK_CALL MGTK::MoveTo, caret_blink2_label_pos
-        CALL    DrawString, AX=#caret_blink2_label_str
+        MGTK_CALL MGTK::DrawString, caret_blink2_label_str
 
-        MGTK_CALL MGTK::PaintBitsHC, caret_blink_bitmap_params
+        MGTK_CALL MGTK::PaintBits, caret_blink_bitmap_params
 
         MGTK_CALL MGTK::MoveTo, caret_blink_slow_label_pos
-        CALL    DrawString, AX=#caret_blink_slow_label_str
+        MGTK_CALL MGTK::DrawString, caret_blink_slow_label_str
 
         MGTK_CALL MGTK::MoveTo, caret_blink_fast_label_pos
         CALL    DrawStringRight, AX=#caret_blink_fast_label_str
@@ -1089,7 +1087,7 @@ notpencopy:     .byte   MGTK::notpencopy
         and     #DeskTopSettings::kOptionsShowShortcuts
     IF NOT_ZERO
         MGTK_CALL MGTK::MoveTo, caret_blink_button1_shortcut_label_pos
-        CALL    DrawString, AX=#caret_blink_button1_shortcut_label_str
+        MGTK_CALL MGTK::DrawString, caret_blink_button1_shortcut_label_str
         MGTK_CALL MGTK::MoveTo, caret_blink_button2_shortcut_label_pos
         CALL    DrawStringCentered, AX=#caret_blink_button2_shortcut_label_str
         MGTK_CALL MGTK::MoveTo, caret_blink_button3_shortcut_label_pos
@@ -1618,7 +1616,7 @@ caret_blink_speed: .word   0
         MGTK_CALL MGTK::SetPort, grafport
 
         MGTK_CALL MGTK::SetPenMode, penXOR
-        MGTK_CALL MGTK::ShieldCursor, caret_blink_bitmap_caret_params
+        MGTK_CALL MGTK::ShieldCursor, caret_blink_shield_params
         MGTK_CALL MGTK::PaintBits, caret_blink_bitmap_caret_params
         MGTK_CALL MGTK::UnshieldCursor
 
@@ -1643,46 +1641,34 @@ done:   rts
 
 ;;; ============================================================
 
-        .include "../lib/drawstring.s"
-
 .proc DrawStringRight
-        params := $6
-        textptr := $6
-        textlen := $8
-        result := $9
+        params := $06
+        str := params
+        width := params+2
 
-        stax    textptr
-        ldy     #0
-        copy8   (textptr),y, textlen
-        inc16   textptr
-        MGTK_CALL MGTK::TextWidth, params
-        sub16   #0, result, result
-        lda     #0
-        sta     result+2
-        sta     result+3
-        MGTK_CALL MGTK::Move, result
-        MGTK_CALL MGTK::DrawText, params
+        stax    str
+        stax    @addr
+        MGTK_CALL MGTK::StringWidth, params
+        sub16   #0, width, params+MGTK::Point::xcoord
+        copy16  #0, params+MGTK::Point::ycoord
+        MGTK_CALL MGTK::Move, params
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
 .endproc ; DrawStringRight
 
 .proc DrawStringCentered
-        params := $6
-        textptr := $6
-        textlen := $8
-        result := $9
+        params := $06
+        str := params
+        width := params+2
 
-        stax    textptr
-        ldy     #0
-        copy8   (textptr),y, textlen
-        inc16   textptr
-        MGTK_CALL MGTK::TextWidth, params
-        lsr16   result
-        sub16   #0, result, result
-        lda     #0
-        sta     result+2
-        sta     result+3
-        MGTK_CALL MGTK::Move, result
-        MGTK_CALL MGTK::DrawText, params
+        stax    str
+        stax    @addr
+        MGTK_CALL MGTK::StringWidth, params
+        lsr16   width
+        sub16   #0, width, params+MGTK::Point::xcoord
+        copy16  #0, params+MGTK::Point::ycoord
+        MGTK_CALL MGTK::Move, params
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
 .endproc ; DrawStringCentered
 

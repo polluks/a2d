@@ -745,18 +745,26 @@ dispatch:
 
 .proc CmdRunAProgram
         jsr     ClearSelectedIndex
-retry:
-        jsr     SetCursorWatch
 
+        jsr     SetCursorWatch  ; before loading overlay
+retry:
         ;; Load file dialog overlay
         MLI_CALL OPEN, open_selector_params
-    IF CC
+    IF CS
+        CALL    ShowAlert, A=#AlertID::insert_system_disk
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
+        beq     retry           ; `kAlertResultTryAgain` = 0
+        jmp     SetCursorPointer  ; after loading overlay (failure)
+    END_IF
+
         lda     open_selector_params::ref_num
         sta     set_mark_overlay1_params::ref_num
         sta     read_overlay1_params::ref_num
         MLI_CALL SET_MARK, set_mark_overlay1_params
         MLI_CALL READ, read_overlay1_params
         MLI_CALL CLOSE, close_overlay_params
+
+        jsr     SetCursorPointer  ; after loading overlay (success)
 
         ;; Invoke file dialog
         jsr     file_dialog_init
@@ -771,12 +779,6 @@ ok:     tya                     ; now A,X = path
 
 cancel: jmp     LoadSelectorList
 
-    END_IF
-
-        CALL    ShowAlert, A=#AlertID::insert_system_disk
-        ASSERT_EQUALS ::kAlertResultTryAgain, 0
-        beq     retry           ; `kAlertResultTryAgain` = 0
-        rts
 .endproc ; CmdRunAProgram
 
 ;;; ============================================================
@@ -1186,21 +1188,17 @@ backup_devlst:
 ;;; Input: A,X = string address
 
 .proc DrawTitleString
-        text_params     := $6
-        text_addr       := text_params + 0
-        text_length     := text_params + 2
-        text_width      := text_params + 3
+        params := $6
+        str := params
+        width := params+2
 
-        stax    text_addr       ; input is length-prefixed string
-        ldy     #0
-        copy8   (text_addr),y, text_length
-        inc16   text_addr       ; point past length
-        MGTK_CALL MGTK::TextWidth, text_params
-
-        sub16   #winfo::kWidth, text_width, pos_title_string::xcoord
+        stax    str
+        stax    @addr
+        MGTK_CALL MGTK::StringWidth, params
+        sub16   #winfo::kWidth, width, pos_title_string::xcoord
         lsr16   pos_title_string::xcoord ; /= 2
         MGTK_CALL MGTK::MoveTo, pos_title_string
-        MGTK_CALL MGTK::DrawText, text_params
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
 .endproc ; DrawTitleString
 
@@ -1362,12 +1360,19 @@ start:
         sta     invoke_index
 
         ;; --------------------------------------------------
-        ;; Highlight entry in UI, if needed
+        ;; Set cursor for duration of operation
+
         bit     invoked_during_boot_flag
     IF NC                       ; skip if there's no UI yet
-        jsr     SetCursorWatch
-        jsr     ClearSelectedIndex
+        jsr     SetCursorWatch  ; before invoking entry
+        jsr     rest
+        jmp     SetCursorPointer ; after invoking entry
     END_IF
+        FALL_THROUGH_TO rest    ; "else"
+rest:
+        ;; --------------------------------------------------
+
+        jsr     ClearSelectedIndex
 
         ;; --------------------------------------------------
         ;; Figure out entry path, given entry options and overrides
@@ -1411,7 +1416,6 @@ start:
         jsr     CheckAndClearUpdates
         pla
     IF NOT_ZERO
-        jsr     SetCursorPointer
         jmp     ClearSelectedIndex ; canceled!
     END_IF
 
@@ -1448,6 +1452,19 @@ InvokeEntry := InvokeEntryImpl::start
 .proc LaunchPath
         jsr     CopyPathToInvokerPrefix
 
+        ;; --------------------------------------------------
+        ;; Set cursor for duration of operation
+
+        bit     invoked_during_boot_flag
+    IF NC                       ; skip if there's no UI yet
+        jsr     SetCursorWatch  ; before launching path
+        jsr     rest
+        jmp     SetCursorPointer ; after launching path
+    END_IF
+        FALL_THROUGH_TO rest    ; "else"
+rest:
+        ;; --------------------------------------------------
+
 retry:
         CALL    GetFileInfo, AX=#INVOKER_PREFIX
         bcc     check_type
@@ -1466,11 +1483,11 @@ retry:
         txa
         ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
         bne     fail            ; `kAlertResultCancel` = 1
-        jsr     SetCursorWatch
-        jmp     retry
+        jmp     retry           ; TODO: `BEQ`
     END_IF
 
-fail:   jmp     ClearSelectedIndex
+fail:
+        jmp     ClearSelectedIndex
 
         ;; --------------------------------------------------
         ;; Check file type
@@ -1528,7 +1545,10 @@ check_type:
 
         ;; Don't know how to invoke
 err:
+        bit     invoked_during_boot_flag
+    IF NC
         CALL    ShowAlert, A=#AlertID::selector_unable_to_run
+    END_IF
         jmp     ClearSelectedIndex
 
         ;; --------------------------------------------------

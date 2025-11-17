@@ -8,7 +8,6 @@
         RESOURCE_FILE "calendar.res"
 
         .include "apple2.inc"
-        .include "opcodes.inc"
         .include "../inc/apple2.inc"
         .include "../inc/macros.inc"
         .include "../inc/prodos.inc"
@@ -312,7 +311,7 @@ first_dow:
 ;;; ============================================================
 
 .proc DecDate
-        jsr     InvertDec
+        BTK_CALL BTK::Flash, left_button
 
         lda     BUTN0
         and     BUTN1
@@ -335,33 +334,11 @@ check:  cmp16   datetime + ParsedDateTime::year, #1901
         copy16  #2155, datetime + ParsedDateTime::year
 
 fin:    jsr     UpdateWindow
-        jsr     InvertDec
         jmp     InputLoop
-
-.proc InvertDec
-        MGTK_CALL MGTK::GetWinPort, getwinport_params
-    IF A <> #MGTK::Error::window_obscured
-        MGTK_CALL MGTK::SetPort, grafport
-        MGTK_CALL MGTK::SetPenMode, notpenXOR
-        MGTK_CALL MGTK::InflateRect, shrink
-        MGTK_CALL MGTK::PaintRect, left_button::rect
-        MGTK_CALL MGTK::InflateRect, grow
-    END_IF
-        rts
-.params shrink
-        .addr   left_button::rect
-        .word   AS_WORD(-1), AS_WORD(-1)
-.endparams
-.params grow
-        .addr   left_button::rect
-        .word   1, 1
-.endparams
-.endproc ; InvertDec
-
 .endproc ; DecDate
 
 .proc IncDate
-        jsr     InvertInc
+        BTK_CALL BTK::Flash, right_button
 
         lda     BUTN0
         and     BUTN1
@@ -386,28 +363,7 @@ check:  cmp16   datetime + ParsedDateTime::year, #2155
         copy16  #1901, datetime + ParsedDateTime::year
 
 fin:    jsr     UpdateWindow
-        jsr     InvertInc
         jmp     InputLoop
-
-.proc InvertInc
-        MGTK_CALL MGTK::GetWinPort, getwinport_params
-    IF A <> #MGTK::Error::window_obscured
-        MGTK_CALL MGTK::SetPort, grafport
-        MGTK_CALL MGTK::SetPenMode, notpenXOR
-        MGTK_CALL MGTK::InflateRect, shrink
-        MGTK_CALL MGTK::PaintRect, right_button::rect
-        MGTK_CALL MGTK::InflateRect, grow
-    END_IF
-        rts
-.params shrink
-        .addr   right_button::rect
-        .word   AS_WORD(-1), AS_WORD(-1)
-.endparams
-.params grow
-        .addr   right_button::rect
-        .word   1, 1
-.endparams
-.endproc ; InvertInc
 .endproc ; IncDate
 
 ;;; ============================================================
@@ -514,9 +470,10 @@ notpenXOR:      .byte   MGTK::notpenXOR
 
         ;; Draw month + space + year
         MGTK_CALL MGTK::MoveTo, pos_month_year
-        CALL    DrawString, AX=ptr_str_month
-        CALL    DrawString, AX=#str_space
-        CALL    DrawString, AX=#str_year
+        copy16  ptr_str_month, @addr
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
+        MGTK_CALL MGTK::DrawString, str_space
+        MGTK_CALL MGTK::DrawString, str_year
 
         ;; --------------------------------------------------
         ;; Grid lines
@@ -579,12 +536,8 @@ notpenXOR:      .byte   MGTK::notpenXOR
 
         asl
         tax
-        lda     day_str_table,x
-        pha
-        lda     day_str_table+1,x
-        tax
-        pla
-        jsr     DrawString
+        copy16  day_str_table,x, @addr
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
 
         dec     index
       WHILE POS
@@ -622,7 +575,7 @@ notpenXOR:      .byte   MGTK::notpenXOR
         copy8   #0, row
         COPY_BLOCK date_base, date_pos
 
-day_loop:
+    DO
         ;; Assume it's an empty cell.
         copy8   #3, str_date
         lda     #' '
@@ -640,40 +593,39 @@ day_loop:
         copy8   #' ', str_date+1 ; assume 1 digit
         lda     date
         ldx     #0
-    DO
+      DO
         BREAK_IF A < #10
         sbc     #10
         inx
-    WHILE NOT_ZERO              ; always
+      WHILE NOT_ZERO            ; always
 
         ora     #'0'            ; convert to digit
         sta     str_date+2      ; units place
         txa
-    IF NOT_ZERO
+      IF NOT_ZERO
         ora     #'0'            ; convert to digit
         sta     str_date+1      ; tens place
-    END_IF
+      END_IF
 
         ;; Draw it
 draw_date:
         MGTK_CALL MGTK::MoveTo, date_pos
-        CALL    DrawString, AX=#str_date
+        MGTK_CALL MGTK::DrawString, str_date
         add16_8 date_pos::xcoord, #kDayDX
 
         ;; Next
         inc     col
         lda     col
-    IF A = #7
+      IF A = #7
         copy8   #0, col
         inc     row
         copy16  date_base::xcoord, date_pos
         add16_8 date_pos::ycoord, #kDayDY
-    END_IF
+      END_IF
 
         inc     date
         lda     date
-        cmp     #39             ; extra, to erase previous days
-        jne     day_loop
+    WHILE A <> #39              ; extra, to erase previous days
 
         ;; --------------------------------------------------
         ;; Left/right arrow buttons
@@ -769,9 +721,19 @@ tmp:    .word   0
 
 ;;; ============================================================
 
+.proc MeasureString
+        ptr := $06
+        width := $08
+
+        stax    ptr
+        MGTK_CALL MGTK::StringWidth, ptr
+        ldax    width
+        rts
+.endproc ; MeasureString
+
+;;; ============================================================
+
         .include "../lib/uppercase.s"
-        .include "../lib/drawstring.s"
-        .include "../lib/measurestring.s"
 
         str_time := 0           ; unused
         .include "../lib/datetime.s"

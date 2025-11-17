@@ -219,38 +219,18 @@ auxtype:        .word   SELF_MODIFIED
 
         MGTK_CALL MGTK::InRect, type_rect
     IF NOT_ZERO
-        jsr     SetCursorIBeam
+        MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
         jmp     InputLoop
     END_IF
 
         MGTK_CALL MGTK::InRect, auxtype_rect
     IF NOT_ZERO
-        jsr     SetCursorIBeam
+        MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
         jmp     InputLoop
     END_IF
 
-        jsr     SetCursorPointer
-        jmp     InputLoop
-
-cursor_ibeam_flag: .byte   0
-
-.proc SetCursorIBeam
-        bit     cursor_ibeam_flag
-        RTS_IF NS
-
-        MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
-        SET_BIT7_FLAG cursor_ibeam_flag
-        rts
-.endproc ; SetCursorIBeam
-
-.proc SetCursorPointer
-        bit     cursor_ibeam_flag
-        RTS_IF NC
-
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
-        CLEAR_BIT7_FLAG cursor_ibeam_flag
-        rts
-.endproc ; SetCursorPointer
+        jmp     InputLoop
 .endproc ; HandleMouseMoved
 
 ;;; ============================================================
@@ -565,22 +545,17 @@ digits: .byte   "0123456789ABCDEF"
 ;;; ============================================================
 
 .proc DrawStringRight
-        params := $6
-        textptr := $6
-        textlen := $8
-        result := $9
+        params := $06
+        str := params
+        width := params+2
 
-        stax    textptr
-        ldy     #0
-        copy8   (textptr),y, textlen
-        inc16   textptr
-        MGTK_CALL MGTK::TextWidth, params
-        sub16   #0, result, result
-        lda     #0
-        sta     result+2
-        sta     result+3
-        MGTK_CALL MGTK::Move, result
-        MGTK_CALL MGTK::DrawText, params
+        stax    str
+        stax    @addr
+        MGTK_CALL MGTK::StringWidth, params
+        sub16   #0, width, params+MGTK::Point::xcoord
+        copy16  #0, params+MGTK::Point::ycoord
+        MGTK_CALL MGTK::Move, params
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
 .endproc ; DrawStringRight
 

@@ -1,3 +1,9 @@
+;;; ============================================================
+;;; SHOW.FONT.FILE - Desk Accessory
+;;;
+;;; Preview accessory for MGTK font files.
+;;; ============================================================
+
         .include "../config.inc"
 
         .include "apple2.inc"
@@ -251,7 +257,6 @@ line_addrs:
 
 PARAM_BLOCK params, $06
 data    .addr
-len     .byte
 width   .word
 END_PARAM_BLOCK
 
@@ -269,21 +274,17 @@ END_PARAM_BLOCK
         lda     index
         asl
         tax
-        copy16  line_addrs,x, ptr
-
-        ldy     #0
-        lda     (ptr),y         ; length
-        sta     params::len
-        add16   ptr, #1, params::data ; offset past length
+        copy16  line_addrs,x, params::data
 
         ;; Position the string
-        MGTK_CALL MGTK::TextWidth, params
+        MGTK_CALL MGTK::StringWidth, params
         sub16   #kDAWidth, params::width, pos::xcoord ; center it
         lsr16   pos::xcoord
         add16   pos::ycoord, #kLineHeight, pos::ycoord ; next row
 
         MGTK_CALL MGTK::MoveTo, pos
-        MGTK_CALL MGTK::DrawText, params
+        copy16  params::data, @addr
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
 
         inc     index
         lda     index

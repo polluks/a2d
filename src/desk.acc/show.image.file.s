@@ -1,3 +1,9 @@
+;;; ============================================================
+;;; SHOW.IMAGE.FILE - Desk Accessory
+;;;
+;;; Preview accessory for graphics (image) files.
+;;; ============================================================
+
         .include "../config.inc"
 
         .include "apple2.inc"
@@ -520,7 +526,7 @@ fail:   RETURN  C=1             ; failure
         JUMP_TABLE_MGTK_CALL MGTK::InitPort, aux::grafport
         JUMP_TABLE_MGTK_CALL MGTK::SetPort, aux::grafport
         JUMP_TABLE_MGTK_CALL MGTK::SetPenMode, aux::notpencopy
-        JUMP_TABLE_MGTK_CALL MGTK::PaintBitsHC, aux::paintbits_params
+        JUMP_TABLE_MGTK_CALL MGTK::PaintBits, aux::paintbits_params
 
         RETURN  C=0             ; success
 .endproc ; ShowMinipixFile

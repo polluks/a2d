@@ -11,10 +11,8 @@
         .include "apple2.inc"
         .include "../inc/apple2.inc"
         .include "../inc/macros.inc"
-        .include "../inc/prodos.inc"
         .include "../mgtk/mgtk.inc"
         .include "../toolkits/btk.inc"
-        .include "../lib/alert_dialog.inc"
         .include "../common.inc"
         .include "../desktop/desktop.inc"
 
@@ -352,7 +350,7 @@ common: bit     dragwindow_params::moved
         ;; --------------------------------------------------
 
         MGTK_CALL MGTK::MoveTo, view_style_label_pos
-        CALL    DrawString, AX=#view_style_label_str
+        MGTK_CALL MGTK::DrawString, view_style_label_str
 
         copy8   #kNumButtons-1, index
     DO
@@ -434,7 +432,6 @@ common: bit     dragwindow_params::moved
 ;;; ============================================================
 
         .include "../lib/uppercase.s"
-        .include "../lib/drawstring.s"
 
 ;;; ============================================================
 

@@ -102,10 +102,10 @@ buffer: .res 16, 0
         CALL    file_dialog::DrawLineEditLabel, AX=#enter_the_name_to_appear_label
 
         MGTK_CALL MGTK::MoveTo, add_a_new_entry_to_label_pos
-        CALL    main::DrawString, AX=#add_a_new_entry_to_label_str
+        MGTK_CALL MGTK::DrawString, add_a_new_entry_to_label_str
 
         MGTK_CALL MGTK::MoveTo, down_load_label_pos
-        CALL    main::DrawString, AX=#down_load_label_str
+        MGTK_CALL MGTK::DrawString, down_load_label_str
 
         BTK_CALL BTK::RadioDraw, primary_run_list_button
         BTK_CALL BTK::RadioDraw, secondary_run_list_button
@@ -217,19 +217,19 @@ is_add_flag:                    ; high bit set = Add, clear = Edit
 
 .proc HandleClick
         MGTK_CALL MGTK::InRect, primary_run_list_button::rect
-        jne     ClickPrimaryRunListCtrl
+        bne     ClickPrimaryRunListCtrl
 
         MGTK_CALL MGTK::InRect, secondary_run_list_button::rect
-        jne     ClickSecondaryRunListCtrl
+        bne     ClickSecondaryRunListCtrl
 
         MGTK_CALL MGTK::InRect, at_first_boot_button::rect
-        jne     ClickAtFirstBootCtrl
+        bne     ClickAtFirstBootCtrl
 
         MGTK_CALL MGTK::InRect, at_first_use_button::rect
-        jne     ClickAtFirstUseCtrl
+        bne     ClickAtFirstUseCtrl
 
         MGTK_CALL MGTK::InRect, never_button::rect
-        jne     ClickNeverCtrl
+        bne     ClickNeverCtrl
 
         RETURN  A=#0
 .endproc ; HandleClick

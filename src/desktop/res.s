@@ -581,9 +581,9 @@ icon_count:
         ;; (see `window_entry_count_table`, `window_entry_list_table`)
 cached_window_id: .byte   0
         ;; number of entries in copied window
-cached_window_entry_count:.byte   0
+cached_window_icon_count:.byte   0
         ;; list of entries (icons or file entry numbers) in copied window
-cached_window_entry_list:   .res    kMaxIconCount, 0
+cached_window_icon_list:   .res    kMaxIconCount, 0
 
 ;;; Index of window with selection (0=desktop)
 selected_window_id:
@@ -690,6 +690,7 @@ addr:   .addr   0
 ;;; Used for IconTK::OffsetAll
 .params offset_icons_params
 window_id:      .byte   0
+delta:
 delta_x:        .word   0
 delta_y:        .word   0
 .endparams
@@ -871,6 +872,9 @@ file_record_ptr:
 
 ;;; ============================================================
 
+kMaxResizeWindowWidth = 545
+kMaxResizeWindowHeight = 175
+
 .macro WINFO_DEFN id, label, buflabel
 .params label
 window_id:      .byte   id
@@ -886,8 +890,8 @@ status:         .byte   0
 reserved:       .byte   0
 mincontwidth:   .word   170
 mincontheight:  .word   50
-maxcontwidth:   .word   545
-maxcontheight:  .word   175
+maxcontwidth:   .word   kMaxResizeWindowWidth
+maxcontheight:  .word   kMaxResizeWindowHeight
 port:
         DEFINE_POINT viewloc, 20, 27
 mapbits:        .addr   MGTK::screen_mapbits
@@ -920,7 +924,7 @@ buflabel:       .res    16, 0
         DEFINE_POINT header_text_delta, 0, 0
 
         DEFINE_POINT header_line_left, 0, 0
-        DEFINE_POINT header_line_right, 0, 0
+        DEFINE_POINT header_line_right, kMaxResizeWindowWidth, 0
 
 str_from_int:                   ; populated by IntToString
         PASCAL_STRING "000,000" ; 6 digits plus thousands separator
@@ -955,7 +959,15 @@ remainder:      .word   0               ; (out)
 
 ;;; ============================================================
 
+;;; Always tracks the front window, or 0 if none. Updated when a
+;;; window is opened (via `MGTK::OpenWindow`), closed (via
+;;; `MGTK::FrontWindow`), or activated (via `MGTK::SelectWindow`).
 active_window_id:
+        .byte   0
+
+;;; Always tracks `active_window_id` unless an icon on the desktop has
+;;; been clicked.
+focused_window_id:
         .byte   0
 
 kWindowToDirIconFree = $00      ; window not in use

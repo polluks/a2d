@@ -132,6 +132,11 @@ grafport_win:   .tag    MGTK::GrafPort
         kFindLeft = 20
         DEFINE_LABEL find, res_string_label_find, kFindLeft, 20
 
+.params measure_find_label_params
+str:    .addr   find_label_str
+width:  .word   0
+.endparams
+
         ;; Left edges are adjusted dynamically based on label width
         DEFINE_RECT input_rect, kFindLeft + kLabelHOffset, kControlsTop, kDAWidth-250, kControlsTop + kTextBoxHeight
 
@@ -143,8 +148,6 @@ penXOR:         .byte   MGTK::penXOR
 pencopy:        .byte   MGTK::pencopy
 pensize_normal: .byte   1, 1
 pensize_frame:  .byte   kBorderDX, kBorderDY
-
-cursor_ibeam_flag: .byte   0    ; bit7
 
 kBufSize = ::kMaxFilenameLength+1     ; max length = 15, length
 buf_search:     .res    kBufSize, 0 ; search term
@@ -181,15 +184,14 @@ num_entries := listbox_rec::num_items
         ;; Prep input string
         copy8   #0, buf_search
 
-
-        CALL    MeasureString, AX=#find_label_str
-        addax   input_rect::x1
+        MGTK_CALL MGTK::StringWidth, measure_find_label_params
+        add16   input_rect::x1, measure_find_label_params::width, input_rect::x1
         add16_8 input_rect::x1, #1, line_edit_rec::rect::x1
 
         MGTK_CALL MGTK::OpenWindow, winfo
-        MGTK_CALL MGTK::OpenWindow, winfo_results
         MGTK_CALL MGTK::HideCursor
         jsr     DrawWindow
+        MGTK_CALL MGTK::OpenWindow, winfo_results
         LETK_CALL LETK::Init, le_params
         LETK_CALL LETK::Activate, le_params
         MGTK_CALL MGTK::ShowCursor
@@ -358,6 +360,7 @@ path_length:
         .byte   0
 
 .proc DoSearch
+        MGTK_CALL MGTK::GetCursorAdr, cursor_addr
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::watch
 
         copy8   #0, num_entries
@@ -410,13 +413,7 @@ search:
     END_IF
 
 finish:
-        bit     cursor_ibeam_flag
-    IF NC
-        MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
-    ELSE
-        MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
-    END_IF
-
+        MGTK_CALL MGTK::SetCursor, SELF_MODIFIED, cursor_addr
         jmp     InputLoop
 
 .endproc ; DoSearch
@@ -484,22 +481,12 @@ done:   jmp     InputLoop
 
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
         MGTK_CALL MGTK::InRect, input_rect
-        bne     inside
-
-outside:
-        bit     cursor_ibeam_flag
-        bpl     done
-        CLEAR_BIT7_FLAG cursor_ibeam_flag
+    IF ZERO
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
-        jmp     done
-
-inside:
-        bit     cursor_ibeam_flag
-        bmi     done
-        SET_BIT7_FLAG cursor_ibeam_flag
+    ELSE
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
-
-done:   jmp     InputLoop
+    END_IF
+        jmp     InputLoop
 .endproc ; HandleMouseMove
 
 ;;; ============================================================
@@ -524,7 +511,7 @@ done:   jmp     InputLoop
         MGTK_CALL MGTK::FrameRect, input_rect
 
         MGTK_CALL MGTK::MoveTo, find_label_pos
-        CALL    DrawString, AX=#find_label_str
+        MGTK_CALL MGTK::DrawString, find_label_str
 
         BTK_CALL BTK::Draw, search_button
         BTK_CALL BTK::Draw, cancel_button
@@ -560,7 +547,8 @@ NoOp:   rts
 ;;; Called with A = index
 .proc DrawListEntryProc
         jsr     GetEntry
-        TAIL_CALL DrawString, AX=#entry_buf
+        MGTK_CALL MGTK::DrawString, entry_buf
+        rts
 .endproc ; DrawListEntryProc
 
 ;;; ============================================================
@@ -613,8 +601,6 @@ offset: .addr   0
 ;;; ============================================================
 
         .include "../lib/uppercase.s"
-        .include "../lib/drawstring.s"
-        .include "../lib/measurestring.s"
         .include "../lib/doubleclick.s"
         .include "../lib/get_next_event.s"
 

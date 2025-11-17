@@ -516,7 +516,7 @@ set_key:
 
 .macro DRAW_CD_BUTTON name, flag
         JUMP_TABLE_MGTK_CALL MGTK::FrameRect, aux::.ident(.sprintf("%s_button_rect", .string(name)))
-        JUMP_TABLE_MGTK_CALL MGTK::PaintBitsHC, aux::.ident(.sprintf("%s_bitmap_params", .string(name)))
+        JUMP_TABLE_MGTK_CALL MGTK::PaintBits, aux::.ident(.sprintf("%s_bitmap_params", .string(name)))
   .if .paramcount > 1
         bit     ::cdremote::flag
     IF NS
@@ -538,7 +538,7 @@ set_key:
 
         ;; --------------------------------------------------
 
-        JUMP_TABLE_MGTK_CALL MGTK::PaintBitsHC, aux::logo_bitmap_params
+        JUMP_TABLE_MGTK_CALL MGTK::PaintBits, aux::logo_bitmap_params
 
         ;; --------------------------------------------------
 
@@ -558,21 +558,21 @@ str_time:
 ;;; Caller is responsible for setting port.
 .proc DrawTrack
         JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::pos_track
-        CALL    DrawString, AX=#str_track
-        TAIL_CALL DrawString, AX=#str_track_num
+        CALL    DrawStringFromMain, AX=#str_track
+        TAIL_CALL DrawStringFromMain, AX=#str_track_num
 .endproc ; DrawTrack
 
 ;;; Caller is responsible for setting port.
 .proc DrawTime
         JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::pos_time
-        TAIL_CALL DrawString, AX=#str_time
+        TAIL_CALL DrawStringFromMain, AX=#str_time
 .endproc ; DrawTime
 
 ;;; ============================================================
 ;;; Copies string main>aux before drawing
 ;;; Input: A,X = address of length-prefixed string
 
-.proc DrawString
+.proc DrawStringFromMain
         params  := $06
         textptr := $06
         textlen := $08
@@ -591,7 +591,7 @@ str_time:
 
         JUMP_TABLE_MGTK_CALL MGTK::DrawText, params
 done:   rts
-.endproc ; DrawString
+.endproc ; DrawStringFromMain
 
 ;;; ============================================================
 ;;; Inputs: A,X = rect address

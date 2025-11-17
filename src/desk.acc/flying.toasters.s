@@ -7,7 +7,6 @@
         .include "../config.inc"
 
         .include "apple2.inc"
-        .include "../inc/apple2.inc"
         .include "../inc/macros.inc"
         .include "../mgtk/mgtk.inc"
         .include "../common.inc"
@@ -116,9 +115,8 @@ exit:
 
         ;; For each toaster...
         copy8   #kToasterCount-1, index
-loop:
-
         ;; Stash current toaster's values
+    DO
         ldx     index
         copy8   frame_table,x, frame
         txa
@@ -133,28 +131,28 @@ loop:
 
         ;; Wrap Y
         cmp16   ypos, #kScreenHeight
-    IF VS
+      IF VS
         eor     #$80
-    END_IF
-    IF NC
+      END_IF
+      IF NC
         copy16  #AS_WORD(-kToasterHeight), ypos
-    END_IF
+      END_IF
 
         ;; Wrap X
         cmp16   xpos, #AS_WORD(-kToasterWidth)
-    IF VS
+      IF VS
         eor     #$80
-    END_IF
-    IF NS
+      END_IF
+      IF NS
         copy16  #kScreenWidth+kToasterWidth, xpos
-    END_IF
+      END_IF
 
         ;; Next frame
         inc     frame
         lda     frame
-    IF A = #4                   ; num frames
+      IF A = #4                 ; num frames
         copy8   #0, frame
-    END_IF
+      END_IF
 
         ;; Draw new pos
         copy16  xpos, paintbits_params::viewloc::xcoord
@@ -163,7 +161,7 @@ loop:
         asl                     ; *2
         tax
         copy16  toaster_frames,x, paintbits_params::mapbits
-        MGTK_CALL MGTK::PaintBitsHC, paintbits_params
+        MGTK_CALL MGTK::PaintBits, paintbits_params
 
         ;; Store updated values
         ldx     index
@@ -176,7 +174,7 @@ loop:
 
         ;; Next
         dec     index
-        jpl     loop
+    WHILE POS
         rts
 
 index:  .byte   0

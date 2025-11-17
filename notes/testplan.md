@@ -152,13 +152,13 @@ When steps say to a path e.g. `/TESTS/FOLDER/SUBFOLDER`, open the volume then ea
   * Select multiple files. Start the operation. During the initial count of the files, press Escape. Verify that the count is canceled and the progress dialog is closed, and that the window contents do not refresh.
   * Select multiple files. Start the operation. After the initial count of the files is complete and the actual operation has started, press Escape. Verify that the operation is canceled and the progress dialog is closed, and that (apart from the source window for Copy) the window contents do refresh.
 
-* Open a directory with more than 30 files, without resizing the window. Scroll up and down by one tick, by one page, and to the top/bottom. Verify that such operations scroll by an integral number of icons, i.e. the last row of labels are always the same distance from the bottom of the window.
+* Open `/TESTS/HUNDRED.FILES`, without resizing the window. Scroll up and down by one tick, by one page, and to the top/bottom. Verify that such operations scroll by an integral number of icons, i.e. the last row of labels are always the same distance from the bottom of the window.
 
 * Launch DeskTop. Open a volume window with enough icons that a scrollbar appears. Click on an active part of the scrollbar. Verify that the scrollbar responds immediately, not after the double-click detection delay expires.
 * Launch DeskTop. Open a volume window where the vertical and horizontal scrollbars are inactive. Click on each inactive scrollbar. Verify nothing happens.
 
-* Use `BASIC.SYSTEM` to create a file with type $08 e.g. `CREATE TEST08,T$08`. Launch DeskTop. Open the appropriate window. Verify that an icon appears for the file.
-* Use `BASIC.SYSTEM` to create a file with type $01 e.g. `CREATE TEST01,T$01`. Launch DeskTop. Open the appropriate window. Verify that an icon appears for the file.
+* Open `TESTS/FILE.TYPES`. Verify that an icon appears for the `TEST08` file.
+* Open `TESTS/FILE.TYPES`. Verify that an icon appears for the `TEST01` file.
 
 
 ## Selection
@@ -209,6 +209,12 @@ When steps say to a path e.g. `/TESTS/FOLDER/SUBFOLDER`, open the volume then ea
 * Launch DeskTop. Open a window. Select a file icon. Apple Menu > Control Panels. Verify that the previously selected file is no longer selected.
 
 * Launch DeskTop, ensuring no windows are open. Edit > Select All. Verify that the volume icons are selected.
+* Launch DeskTop. Open a window. Click a volume icon. Edit > Select All. Verify that volume icons are selected.
+* Launch DeskTop. Open a window. Click a volume icon. Click on the open window's title bar. Edit > Select All. Verify that icons within the window are selected. Repeat for the window's header and scroll bars.
+* Launch DeskTop. Open a window. Click a volume icon. Click an empty area within the window. Edit > Select All. Verify that icons within the window are selected.
+* Launch DeskTop. Open a window. Click a volume icon. Click an icon within the window. Edit > Select All. Verify that icons within the window are selected.
+* Launch DeskTop. Open a window. Click a volume icon. Click an empty space on the desktop. Edit > Select All. Verify that volume icons are selected.
+* Launch DeskTop. Open a window. Click a file icon. Click an empty space on the desktop. Edit > Select All. Verify that volume icons are selected.
 
 * Launch DeskTop. Open a volume window. Drag a selection rectangle so that it covers only the top row of pixels of an icon. Verify that the icon is selected.
 
@@ -598,6 +604,9 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 
 * Launch DeskTop. Drag a file to another volume to copy it. Open the volume and select the newly copied file. File > Get Info. Check Locked and click OK. Drag a file with a different type but the same name to the volume. When prompted to overwrite, click Yes. Verify that the file was replaced.
 
+* Load DeskTop. Open a window for a volume in a Disk II drive. Remove the disk from the Disk II drive. Hold Solid-Apple and drag a file to another volume to move it. When prompted to insert the disk, click Cancel. Verify that when the window closes the disk icon is no longer dimmed.
+
+
 ## File Deletion
 
 * Launch DeskTop. Open two windows. Select a file in one window. Activate the other window by clicking its title bar. File > Delete. Click OK. Verify that the window with the deleted file refreshes.
@@ -609,6 +618,8 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Launch DeskTop. Open a volume window. Create a folder. Open the folder's window. Activate the folder's parent window and select the folder icon. File > Delete. Click OK in the delete confirmation dialog. Verify that the folder's window closes.
 
 * Open `/TESTS/DELETION`. Select `X`. File > Delete. Verify that a prompt is shown for deleting each file in deepest-first order (B, Z, Y, X). Click Yes at each prompt. Verify that all files are deleted.
+
+* Load DeskTop. Open a window for a volume in a Disk II drive. Remove the disk from the Disk II drive. Drag a file to the trash. When prompted to insert the disk, click Cancel. Verify that when the window closes the disk icon is no longer dimmed.
 
 
 ## Get Info
@@ -701,6 +712,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Select a folder containing many files. File > Duplicate. During the initial count of the files, press Escape. Verify that the count is canceled and the progress dialog is closed, and that the window contents do not refresh.
 * Select a folder containing many files. File > Duplicate. After the initial count of the files is complete and the actual operation has started, press Escape. Verify that the operation is canceled and the progress dialog is closed, and that the window contents do refresh, but that no rename prompt appears.
 
+* Find make a copy of a `PRODOS` system file. Rename it to have a ".SYSTEM" suffix. Verify that it updates to have an application icon. Rename it again to remove the suffix. Verify that it updates to have a system file icon. Repeat several times. Verify that the icon has not shifted in position.
 
 ## Name Casing
 
@@ -744,8 +756,10 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Open a folder with no items. File > New Folder. Enter a name. Verify that the window header says "1 Item"
 * Open a folder with only one item. File > New Folder. Enter a name. Verify that the window header says "2 Items"
 
-* Open window for an otherwise empty RAMDisk volume. Note the "K in disk" and "K free" values in the header. File > New Folder. Enter a name. Verify that the "K in disk" increases by 0.5, and that the "K free" decreases by 0 or 1. File > New Folder. Enter another name. Verify that the "K in disk" increases by 0.5, and that the "K free" decreases by 0 or 1.
-* Open two windows for different volumes. Note the "items", "K in disk" and "K free" values in the header of the second window. File > New Folder. Enter a name. Verify that the "items" value increases by one, and "K in disk" increases by 0, 0.5 or 1, and that the "K free" decreases by 0, 0.5 or 1.
+* Open window for an otherwise empty RAMDisk volume. Note the "K in disk" and "K available" values in the header. File > New Folder. Enter a name. Verify that the "K in disk" increases by 0.5, and that the "K available" decreases by 0 or 1. File > New Folder. Enter another name. Verify that the "K in disk" increases by 0.5, and that the "K available" decreases by 0 or 1.
+* Open two windows for different volumes. Note the "items", "K in disk" and "K available" values in the header of the second window. File > New Folder. Enter a name. Verify that the "items" value increases by one, and "K in disk" increases by 0, 0.5 or 1, and that the "K available" decreases by 0, 0.5 or 1.
+
+* Open a window. Drag the window so that the left edge of the window is offscreen. Verify that the "X Items" display gets cut off. Drag the window so that the right edge of the window is offscreen. Verify that the "XK available" display gets cut off. Repeat with the window sized so that both scrollbars appear and thumbs moved to the middle of the scrollbars.
 
 
 ## Window Restoration
@@ -953,11 +967,18 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Launch DeskTop. Close all windows. Select a volume icon. Press an arrow key. Verify that the next icon in the specified direction is selected, if any. If none, verify that selection remains unchanged.
 * Launch DeskTop. Close all windows. Eject all disks, and verify that only the Trash icon remains. Clear selection by clicking on the desktop. Press an arrow key. Verify that the Trash icon is selected.
 
-* Launch DeskTop. Open a window. Select a volume icon. Press Right Arrow key. Verify that the first icon in the window is selected. Repeat with Down Arrow key.
-* Launch DeskTop. Open a window. Select a volume icon. Press Left Arrow key. Verify that the last icon in the window is selected. Repeat with Up Arrow key.
+* Launch DeskTop. Open a window. Press Right Arrow key. Verify that the first icon in the window is selected. Repeat with Down Arrow key.
+* Launch DeskTop. Open a window. Press Left Arrow key. Verify that the last icon in the window is selected. Repeat with Up Arrow key.
 * Launch DeskTop. Open two windows, both containing icons. Select an icon in one window. Activate the other window without changing selection. Press Right Arrow key. Verify that the first icon in the active window is selected. Repeat with Down Arrow key.
 * Launch DeskTop. Open two windows, both containing icons. Select an icon in one window. Activate the other window without changing selection. Press Left Arrow key. Verify that the last icon in the active window is selected. Repeat with Up Arrow key.
 * Launch DeskTop. Open a window containing multiple icons. Select an icon in the window. Press an arrow key. Verify that the next icon in the specified direction is selected, if any. If none, verify that selection remains unchanged.
+
+* Launch DeskTop. Open a window. Click a volume icon. Press an arrow key. Verify that the next volume icon in visual order is selected
+* Launch DeskTop. Open a window. Click a volume icon. Click on the open window's title bar. Press an arrow key. Verify that an icon within the window is selected. Repeat for the window's header and scroll bars.
+* Launch DeskTop. Open a window. Click a volume icon. Click an empty area within the window. Press an arrow key. Verify that an icon within the window is selected.
+* Launch DeskTop. Open a window. Click a volume icon. Click an icon within the window. Press an arrow key. Verify that the next file icon in visual order within the window is selected.
+* Launch DeskTop. Open a window. Click a volume icon. Click an empty space on the desktop. Press the Down Arrow key. Verify that the first volume icon in visual order on the desktop is selected.
+* Launch DeskTop. Open a window. Click a file icon. Click an empty space on the desktop. Press the Down Arrow key. Verify that the first file icon in visual order within the window is selected.
 
 * Launch DeskTop. Open one window containing icons, the other containing no icons. Select an icon in the first window. Activate the other window without changing selection. Press an arrow key. Verify that selection remains unchanged.
 
@@ -974,6 +995,8 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 
 * Launch DeskTop. Clear selection by closing all windows and clicking on the desktop. Press Apple+Down. Verify that nothing happens.
 
+* Launch DeskTop. Close all windows. Edit > Select All. Press the Right Arrow key. Verify that a single volume icon becomes selected.
+* Launch DeskTop. Open a window containing icons. Edit > Select All. Press the Right Arrow key. Verify that a single file icon becomes selected.
 
 ## Hardware Configurations
 
@@ -1131,6 +1154,7 @@ Image File:
 * In a directory with multiple images, preview one image. Press S. Verify that a slideshow starts. Press D (or any key that doesn't have a special purpose). Verify that the slideshow stops. Press S. Verify that a slideshow starts again.
 * In a directory with multiple images, preview one image. Press S. Verify that a slideshow starts. Press Left Arrow. Verify that the previous image is shown, and that the slideshow stops. Press S. Verify that a slideshow starts again.
 * Click on the File menu, then close it. Double-click an image file. Press Escape to close the preview. Verify that the File menu is not highlighted.
+* Preview an image file. Verify that the mouse cursor is hidden. Without moving the mouse, press the Escape key. Verify that after the desktop repaints the mouse cursor becomes visible without needing to move the mouse first.
 
 * Put `SHOW.IMAGE.FILE` in `APPLE.MENU`, start DeskTop.
     * Select no icon, select DA from Apple menu. Verify nothing happens other than open/close animation and screen refresh.
@@ -1358,6 +1382,19 @@ Run these tests on a system without a real-time clock:
 * Select a non-folder. Apple > Change Type. Specify `0F` as the type and click OK. Verify that an error is shown.
 * Select two folders. Apple > Change Type. Modify only the type (e.g. `06`). Verify that only a single error is shown.
 
+## DOS 3.3 Import
+
+For the following test cases, insert a DOS 3.3 disk then run the DA.
+
+* Select nothing. Verify that the OK button is disabled.
+* Select nothing. Press the Return key. Verify that nothing happens.
+* Select a slot/drive. Verify that the OK button is enabled.
+* Select a slot/drive. Click OK. Verify that the catalog screen is shown.
+* Select a slot/drive. Press the Return key. Verify that the OK button flashes and that the catalog dialog is shown.
+* Select a slot/drive. Click Cancel. Verify that the dialog closes.
+* Select a slot/drive. Press the Escape key. Verify that the Cancel button flashes and that the dialog closes.
+* Select a slot/drive. Click OK. Select a file. Press the Return key. Verify that the Import button flashes.
+* Select a slot/drive. Click OK. Select a file. Press the Escape key. Verify that the Cancel button flashes and that the dialog closes.
 
 # Shortcuts (Module)
 
@@ -1439,10 +1476,11 @@ Prerequisite: In DeskTop, Apple Menu > Control Panels > Options, check Show Shor
 * Launch DeskTop. Special > Copy Disk.... Verify that Pascal disk names in the device list do not have adjusted case (e.g. "TGP:" not "Tgp:").
 * Launch DeskTop. Special > Copy Disk.... Verify that DOS 3.3 disk names in the device list appear as "DOS 3.3" and do not have adjusted case.
 
-* Launch DeskTop. Special > Copy Disk.... Select a ProDOS disk as a source disk. Verify that after the "Insert source disk" prompt is dismissed, the volume name appears on the "Source" line and the name has adjusted case (e.g. "Volume" not "VOLUME").
-* Launch DeskTop. Special > Copy Disk.... Select a GS/OS disk as a source disk. Verify that after the "Insert source disk" prompt is dismissed, the volume name appears on the "Source" line and the name has correct case (e.g. "GS.OS.disk" not "Gs.Os.Disk").
-* Launch DeskTop. Special > Copy Disk.... Select a Pascal disk as a source disk. Verify that after the "Insert source disk" prompt is dismissed, the volume name appears on the "Source" line and the name does not have adjusted case (e.g. "TGP:" not "Tgp:").
-* Launch DeskTop. Special > Copy Disk.... Select a DOS 3.3 disk as a source disk. Verify that after the "Insert source disk" prompt is dismissed, no volume name appears on the "Source" line.
+* Launch DeskTop. Special > Copy Disk.... Select a ProDOS disk as a source disk. Verify that after the "Insert source disk" prompt is dismissed, the volume name appears on the "Source" line and the name has adjusted case (e.g. "Volume" not "VOLUME"), and that the line above reads "ProDOS disk copy".
+* Launch DeskTop. Special > Copy Disk.... Select a GS/OS disk as a source disk. Verify that after the "Insert source disk" prompt is dismissed, the volume name appears on the "Source" line and the name has correct case (e.g. "GS.OS.disk" not "Gs.Os.Disk"), and that the line above reads "ProDOS disk copy".
+* Launch DeskTop. Special > Copy Disk.... Select a Pascal disk as a source disk. Verify that after the "Insert source disk" prompt is dismissed, the volume name appears on the "Source" line and the name does not have adjusted case (e.g. "TGP:" not "Tgp:"), and that the line above reads "Pascal disk copy".
+* Launch DeskTop. Special > Copy Disk.... Select a DOS 3.3 disk as a source disk. Verify that after the "Insert source disk" prompt is dismissed, no volume name appears on the "Source" line, and that the line above reads "DOS 3.3 disk copy".
+* Launch DeskTop. Special > Copy Disk.... Select a CP/M disk as a source disk. Verify that after the "Insert source disk" prompt is dismissed, no volume name appears on the "Source" line, and that there is no line immediately above incorrectly identifying the source disk type.
 
 * Launch DeskTop. Special > Copy Disk.... Select a ProDOS disk as a destination disk. Verify that in the "Are you sure you want to erase ...?" dialog that the name has adjusted case (e.g. "Volume" not "VOLUME"), and the name is quoted.
 * Launch DeskTop. Special > Copy Disk.... Select a GS/OS disk as a destination disk. Verify that in the "Are you sure you want to erase ...?" dialog that the name has correct case (e.g. "GS.OS.disk" not "Gs.Os.Disk"), and the name is quoted.
@@ -1735,3 +1773,8 @@ For the following tests, run on non-IIgs system with any acceleration disabled.
 * Launch DeskTop. Open `/TESTS/HUNDRED.FILES`. Press Apple-A to Select All. Verify that the visible icons all become selected in under 1s, and that the mouse cursor remains responsive. Click a blank area within the window to clear selection. Verify that the visible icons all become selected in under 1s, and that the mouse cursor remains responsive.
 * Launch DeskTop. Open `/TESTS/HUNDRED.FILES`. Type `F`. Verify that icon `F1` becomes selected in under 2s. Without moving the mouse, type `9`. Verify that icon `F9` becomes selected in under 1s. Without moving the mouse, type `9`. Verify that icon `F99` becomes selected and scrolled into view in under 2s.
 * Launch DeskTop. Open `/TESTS/HUNDRED.FILES`. Press the Left Arrow key. Verify that icon `F1` becomes selected. Use the arrow keys to move selection. Verify that changing selection takes under 0.5s when scrolling is not required.
+* Launch DeskTop. Open `/TESTS/HUNDRED.FILES`. Drag a select rectangle around all the visible icons in the window. Verify that the icons all become selected in under 1s, and that the mouse cursor remains responsive.
+
+* Launch DeskTop. Open `/TESTS/HUNDRED.FILES`. Verify that the mouse cursor doesn't flicker as icons far away from the cursor are drawn.
+* Launch DeskTop. Click on the desktop, away from any icons. Verify that the mouse cursor doesn't flicker.
+* Launch DeskTop. Click on in a window, away from any icons. Verify that the mouse cursor doesn't flicker.
