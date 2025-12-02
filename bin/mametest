@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+
+# Syntax:
+#
+# bin/mametest [options] tests/SCRIPTNAME.lua
+#
+# Options
+#
+#    --only PATTERN      Run only matching named test steps (wildcards * and ?)
+#    --visible           Don't run headless (i.e. do present video)
+#    --audible           Don't run silent (i.e. do present audio)
+#    --nosnaps           Don't show snapshots once tests are complete
+#    --console           Don't run script, show console instead
+#    --slow              Don't run emulation unthrottled
+#
+# MAMEDIR must be set to the path containing roms/ etc
+# MAMEEXE must be set to the path to the mame64 binary
+
+# --------------------------------------------------
+
+set -e
+#set -x
+
+cd "$(dirname "$0")/.."
+source "bin/util.sh"
+
+# --------------------------------------------------
+# Parse command line
+
+TEST_NAME=""
+VISIBLE=""
+AUDIBLE=""
+SNAPS=true
+CONSOLE=""
+SLOW=""
+
+for arg in "$@"; do
+  case $1 in
+    --only)      shift; TEST_NAME="$1"; shift ;;
+    --only=*)    TEST_NAME="${1#--only=}"; shift ;;
+    --visible)   shift; VISIBLE=true ;;
+    --audible)   shift; AUDIBLE=true ;;
+    --nosnaps)   shift; SNAPS="" ;;
+    --console)   shift; CONSOLE=true ;;
+    --slow)      shift; SLOW=true ;;
+    *)           SCRIPT="$(realpath "$1")"; shift; break ;;
+  esac
+done
+
+if [ $# -gt 0 ]; then
+  echo "Unexpected argument(s): $@" 1>&2
+  exit 1
+fi
+
+# Validate environment
+
+if [ ! -x "$MAMEEXE" ]; then
+  echo "MAMEEXE is not an executable" 1>&2
+  exit 1
+fi
+if [ ! -d "$MAMEDIR" ]; then
+  echo "MAMEDIR is not a directory" 1>&2
+  exit 1
+fi
+
+# --------------------------------------------------
+
+BASEDIR="$(pwd)"
+SCRIPTDIR="$(dirname "$SCRIPT")"
+TMPDIR=/tmp/mametest
+mkdir -p "$TMPDIR"/disks
+
+NVRAMDIR="$TMPDIR"/nvram
+mkdir -p "$NVRAMDIR"
+rm -rf "$NVRAMDIR"/*
+
+# --------------------------------------------------
+# Configuration
+
+HARDIMG="out/A2DeskTop-${version}_800k.2mg"
+FLOP1IMG="out/A2DeskTop-${version}_140k_disk1.po"
+FLOP2IMG="out/A2DeskTop-${version}_140k_disk2.po"
+
+if [ ! -f "$HARDIMG" ]; then
+  make && make package
+fi
+
+MODEL="apple2ee"
+MODELARGS="-sl1 ramfactor -sl2 mouse -sl7 scsi -aux rw3"
+DISKARGS="-hard1 $HARDIMG"
+RESOLUTION="560x384"
+
+CONFIG="$(cat "$SCRIPT" | sed -n '/BEGINCONFIG/,/ENDCONFIG/p' | egrep -v 'BEGINCONFIG|ENDCONFIG' || true)"
+if [ -n "$CONFIG" ]; then
+  eval "$CONFIG"
+fi
+
+# --------------------------------------------------
+# Disk handling
+
+NEWDISKARGS=""
+while read -r arg disk; do
+  target="$TMPDIR/disks/${arg#?}"
+  cp "$disk" "$target"
+  NEWDISKARGS="$NEWDISKARGS $arg $target"
+done < <(echo $DISKARGS | xargs -n 2)
+DISKARGS="$NEWDISKARGS"
+
+# --------------------------------------------------
+# Prepare snapshots dir
+
+SNAPDIR="$TMPDIR"/snaps
+mkdir -p "$SNAPDIR/$MODEL"
+rm -rf "$SNAPDIR/$MODEL/"*
+
+# --------------------------------------------------
+# Run MAME
+
+OUTPUTARGS=""
+if [ -z "$VISIBLE" ]; then
+  export SDL_VIDEODRIVER=dummy
+  OUTPUTARGS="$OUTPUTARGS -video none"
+fi
+if [ -z "$AUDIBLE" ]; then
+  export SDL_AUDIODRIVER=dummy
+  OUTPUTARGS="$OUTPUTARGS -sound none"
+fi
+
+if [ "$CONSOLE" ]; then
+  SCRIPTARGS="-console"
+else
+  TIMEOUT=9999
+  SCRIPTARGS="-seconds_to_run $TIMEOUT -autoboot_script $BASEDIR/tests/lib/autoboot.lua"
+  export LUA_SCRIPT="$SCRIPT"
+fi
+
+
+if [ "$SLOW" ]; then
+  THROTTLE=""
+else
+  THROTTLE="-nothrottle"
+fi
+
+export LUA_PATH="$BASEDIR/tests/lib/?.lua;$SCRIPTDIR/?.lua"
+export TEST_NAME
+
+pushd "$MAMEDIR" > /dev/null
+exec 5>&1 # duplicate stdout filehandle
+output=$(
+  # eval here to allow configs to specify empty variables e.g. -sl6 ''
+  eval "'$MAMEEXE' \
+    -skip_gameinfo -nosamples \
+    -window -nomax -resolution '$RESOLUTION' -nounevenstretch \
+    -mouse \
+    -nvram_directory '$NVRAMDIR' \
+    -snapshot_directory '$SNAPDIR' -snapsize '$RESOLUTION' \
+    $OUTPUTARGS \
+    '$MODEL' $MODELARGS $DISKARGS \
+    $THROTTLE -nosleep \
+    $SCRIPTARGS" \
+    2>&1 | \
+    egrep --line-buffered -v "Secure coding is automatically enabled" | \
+    tee /dev/fd/5
+      )
+popd > /dev/null
+
+# --------------------------------------------------
+# Show snapshots
+
+# Parse output to determine snapshot names
+snapname=()
+while IFS= read -r line ; do
+  pattern='\[snap: ([0-9]+)\] (.*)'
+  if [[ $line =~ $pattern ]]; then
+    snapname["10#${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]//\//-}"
+  fi
+done <<< "$output"
+
+if [ "$SNAPS" ]; then
+  if ls "$SNAPDIR/$MODEL/"????.png >/dev/null 2>/dev/null; then
+    # Rename files to include snapshot names
+    for file in "$SNAPDIR/$MODEL"/????.png; do
+      dir="$(dirname "$file")"
+      num="$(basename "$file" .png)"
+      name="${snapname[10#$num]}"
+      if [ -n "$name" ]; then
+        mv "${dir}/${num}.png" "${dir}/${num} - ${name}.png"
+      fi
+    done
+
+    open "$SNAPDIR/$MODEL/"*.png
+  fi
+fi

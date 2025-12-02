@@ -67,7 +67,6 @@ JT_GET_TICKS:           jmp     GetTickCount            ; *
 ;;; Main event loop for the application
 
 .proc MainLoop
-
         ;; Poll drives every Nth time `SystemTask` does its thing.
         ;; At 1MHz on a //e this is about once every 3 seconds.
         kDrivePollFrequency = 35
@@ -276,6 +275,8 @@ modifiers:
         jeq     CmdOpenFromKeyboard
         cmp     #CHAR_UP        ; Apple-Up (Open Parent)
         jeq     CmdOpenParent
+        cmp     #CHAR_ESCAPE    ; Apple-Esc (Clear Selection)
+        jeq     ClearSelection
 
         ldx     active_window_id
     IF NOT_ZERO
@@ -3297,7 +3298,7 @@ entry3:
         txa                     ; X = index
         pha
 
-        lda     cached_window_icon_list-1,x
+        lda     cached_window_icon_list,x
         pha                     ; A = icon id
         jsr     GetIconRecordNum
         tay                     ; Y = record num
@@ -5490,8 +5491,8 @@ beyond:
 ;;; ============================================================
 
 .proc DoWindowResize
-        copy8   active_window_id, event_params
-        MGTK_CALL MGTK::GrowWindow, event_params
+        copy8   active_window_id, growwindow_params::window_id
+        MGTK_CALL MGTK::GrowWindow, growwindow_params
         jmp     ScrollUpdate
 .endproc ; DoWindowResize
 

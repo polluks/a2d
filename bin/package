@@ -14,6 +14,7 @@ fi
 
 tempdir=$(mktemp -d "${TMPDIR:-/tmp}/pkg.XXXXXXXXX")
 test -d "${tempdir}" || (cecho red "cannot make tempdir"; exit 1)
+trap "rmdir $tempdir" EXIT
 
 # ============================================================
 # Define and create the disk images
@@ -80,9 +81,6 @@ add_file () {
             fi
         fi
 
-        if [ "$folder" != "" ]; then
-            suppress cadius CREATEFOLDER "$img_file" "$folder" --quiet
-        fi
         suppress cadius ADDFILE "$img_file" "$folder" "$tmp_file" --quiet
         rm "$tmp_file"
     }
@@ -138,4 +136,3 @@ rm -f "$ZIPFILE"
 zip --junk-paths "$ZIPFILE" $IMAGES res/README.txt
 unzip -l "$ZIPFILE"
 
-rmdir "$tempdir"

@@ -10,6 +10,7 @@ Project Page: https://github.com/a2stuff/a2d
 
 * Eliminate cursor flickering when mouse is moved.
 * Improve visibility of button flashing using VBL.
+* Adjust movement scaling in MouseKeys mode.
 
 ### Launcher
 
@@ -28,6 +29,8 @@ Project Page: https://github.com/a2stuff/a2d
 * Reduce cursor flickering while icons are drawn.
 * Eliminate cursor flickering when clicking on the desktop or windows.
 * Time window open/close animations using VBL.
+* Add Apple+Escape as shortcut to clear selection.
+* Prevent volume icon flicker on startup with empty Disk II drives.
 
 ### Selector
 
@@ -35,6 +38,7 @@ Project Page: https://github.com/a2stuff/a2d
 ### Disk Copy
 
 * Don't erroneously show "DOS 3.3 disk copy" when source format is unknown.
+* Flash OK button when a disk is selected via double-click.
 
 ### Desk Accessories
 

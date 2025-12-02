@@ -7,9 +7,13 @@ LDFLAGS = --config ../common/asm.cfg --warnings-as-errors
 # Each directory builds into an 'out' sibling dir:
 OUTDIR = ../../out
 
+BINDIR = ../../bin
+
 # Evaluated relative to each Makefile - include, library, and resource files
-COMMON_HEADERS = $(wildcard ../*.inc ../inc/*.inc *.inc inc/*.inc) \
-	$(wildcard ../lib/*.s) \
+COMMON_HEADERS = \
+	../config.inc $(OUTDIR)/buildinfo.inc ../common.inc \
+	$(wildcard ../inc/*.inc *.inc) \
+	$(wildcard ../lib/*.s ../lib/*.inc) \
 	$(wildcard res/*.res.?? ../common/res/*.res.??)
 
 LANGS = da de en es fr it nl pt sv bg
@@ -18,20 +22,30 @@ MONO_FONTS = $(foreach LANG,$(LANGS),$(OUTDIR)/Monaco.$(LANG).font)
 
 ### Build Rules
 
+# Nothing here should be default
+.DEFAULT_GOAL := all
+
 # Object files
 $(OUTDIR)/%.o: %.s $(HEADERS)
-	../../bin/colorize ca65 $(CAFLAGS) --listing $(basename $@).list -o $@ $<
+	ca65 $(CAFLAGS) --listing $(basename $@).list -o $@ $<
 
 # Desk Accessory Files .da
 $(OUTDIR)/%.da: $(OUTDIR)/%.o ../common/asm.cfg
-	../../bin/colorize ld65 $(LDFLAGS) -o '$@' $<
+	ld65 $(LDFLAGS) -o '$@' $<
 
 # System Files .SYS
 $(OUTDIR)/%.SYS: $(OUTDIR)/%.o ../common/asm.cfg
-	../../bin/colorize ld65 $(LDFLAGS) -o '$@' $<
+	ld65 $(LDFLAGS) -o '$@' $<
 
 # Fonts
 .SECONDEXPANSION:
 $(OUTDIR)/%.font: ../../res/fonts/$$(basename $$*).unicode.txt
-	../../bin/build_font_from_unicode_txt.pl $(subst .,,$(suffix $*)) < ../../res/fonts/$(basename $*).unicode.txt > $@
+	$(BINDIR)/build_font_from_unicode_txt.pl $(subst .,,$(suffix $*)) < ../../res/fonts/$(basename $*).unicode.txt > $@
 .NOTINTERMEDIATE: $(SYS_FONTS) $(MONO_FONTS)
+
+# Build Date
+$(OUTDIR)/buildinfo.inc: FORCE
+	@$(BINDIR)/make_buildinfo_inc
+
+FORCE:
+
