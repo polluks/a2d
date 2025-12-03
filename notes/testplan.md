@@ -457,7 +457,7 @@ When steps say to a path e.g. `/TESTS/FOLDER/SUBFOLDER`, open the volume then ea
 * Open two windows. Hold Open-Apple and open the File menu, then press Open-Apple+Solid-Apple+W. Verify that all windows close. Repeat with Caps Lock off.
 * Open two windows. Hold Solid-Apple and open the File menu, then press Open-Apple+Solid-Apple+W. Verify that all windows close. Repeat with Caps Lock off.
 
-## View Menu
+## View Menu - covered by `tests/view_menu.lua`
 
 * Open folder with files. View > by Date. Verify that DeskTop does not hang.
 
@@ -1189,7 +1189,7 @@ Repeat for every desk accessory that runs in a movable window:
 Repeat for every desk accessory that runs in a window.
 * Launch DeskTop. Open the DA. Hold Apple (either Open-Apple or Solid-Apple) and press W. Verify that the desk accessory exits. Repeat with caps-lock off.
 
-## Control Panel
+## Control Panel - covered by `tests/control_panel*.lua`
 
 * Launch DeskTop. Open the Control Panel DA. Use the pattern editor to create a custom pattern, then click the desktop preview to apply it. Close the DA. Open the Control Panel DA. Click the right arrow above the desktop preview. Verify that the default checkerboard pattern is shown.
 
@@ -1202,7 +1202,7 @@ Repeat for every desk accessory that runs in a window.
 
 * Configure a system with a RAMCard, and ensure DeskTop is configured to copy to RAMCard on startup. Launch DeskTop. Apple Menu > Control Panels. Open Control Panel. Modify a setting e.g. the desktop pattern. Close the window. Reboot the system. Verify that the setting is retained.
 
-## Options - need a way to eject via emulator from Lua
+## Options - covered by `tests/options.lua`
 
 * Open the Options DA. Eject the startup disk. Close the DA without changing any settings. Verify that you are not prompted to save.
 * Open the Options DA. Eject the startup disk. Modify a setting and close the DA. Verify that you are prompted to save.
@@ -1346,7 +1346,7 @@ Run these tests on a system without a real-time clock:
 * Launch DeskTop. Open a window for a volume that is not the startup disk. Apple Menu > Run Basic Here. Verify that the PREFIX is set correctly.
 * Configure a system with a RAMCard. Launch DeskTop, ensure it copies itself to RAMCard. Ensure `BASIC.SYSTEM` is present on the startup disk. Open a window. Apple Menu > Run Basic Here. Verify that `BASIC.SYSTEM` starts.
 
-## Joystick - coverage in `tests/joystick.lua`
+## Joystick - covered by `tests/joystick.lua`
 
 * Configure a system with only a single joystick (or paddles 0 and 1). Run the DA. Verify that only a single indicator is shown.
 * Configure a system with two joysticks (or paddles 2 and 3). Run the DA. Verify that after the second joystick is moved, a second indicator is shown.
