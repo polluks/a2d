@@ -303,7 +303,7 @@ When steps say to a path e.g. `/TESTS/FOLDER/SUBFOLDER`, open the volume then ea
 * Launch DeskTop. Open a volume containing a file icon. Select the file icon. Drag the window to the bottom of the screen so that only the top of the title bar is visible. Verify that the file icon doesn't mispaint onto the desktop.
 
 
-## Menus
+## Menus - covered by `tests/menus.lua`
 
 * Launch DeskTop. Clear the selection (e.g. by clicking on the DeskTop). Verify that:
   * Special > Eject Disk and Special > Check Drive are disabled.
@@ -748,7 +748,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Launch DeskTop. In the Options control panel, check "Preserve uppercase and lowercase in names". Rename one volume with mixed case e.g. "vol1.MIXED". Rename a second volume with differently mixed case, e.g. "VOL2.mixed". Drag the first volume to the second. Verify that the newly created folder is named with the same case as the dragged volume.
 
 
-## Window Headers
+## Window Headers - covered by `tests/window_headers.lua`
 
 * Open a folder with no items. Verify window header says "0 Items"
 * Open a folder with only one item. Verify window header says "1 Item"
@@ -762,7 +762,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Open a window. Drag the window so that the left edge of the window is offscreen. Verify that the "X Items" display gets cut off. Drag the window so that the right edge of the window is offscreen. Verify that the "XK available" display gets cut off. Repeat with the window sized so that both scrollbars appear and thumbs moved to the middle of the scrollbars.
 
 
-## Window Restoration
+## Window Restoration - mostly covered by `tests/window_restoration.lua`
 
 * Launch DeskTop. Open a subdirectory folder. Quit and relaunch DeskTop. Verify that the used/free numbers in the restored windows are non-zero.
 
@@ -779,7 +779,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Launch DeskTop. Open a volume window. Rename the volume to "TRASH" (all uppercase). File > Quit. Load DeskTop. Verify that the restored window is named "TRASH" not "Trash".
 
 
-## Apple Menu
+## Apple Menu - covered by `tests/apple_menu.lua`
 
 * Rename the `APPLE.MENU` directory. Launch DeskTop. Verify that the Apple Menu has two "About" items and no separator.
 * Create a new `APPLE.MENU` directory. Launch DeskTop. Verify that the Apple Menu has two "About" items and no separator.
@@ -844,6 +844,8 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 
 * Launch DeskTop. Create a shortcut for a folder that is the 8th entry in the menu. Shortcuts > Edit a Shortcut... Select the entry. Click OK. Verify that DeskTop does not hang.
 
+* Launch DeskTop. Add a shortcut for a file. Rename the file. Run the shortcut. Verify that the alert is specific e.g. "file not found", not an unknown error.
+
 
 ## File Types
 
@@ -880,7 +882,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Launch DeskTop. Using drag/drop, try to delete a GS/OS forked file. When the delete confirmation dialog is shown, click OK. When an alert is shown, click OK. Verify that the source window is updated.
 * Launch DeskTop. Using File > Delete try to delete a GS/OS forked file, where the containing window is visible. When the delete confirmation dialog is shown, click OK. When an alert is shown, click OK. Verify that the containing window is updated.
 
-## RAMCard - WIP in `tests/ramcard.lua`
+## RAMCard - WIP in `tests/ramcard.lua` and `tests/no_ramcard.lua`
 
 * Repeat the following:
   * For these permutations:
@@ -1115,9 +1117,9 @@ The following tests all require:
 
 * Run on a Macintosh equipped with the IIe Option Card. Verify that DeskTop runs and the system does not hang.
 
-# Preview
+# Preview - covered by `tests/*preview*.lua`
 
-Text File:
+Text File: - covered by `tests/text_preview.lua`
 * Verify that Escape key exits.
 * Verify that Space toggles Proportional/Fixed mode.
 * Verify that clicking in the right part of the title bar toggles Proportional/Fixed mode.
@@ -1142,7 +1144,7 @@ Text File:
 * Open `/TESTS/FILE.TYPES/SUDOKU.STORY`. Click on "Proportional" to change to "Fixed" font. Scroll down using down arrow key until bottom line reads "with". Scroll down again using down arrow key. Verify that the file correctly scrolled down one line. Scroll to the bottom of the file. Ensure the entire file is visible.
 * Open `/TESTS/FILE.TYPES/TOGGLE.ME`. Click "Proportional" to toggle to "Fixed". Verify that the scrollbar activates and that the thumb is at the top. Scroll down. Click "Fixed" to toggle to "Proportional". Verify that the scrollbar deactivates.
 
-Image File:
+Image File: - covered by `tests/image_preview.lua`
 * Verify that Escape key exits.
 * Verify that Apple+W exits.
 * On a IIgs or with RGB card:
@@ -1158,6 +1160,7 @@ Image File:
 * Click on the File menu, then close it. Double-click an image file. Press Escape to close the preview. Verify that the File menu is not highlighted.
 * Preview an image file. Verify that the mouse cursor is hidden. Without moving the mouse, press the Escape key. Verify that after the desktop repaints the mouse cursor becomes visible without needing to move the mouse first.
 
+The below are covered by `tests/previews_in_apple_menu.lua`
 * Put `SHOW.IMAGE.FILE` in `APPLE.MENU`, start DeskTop.
     * Select no icon, select DA from Apple menu. Verify nothing happens other than open/close animation and screen refresh.
     * Select volume icon, select DA from Apple menu. Verify nothing happens other than open/close animation and screen refresh.
@@ -1179,7 +1182,7 @@ Image File:
     * Select folder icon, select DA from Apple menu. Verify nothing happens other than open/close animation.
     * Select Electric Duet file icon, select DA from Apple menu. Verify music is played.
 
-# Desk Accessories - covered in `tests/desk_accessories.lua`
+# Desk Accessories - covered by `tests/desk_accessories.lua`
 
 * Launch DeskTop. Open the APPLE.MENU folder. Select a desk accessory icon. File > Open. Verify that the desk accessory launches.
 
@@ -1245,7 +1248,7 @@ With Sci.Calc:
 * Enter '4' '5' 'COS' 'ACOS'. Verify that the result is approximately 45.
 * Enter '8' '9' 'TAN' 'ATAN'. Verify that the result is approximately 89.
 
-## Date & Time - covered in `tests/date_and_time.lua`
+## Date & Time - covered by `tests/date_and_time.lua`
 
 * Open `/TESTS/FILE.TYPES`. View > by Name. Apple Menu > Control Panels > Date and Time. Change the time format from 12- to 24-hour or vice versa. Click OK. Verify that the entire desktop repaints, and that dates in the windows are shown with the new format.
 
@@ -1294,7 +1297,7 @@ Run these tests on a system without a real-time clock:
   * Launch DeskTop. Apple Menu > Key Caps. Verify that the "extended" layout is shown, with the backslash to the right of the space bar.
 * Launch DeskTop. Run Apple Menu > Key Caps desk accessory. Press the semicolon/colon key. Verify that the highlight is correctly positioned.
 
-## Map
+## Map - covered by `tests/map.lua`
 
 * Launch DeskTop. Apple Menu > Control Panels. Open Map. Type a known city name e.g. "San Francisco". Click Find. Verify that the city is highlighted on the map and the Latitude/Longitude are updated.
 * Launch DeskTop. Apple Menu > Control Panels. Open Map. Wait for the blinking indicator to be visible (this will be easier to observe in emulators with acceleration disabled), and drag the window to a new location. Type a city name (e.g. "San Francisco"). Click Find. Verify that the indicator blinks correctly only in the new location.
@@ -1504,7 +1507,7 @@ Prerequisite: In DeskTop, Apple Menu > Control Panels > Options, check Show Shor
 * Populate a ProDOS disk with several large files, then delete all but the last. Launch DeskTop. Special > Copy Disk.... Select the prepared disk. Ensure Options > Quick Copy is checked. Select an appropriate destination disk. Proceed with the copy. Verify that the "Blocks to transfer" count is accurate (i.e. less than the total block count), and the blocks read/written count up to the transfer count accurately.
 * Populate a ProDOS disk with several large files, then delete all but the last. Launch DeskTop. Special > Copy Disk.... Select the prepared disk. Select Options > Disk Copy. Select an appropriate destination disk. Proceed with the copy. Verify that the "Blocks to transfer" count is equal to the total block count of the device, and the blocks read/written count up to the transfer count accurately.
 
-# Alerts
+# Alerts - covered by `tests/alerts.lua`
 
 * Launch DeskTop. Trigger an alert with only OK (e.g. running a shortcut with disk ejected). Verify that Escape key closes alert.
 * Launch Shortcuts. Trigger an alert with only OK (e.g. running a shortcut that only works in DeskTop, like a DA). Verify that Escape key closes alert.

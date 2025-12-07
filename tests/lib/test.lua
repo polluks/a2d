@@ -25,7 +25,7 @@ test.count = 0
 
 local snapnum = -1
 
-function snap(message)
+local function snap(message)
   manager.machine.video:snapshot()
   snapnum = snapnum + 1
   if message ~= nil then
@@ -52,7 +52,7 @@ end
 -- test.Variants({"v1", "v2"}, function(idx) ... end}
 function test.Variants(t, func)
   for idx, name in pairs(t) do
-    test.Step(name, function() return func(idx) end)
+    test.Step(name, function() return func(idx, name) end)
   end
 end
 
@@ -60,6 +60,10 @@ function test.Failure(message)
   print(message)
   os.exit(1)
 end
+
+--------------------------------------------------
+-- Snapshots
+--------------------------------------------------
 
 function test.Snap(opt_title)
   snap(opt_title)
@@ -72,26 +76,56 @@ function test.MultiSnap(frames, opt_title)
   end
 end
 
-function test.Expect(expr, message)
-  if not expr then
-    error("Expectation failure: " .. message)
+--------------------------------------------------
+-- Expectations
+--------------------------------------------------
+
+local function inc(level)
+  if level then
+    return level + 1
+  else
+    return 1
   end
 end
 
-function test.ExpectEquals(actual, expected, message)
-  test.Expect(actual == expected, message .. " - " .. actual .. " should equal " .. expected)
+
+function test.Expect(expr, message, options, level)
+  if not expr then
+    if options and options.snap then
+      test.Snap("FAILURE - " .. message)
+    end
+    error("Expectation failure: " .. message, inc(inc(level)))
+  end
 end
 
-function test.ExpectNotEquals(actual, expected, message)
-  test.Expect(actual ~= expected, message .. " - " .. actual .. " should not equal " .. expected)
+local function format(value)
+  if type(value) == "string" then
+    return string.format("%q", value)
+  elseif type(value) == "boolean" then
+    return value and "true" or "false"
+  else
+    return value
+  end
 end
 
-function test.ExpectLessThan(a, b, message)
-  test.Expect(a < b, message .. " - " .. a .. " should be < " .. b)
+function test.ExpectEquals(actual, expected, message, options, level)
+  test.Expect(actual == expected, message .. " - actual " .. format(actual) .. " should equal " .. format(expected), options, inc(level))
 end
 
-function test.ExpectLessThanOrEqual(a, b, message)
-  test.Expect(a <= b, message .. " - " .. a .. " should be <= " .. b)
+function test.ExpectEqualsIgnoreCase(actual, expected, message, options, level)
+  test.Expect(actual:lower() == expected:lower(), message .. " - actual " .. format(actual) .. " should equal " .. format(expected), options, inc(level))
+end
+
+function test.ExpectNotEquals(actual, expected, message, options, level)
+  test.Expect(actual ~= expected, message .. " - actual " .. format(actual) .. " should not equal " .. format(expected), options, inc(level))
+end
+
+function test.ExpectLessThan(a, b, message, options, level)
+  test.Expect(a < b, message .. " - actual " .. format(a) .. " should be < " .. format(b), options, inc(level))
+end
+
+function test.ExpectLessThanOrEqual(a, b, message, options, level)
+  test.Expect(a <= b, message .. " - actual " .. format(a) .. " should be <= " .. format(b), options, inc(level))
 end
 
 --------------------------------------------------

@@ -1,12 +1,10 @@
 --[[ BEGINCONFIG ========================================
 
 MODEL="apple2cp"
-MODELARGS="-ramsize 1152K -gameio joy"
+MODELARGS=""
 DISKARGS="-flop3 $HARDIMG"
 
 ======================================== ENDCONFIG ]]--
-
-emu.wait(50) -- IIc emulation is very slow
 
 test.Step(
   "custom and default pattern",
@@ -45,7 +43,7 @@ test.Step(
 
     a2d.CloseWindow()
     a2d.WaitForRepaint()
-    test.Snap("verify no prompt to save")
+    a2dtest.ExpectAlertNotShowing()
 
     drive:load(current)
     a2d.CloseAllWindows()
@@ -63,7 +61,7 @@ test.Step(
 
     a2d.CloseWindow()
     a2d.WaitForRepaint()
-    test.Snap("verify prompt to save")
+    a2dtest.ExpectAlertShowing()
     a2d.DialogCancel()
 
     drive:load(current)
@@ -74,7 +72,7 @@ test.Step(
   "Mouse tracking",
   function()
     a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
-    apple2.MoveMouse(280,96)
+    apple2.MoveMouse(apple2.SCREEN_WIDTH/2,apple2.SCREEN_HEIGHT/2)
     a2d.OAShortcut("2")
     -- NOTE: Mouse shouldn't move at all, but POSMOUSE in emulators is sketch
     test.MultiSnap(3, "verify mouse cursor doesn't move significantly")

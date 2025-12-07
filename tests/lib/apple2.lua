@@ -5,7 +5,11 @@
 
   ============================================================]]--
 
-local apple2 = {}
+local apple2 = {
+  SCREEN_HEIGHT = 192,
+  SCREEN_WIDTH = 560,
+  SCREEN_COLUMNS = 80,
+}
 
 local machine = manager.machine
 
@@ -34,7 +38,8 @@ local keyboard = {
   ["Solid Apple"] = { port = ":keyb_special", field = "Solid Apple" },
 
   -- Other
-  ["Reset"] = { port = ":keyb_special", field = "RESET" },
+  ["Reset"]       = { port = ":keyb_special", field = "RESET"     },
+  ["Caps Lock"]   = { port = ":keyb_special", field = "Caps Lock", bits = 0x01 },
 }
 
 local images = {
@@ -42,7 +47,7 @@ local images = {
   S6D2 = ":sl6:diskiing:1:525",
 }
 
-function get_device(pattern)
+local function get_device(pattern)
   for name,dev in pairs(machine.devices) do
     if name:match(pattern) then return dev end
   end
@@ -119,7 +124,8 @@ elseif machine.system.name:match("^apple2gs") then
     ["Solid Apple"] = { port = ":macadb:KEY3", field = "Option"  },
 
     -- Other
-    ["Reset"] = { port = ":macadb:KEY5", field = "Reset / Power" },
+    ["Reset"]     = { port = ":macadb:KEY5", field = "Reset / Power" },
+    ["Caps Lock"] = { port = ":macadb:KEY3", field = "Caps Lock", bits = 0x0200 },
   }
 
   images = {
@@ -173,7 +179,7 @@ end
 -- General System Configuration
 --------------------------------------------------
 
-function get_port(port_name)
+local function get_port(port_name)
   local port = machine.ioport.ports[port_name]
   if port == nil then
     error("No such port: " .. port_name)
@@ -181,7 +187,7 @@ function get_port(port_name)
   return port
 end
 
-function get_field(port_name, field_name)
+local function get_field(port_name, field_name)
   local port = get_port(port_name)
   local field = port.fields[field_name]
   if field == nil then
@@ -248,7 +254,7 @@ end
   ]]--
 
 
-function SetVideoConfig(field_name, value, mask, shift)
+local function SetVideoConfig(field_name, value, mask, shift)
   apple2.SetSystemConfig(":a2video:a2_video_config", field_name, mask << shift, value << shift)
   emu.wait(2/60)
 end
@@ -302,6 +308,12 @@ end
 
 local kbd = machine.natkeyboard
 
+local function wait_for_kbd_strobe_clear()
+  while apple2.ReadSSW("KBD") > 127 do
+    emu.wait(1/60)
+  end
+end
+
 -- https://docs.mamedev.org/luascript/ref-input.html#natural-keyboard-manager
 function apple2.Type(sequence)
   for i=1,sequence:len() do
@@ -318,23 +330,39 @@ function apple2.TypeLine(sequence)
   apple2.ReturnKey()
 end
 
-function wait_for_kbd_strobe_clear()
-  while apple2.ReadSSW("KBD") > 127 do
-    emu.wait(1/60)
-  end
-end
-
-function press(k)
+local function press(k)
   get_field(keyboard[k].port, keyboard[k].field):set_value(1)
 end
-function release(k)
+local function release(k)
   get_field(keyboard[k].port, keyboard[k].field):clear_value()
 end
-function press_and_release(k)
+local function press_and_release(k)
   press(k)
   emu.wait(2/60)
   release(k)
   emu.wait(2/60)
+end
+
+function apple2.IsCapsLockOn()
+  local key = keyboard["Caps Lock"]
+  local bits = get_port(key.port):read()
+  return (bits & key.bits) ~= 0
+end
+
+function apple2.ToggleCapsLock()
+  press_and_release("Caps Lock")
+end
+
+function apple2.CapsLockOn()
+  if not apple2.IsCapsLockOn() then
+    apple2.ToggleCapsLock()
+  end
+end
+
+function apple2.CapsLockOff()
+  if apple2.IsCapsLockOn() then
+    apple2.ToggleCapsLock()
+  end
 end
 
 function apple2.ControlReset()
@@ -356,6 +384,10 @@ function apple2.ControlKey(key)
   apple2.PressControl()
   apple2.Type(key)
   apple2.ReleaseControl()
+end
+
+function apple2.SpaceKey()
+  apple2.Type(" ")
 end
 
 function apple2.TabKey()
@@ -483,7 +515,7 @@ end
 -- Mouse
 --------------------------------------------------
 
-function clamp(n, min, max)
+local function clamp(n, min, max)
   if n < min then
     return min
   elseif n > max then
@@ -547,15 +579,33 @@ end
 -- Memory
 --------------------------------------------------
 
--- This is a hardware view of memory
--- * It does not reflect bank states; aux starts at is 0x10000
--- * LCBANK1 is presented at $C000 (!!!)
--- * LCBANK2 is presented at $D000
+-- This is a "hardware" view of memory; i.e. the MMU/softswitch states
+-- are ignored, which is useful as the banking configuration changes
+-- constantly. Instead, call with explicit bank selection in the
+-- address.
+
+-- Note that internally MAME models LC memory as:
+-- * $D000/1 is presented at $C000
+-- * $D000/2 is presented at $D000
+-- * $E000 is presented at $F000
+-- * $F000 is presented at $E000
+-- For Apple IIe devices, Auxiliary RAM is a separate device. For
+-- others, it just exists at 0x10000 and up.
+
+-- The ReadRAMDevice/WriteRAMDevice calls normalize this; call with
+-- 0x0nnnn to access Main RAM and 0x1nnnn to acces Aux RAM. For
+-- LCBANK2 use 0xbCnnnn instead of 0xDnnnn.
+
 local ram = emu.item(machine.devices[":ram"].items["0/m_pointer"])
 
 function apple2.ReadRAMDevice(addr)
+  -- Assume LCBANK1 is desired
+  if (addr & 0xC000) ~= 0 then
+    addr = addr ~ 0x1000
+  end
+
   -- Apple IIe exposes Aux RAM as a separate device
-  if addr > 0x10000 and auxram ~= nil then
+  if addr >= 0x10000 and auxram ~= nil then
     return auxram:read(addr - 0x10000)
   else
     return ram:read(addr)
@@ -563,8 +613,13 @@ function apple2.ReadRAMDevice(addr)
 end
 
 function apple2.WriteRAMDevice(addr, value)
+  -- Assume LCBANK1 is desired
+  if (addr & 0xC000) ~= 0 then
+    addr = addr ~ 0x1000
+  end
+
   -- Apple IIe exposes Aux RAM as a separate device
-  if addr > 0x10000 and auxram ~= nil then
+  if addr >= 0x10000 and auxram ~= nil then
     auxram:write(addr - 0x10000, value)
   else
     ram:write(addr, value)
@@ -575,7 +630,9 @@ end
 -- Machine State
 --------------------------------------------------
 
--- This is a software view of memory; i.e. banking matters!
+-- This is a "software" view of memory; i.e. the MMU/softswitch states
+-- determines which banks (Main vs. Aux, LCBANK1 vs. LCBANK2 vs. ROM)
+-- are accessed
 
 -- Most useful for reading/writing softswitches
 local cpu = manager.machine.devices[":maincpu"]
@@ -755,14 +812,34 @@ end
 -- Misc Utilities
 --------------------------------------------------
 
-function apple2.GetDoubleHiresByte(row, col)
+-- Address must include bank offset
+function apple2.GetPascalString(addr)
+  -- NOTE: Doesn't handle non-ASCII encodings
+  local len = apple2.ReadRAMDevice(addr)
+  local str = ""
+  for i = 1,len do
+    str = str .. string.char(apple2.ReadRAMDevice(addr+i))
+  end
+  return str
+end
+
+local function GetDHRByteAddress(row, col)
   local bank = col % 2
   col = col >> 1
   local aa = (row & 0xC0) >> 6
   local bbb = (row & 0x38) >> 3
   local ccc = (row & 0x07)
-  local addr = 0x2000 + (aa * 0x28) + (bbb * 0x80) + (ccc * 0x400) + col
-  return apple2.ReadRAMDevice(addr + 0x10000 * (1-bank))
+  return bank, 0x2000 + (aa * 0x28) + (bbb * 0x80) + (ccc * 0x400) + col
+end
+
+function apple2.GetDHRByte(row, col)
+  local bank, addr = GetDHRByteAddress(row, col)
+  return apple2.ReadRAMDevice(addr + 0x10000 * (1-bank)) & 0x7F
+end
+
+function apple2.SetDHRByte(row, col, value)
+  local bank, addr = GetDHRByteAddress(row, col)
+  apple2.WriteRAMDevice(addr + 0x10000 * (1-bank), value)
 end
 
 function apple2.GrabTextScreen()
@@ -785,32 +862,16 @@ function apple2.GrabTextScreen()
   return screen
 end
 
---------------------------------------------------
-
-function apple2.DHRDarkness()
-  function SetDHRByte(col, row, value)
-    local bank = col % 2
-    col = col >> 1
-    local aa = (row & 0xC0) >> 6
-    local bbb = (row & 0x38) >> 3
-    local ccc = (row & 0x07)
-    local addr = 0x2000 + (aa * 0x28) + (bbb * 0x80) + (ccc * 0x400) + col
-    apple2.WriteRAMDevice(addr + 0x10000 * (1-bank), value)
-  end
-
-  local bytes = {
-    {0x00, 0x00, 0x00, 0x00},
-    {0x08, 0x11, 0x22, 0x44},
-    {0x00, 0x00, 0x00, 0x00},
-    {0x22, 0x44, 0x08, 0x11},
-  }
-
-  for row = 0,191 do
-    for col = 0,79 do
-      SetDHRByte(col, row, bytes[row % 4 + 1][col % 4 + 1])
+function apple2.SnapshotDHR()
+  local bytes = {}
+  for row = 0,apple2.SCREEN_HEIGHT-1 do
+    for col = 0,apple2.SCREEN_COLUMNS-1 do
+      bytes[row*apple2.SCREEN_COLUMNS+col] = apple2.GetDHRByte(row, col)
     end
   end
+  return bytes
 end
+
 --------------------------------------------------
 
 return apple2

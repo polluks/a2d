@@ -8,45 +8,61 @@ test.Step(
     a2d.CloseWindow()
 end)
 
-function MoveDoesntRepaintTest(name, path, x, y)
+function MoveDoesntRepaintTest(name, path, opt_threshold)
   test.Step(
     name .. " doesn't repaint on non-move",
     function()
+
+      local expectfunc = a2dtest.ExpectNoRepaint
+
+      -- Needed for Joystick, as MouseKeys tickles the buttons
+      -- Needed for Bounce as the animation continues
+      if opt_threshold then
+        expectfunc = function(func)
+          a2dtest.ExpectRepaintFraction(0, opt_threshold, func)
+        end
+      end
+
       a2d.SelectPath(path)
       a2d.OpenSelection()
+
+      local x,y = a2dtest.GetFrontWindowDragCoords()
+
       a2d.InMouseKeysMode(function(m)
           m.MoveToApproximately(x,y)
           emu.wait(2/60)
-          apple2.DHRDarkness()
-          emu.wait(2/60)
-          m.ButtonDown()
-          emu.wait(10/60)
-          test.Snap("verify drag highlight")
-          m.ButtonUp()
       end)
-      test.Snap("verify no repaint")
+
+      expectfunc(function()
+          a2d.InMouseKeysMode(function(m)
+              emu.wait(2/60)
+              m.ButtonDown()
+              emu.wait(10/60)
+              m.ButtonUp()
+          end)
+      end)
+
       a2d.CloseWindow()
       a2d.CloseAllWindows()
-      a2d.InvokeMenuItem(a2d.STARTUP_MENU, 1) -- restart
-      a2d.WaitForRestart()
+      a2d.Reboot()
   end)
 end
 
-MoveDoesntRepaintTest("Calculator", "/A2.DESKTOP/APPLE.MENU/CALCULATOR", 280, 55)
-MoveDoesntRepaintTest("Calendar", "/A2.DESKTOP/APPLE.MENU/CALENDAR", 280, 40)
-MoveDoesntRepaintTest("Key Caps", "/A2.DESKTOP/APPLE.MENU/KEY.CAPS", 280, 50)
-MoveDoesntRepaintTest("Control Panel", "/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", 280, 30)
-MoveDoesntRepaintTest("Joystick", "/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/JOYSTICK", 280, 50)
-MoveDoesntRepaintTest("Map", "/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP", 280, 40)
-MoveDoesntRepaintTest("Options", "/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS", 280, 45)
-MoveDoesntRepaintTest("Views", "/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/VIEWS", 280, 50)
-MoveDoesntRepaintTest("Bounce", "/A2.DESKTOP/APPLE.MENU/TOYS/BOUNCE", 280, 45)
-MoveDoesntRepaintTest("Eyes", "/A2.DESKTOP/APPLE.MENU/TOYS/EYES", 280, 60)
-MoveDoesntRepaintTest("Lights Out", "/A2.DESKTOP/APPLE.MENU/TOYS/LIGHTS.OUT", 280, 60)
-MoveDoesntRepaintTest("Neko", "/A2.DESKTOP/APPLE.MENU/TOYS/NEKO", 280, 50)
-MoveDoesntRepaintTest("Puzzle", "/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE", 280, 70)
-MoveDoesntRepaintTest("CD Remote", "/A2.DESKTOP/EXTRAS/CD.REMOTE", 280, 70)
-MoveDoesntRepaintTest("Scientific Calculator", "/A2.DESKTOP/EXTRAS/SCI.CALC", 280, 50)
+MoveDoesntRepaintTest("Calculator", "/A2.DESKTOP/APPLE.MENU/CALCULATOR")
+MoveDoesntRepaintTest("Calendar", "/A2.DESKTOP/APPLE.MENU/CALENDAR")
+MoveDoesntRepaintTest("Key Caps", "/A2.DESKTOP/APPLE.MENU/KEY.CAPS")
+MoveDoesntRepaintTest("Control Panel", "/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
+MoveDoesntRepaintTest("Joystick", "/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/JOYSTICK", 0.02)
+MoveDoesntRepaintTest("Map", "/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP")
+MoveDoesntRepaintTest("Options", "/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS")
+MoveDoesntRepaintTest("Views", "/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/VIEWS")
+MoveDoesntRepaintTest("Bounce", "/A2.DESKTOP/APPLE.MENU/TOYS/BOUNCE", 0.05)
+MoveDoesntRepaintTest("Eyes", "/A2.DESKTOP/APPLE.MENU/TOYS/EYES")
+MoveDoesntRepaintTest("Lights Out", "/A2.DESKTOP/APPLE.MENU/TOYS/LIGHTS.OUT")
+MoveDoesntRepaintTest("Neko", "/A2.DESKTOP/APPLE.MENU/TOYS/NEKO")
+MoveDoesntRepaintTest("Puzzle", "/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE")
+MoveDoesntRepaintTest("CD Remote", "/A2.DESKTOP/EXTRAS/CD.REMOTE")
+MoveDoesntRepaintTest("Scientific Calculator", "/A2.DESKTOP/EXTRAS/SCI.CALC")
 
 -- ============================================================
 
@@ -54,15 +70,19 @@ function CloseWindowTest(name, path, x, y)
   test.Step(
     name .. " closes on OA+W",
     function()
-      a2d.OpenPath(path)
-      a2d.OAShortcut("W")
-      a2d.WaitForRepaint()
-      test.Snap("verify window closed on OA+W")
+      a2d.SelectPath(path)
+      a2dtest.ExpectNothingChanged(function()
+          a2d.OpenSelection()
+          a2d.OAShortcut("W")
+          a2d.WaitForRepaint()
+      end)
 
-      a2d.OpenPath(path)
-      a2d.WaitForRepaint()
-      a2d.OAShortcut("w")
-      test.Snap("verify window closed on OA+w")
+      a2d.SelectPath(path)
+      a2dtest.ExpectNothingChanged(function()
+          a2d.OpenSelection()
+          a2d.WaitForRepaint()
+          a2d.OAShortcut("w")
+      end)
   end)
 end
 

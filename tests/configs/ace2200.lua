@@ -6,19 +6,9 @@ DISKARGS="-hard1 $HARDIMG"
 
 ======================================== ENDCONFIG ]]--
 
--- ACE 2200 does not auto-start with anythng but floppies
-apple2.ControlReset()
-apple2.TypeLine("PR#7")
-
--- Wait for DeskTop to start
-a2d.WaitForRestart()
-emu.wait(5) -- slow floppy drives
-
 test.Step(
   "Apple > About This Apple II",
   function()
     a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.ABOUT_THIS_APPLE_II)
-    emu.wait(5) -- slow floppy drives
-    test.Snap()
-    return test.PASS
+    test.Snap(manager.machine.system.name)
 end)

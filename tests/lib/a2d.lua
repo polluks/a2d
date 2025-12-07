@@ -16,7 +16,10 @@ function a2d.InitSystem()
 
   local system = manager.machine.system
 
+  ----------------------------------------
   -- Video
+  ----------------------------------------
+
   if not system.name:match("^apple2gs") then
     -- Monitor type
     if system.name:match("^apple2e") then
@@ -39,7 +42,9 @@ function a2d.InitSystem()
     apple2.SetTextColorMode(apple2.TEXTCOLOR_MODE_OFF)
   end
 
+  ----------------------------------------
   -- CPU and other options
+  ----------------------------------------
 
   if system.name:match("^apple2gs") then
     -- bit0 = ZIP, bits 1-7=speed (0-3):
@@ -68,6 +73,14 @@ function a2d.InitSystem()
     -- ":kbd_lang_select", mask=$FF="Keyboard", 0="QWERTY", 1="DVORAK"
     apple2.SetSystemConfig(":kbd_lang_select", "Keyboard", 0xFF, 0)
   end
+
+  ----------------------------------------
+  -- Caps Lock
+  ----------------------------------------
+
+  -- Caps lock state is retained between runs
+  apple2.CapsLockOff()
+
 end
 
 --------------------------------------------------
@@ -81,7 +94,13 @@ function a2d.WaitForCopyToRAMCard()
 end
 
 function a2d.WaitForRestart()
-  emu.wait(10)
+  if manager.machine.system.name:match("^apple2c") or
+    manager.machine.system.name:match("^ace500") then
+    -- Floppy drives are slow
+    emu.wait(50)
+  else
+    emu.wait(10)
+  end
 end
 
 function a2d.WaitForRepaint()
@@ -112,6 +131,7 @@ for k,v in pairs({
     FIND_FILES             = 9,
     RUN_BASIC_HERE         = 11,
     SORT_DIRECTORY         = 12,
+    APPLE_EMPTY_SLOT       = 13,
 
     FILE_NEW_FOLDER = 1,
     FILE_OPEN       = 2,
@@ -169,12 +189,20 @@ function a2d.OpenMenu(mth)
 end
 
 -- Invoke nth item on mth menu (1-based)
+-- (if nth is negative, from the bottom of menu)
 function a2d.InvokeMenuItem(mth, nth)
   a2d.OpenMenu(mth)
-  -- down to nth item
-  for i=1,nth do
-    apple2.DownArrowKey()
-    emu.wait(MINIMAL_REPAINT)
+  if nth > 0 then
+    -- down to nth item
+    for i=1,nth do
+      apple2.DownArrowKey()
+      emu.wait(2/60)
+    end
+  else
+    for i=1,-nth do
+      apple2.UpArrowKey()
+      emu.wait(2/60)
+    end
   end
   -- invoke
   apple2.ReturnKey()
@@ -246,8 +274,12 @@ function a2d.OpenPath(path, opt_leave_parent)
   end
 end
 
+function a2d.SplitPath(path)
+  return path:match("^(.*)/([^/]+)$")
+end
+
 function a2d.SelectPath(path)
-  local base, name = path:match("^(.*)/([^/]+)$")
+  local base, name = a2d.SplitPath(path)
   if base ~= "" then
     a2d.OpenPath(base)
   end
@@ -296,6 +328,22 @@ function a2d.DeletePath(path)
   a2d.DeleteSelection()
 end
 
+function a2d.CreateFolder(path)
+  local name = path
+  if path:match("/") then
+    local base
+    base, name = a2d.SplitPath(path)
+    if base ~= "" then
+      a2d.OpenPath(base)
+    end
+  end
+  a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_NEW_FOLDER)
+  apple2.ControlKey("X") -- clear
+  apple2.Type(name)
+  apple2.ReturnKey()
+  a2d.WaitForRepaint()
+end
+
 function a2d.EraseVolume(name)
   a2d.SelectPath("/"..name)
   a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_ERASE_DISK)
@@ -319,16 +367,85 @@ function a2d.AddShortcut(path)
   a2d.DialogOK()
 end
 
+function a2d.CopySelectionTo(path)
+  -- Assert: there is a selection
+  --[[
+    But we don't know if it's 1 or more than 1 so we index
+    from the bottom of the menu, which is a fixed number.
+    TODO: Make this less hacky
+  ]]--
+  a2d.InvokeMenuItem(a2d.FILE_MENU, -3)
+
+  --Automate file picker dialog
+  apple2.ControlKey("D") -- Drives
+  a2d.WaitForRepaint()
+  for segment in path:gmatch("([^/]+)") do
+    apple2.Type(segment)
+    apple2.ControlKey("O") -- Open
+    a2d.WaitForRepaint()
+  end
+  a2d.DialogOK()
+  emu.wait(10)
+end
+
+function a2d.CopyPath(src, dst)
+  a2d.SelectPath(src)
+  a2d.CopySelectionTo(dst)
+end
+
+--------------------------------------------------
+-- Configuration
+--------------------------------------------------
+
+function a2d.RemoveClockDriverAndReboot()
+  a2d.DeletePath("/A2.DESKTOP/CLOCK.SYSTEM")
+  a2d.Reboot()
+end
+
+function a2d.ToggleOptionCopyToRAMCard()
+  a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS")
+  a2d.OAShortcut("1") -- Toggle "Copy to RAMCard"
+  a2d.CloseWindow()
+  a2d.CloseAllWindows()
+end
+function a2d.ToggleOptionShowShortcutsOnStartup()
+  a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS")
+  a2d.OAShortcut("2") -- Toggle "Show shortcuts on startup"
+  a2d.CloseWindow()
+  a2d.CloseAllWindows()
+end
+
+function a2d.Quit()
+  a2d.InvokeMenuItem(a2d.FILE_MENU, -1)
+  a2d.WaitForRestart()
+end
+
+function a2d.QuitAndRestart()
+  a2d.Quit()
+  apple2.ReturnKey() -- Launch PRODOS in Bitsy Bye
+  a2d.WaitForRestart()
+end
+
+-- Reboot via menu equivalent of PR#7 (or PR#5 on IIc+)
+function a2d.Reboot()
+  if manager.machine.system.name:match("^apple2cp") then
+    a2d.InvokeMenuItem(a2d.STARTUP_MENU, 2) -- PR#5 (list is 6,5,...)
+  else
+    a2d.InvokeMenuItem(a2d.STARTUP_MENU, 1) -- startup volume index
+  end
+  a2d.WaitForRestart()
+end
+
 --------------------------------------------------
 -- Mouse Keys
 --------------------------------------------------
 
 function a2d.EnterMouseKeysMode()
-    a2d.OASAShortcut(" ")
+  a2d.OASAShortcut(" ")
 end
 
 function a2d.ExitMouseKeysMode()
-    apple2.EscapeKey()
+  apple2.EscapeKey()
 end
 
 function a2d.InMouseKeysMode(func)
@@ -409,13 +526,13 @@ end
 
 local MOUSE_KEYS_DELTA_X = 8
 local MOUSE_KEYS_DELTA_Y = 4
-function round(n)
+local function round(n)
   return math.floor(n + 0.5)
 end
 
 function a2d.MouseKeysHome()
-  a2d.MouseKeysLeft(round(560 / MOUSE_KEYS_DELTA_X))
-  a2d.MouseKeysUp(round(192 / MOUSE_KEYS_DELTA_Y))
+  a2d.MouseKeysLeft(round(apple2.SCREEN_WIDTH / MOUSE_KEYS_DELTA_X))
+  a2d.MouseKeysUp(round(apple2.SCREEN_HEIGHT / MOUSE_KEYS_DELTA_Y))
 end
 
 function a2d.MouseKeysMoveToApproximately(x,y)
@@ -448,6 +565,16 @@ function a2d.GrowWindowBy(x, y)
   a2d.MouseKeysMoveByApproximately(x,y)
   apple2.ReturnKey()
   a2d.WaitForRepaint()
+end
+
+function a2d.DragSelectMultipleVolumes()
+  a2d.InMouseKeysMode(function(m)
+      m.MoveToApproximately(apple2.SCREEN_WIDTH,20)
+      m.ButtonDown()
+      m.MoveByApproximately(-80, 130)
+      m.ButtonUp()
+      a2d.WaitForRepaint()
+  end)
 end
 
 --------------------------------------------------
@@ -484,16 +611,32 @@ end
 
 --------------------------------------------------
 
+local DATELO, DATEHI, TIMELO, TIMEHI = 0xBF90, 0xBF91, 0xBF92, 0xBF93
+
 function a2d.SetProDOSDate(y,m,d)
-  local hi = (y % 100) << 1 | (m >> 4)
+  local hi = (y % 100) << 1 | (m >> 3)
   local lo = (m << 5) | d
-  apple2.WriteRAMDevice(0xBF90, lo)
-  apple2.WriteRAMDevice(0xBF91, hi)
+  apple2.WriteRAMDevice(DATELO, lo)
+  apple2.WriteRAMDevice(DATEHI, hi)
+end
+
+function a2d.GetProDOSDate()
+  local word = (apple2.ReadRAMDevice(DATEHI) << 8) | apple2.ReadRAMDevice(DATELO)
+  local y = (word >> 9) & 0x7F
+  local m = (word >> 5) & 0xF
+  local d = word & 0x1F
+  return y,m,d
 end
 
 function a2d.SetProDOSTime(h, m)
-  apple2.WriteRAMDevice(0xBF92, h)
-  apple2.WriteRAMDevice(0xBF93, m)
+  apple2.WriteRAMDevice(TIMELO, m)
+  apple2.WriteRAMDevice(TIMEHI, h)
+end
+
+function a2d.GetProDOSTime()
+  local m = apple2.ReadRAMDevice(TIMELO) & 0x3F
+  local h = apple2.ReadRAMDevice(TIMEHI) & 0x1F
+  return h,m
 end
 
 --------------------------------------------------

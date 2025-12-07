@@ -1,7 +1,7 @@
 --[[ BEGINCONFIG ========================================
 
 MODELARGS="-sl1 ramfactor -sl2 mouse -sl7 cffa2 -aux ext80"
-DISKARGS="-hard1 $HARDIMG"
+DISKARGS="-hard1 $HARDIMG -flop1 res/prodos_floppy1.dsk"
 
 ======================================== ENDCONFIG ]]--
 
@@ -27,4 +27,50 @@ test.Step(
     a2d.WaitForRestart()
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
     test.Snap("keyboard shortcuts should not be enabled")
+end)
+
+
+test.Step(
+  "Ejecting floppy goes sideways",
+  function()
+    emu.wait(20)
+    local drive = apple2.GetDiskIIS6D1()
+    local current = drive.filename
+    drive:unload()
+
+    a2d.OpenPath("/FLOPPY1")
+    a2dtest.ExpectAlertShown()
+    apple2.EscapeKey()
+
+    --[[
+      we seem to hang here somehow?
+
+      can't reproduce it on the console though!
+
+      maybe we're accessing the disk when it is yanked? Do something
+      modal perhaps?
+
+      CPU seems to still be chugging along, albeit in $C8xx space
+    ]]--
+
+    a2dtest.ExpectAlertNotShown()
+    emu.wait(60)
+    test.Snap("Waited a long time")
+    apple2.Type("TRASH")
+    test.Snap("typed some shit")
+    a2d.InMouseKeysMode(function(m)
+        m.MoveByApproximately(apple2.SCREEN_WIDTH,apple2.SCREEN_HEIGHT)
+        m.MoveByApproximately(-apple2.SCREEN_WIDTH,-apple2.SCREEN_HEIGHT)
+        m.MoveByApproximately(apple2.SCREEN_WIDTH,apple2.SCREEN_HEIGHT)
+        m.MoveByApproximately(-apple2.SCREEN_WIDTH,-apple2.SCREEN_HEIGHT)
+        m.MoveByApproximately(apple2.SCREEN_WIDTH,apple2.SCREEN_HEIGHT)
+        m.MoveByApproximately(-apple2.SCREEN_WIDTH,-apple2.SCREEN_HEIGHT)
+        m.MoveByApproximately(apple2.SCREEN_WIDTH,apple2.SCREEN_HEIGHT)
+        m.MoveByApproximately(-apple2.SCREEN_WIDTH,-apple2.SCREEN_HEIGHT)
+    end)
+    -- This seems to make us hang or crash?
+    drive:load(current)
+
+    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_CHECK_ALL_DRIVES)
+    a2d.WaitForRestart()
 end)

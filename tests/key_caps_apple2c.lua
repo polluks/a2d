@@ -1,12 +1,10 @@
 --[[ BEGINCONFIG ========================================
 
 MODEL="apple2c4"
-MODELARGS="-ramsize 1152K -gameio joy"
+MODELARGS=""
 DISKARGS="-flop1 $FLOP1IMG -flop2 $FLOP2IMG"
 
 ======================================== ENDCONFIG ]]--
-
-emu.wait(50) -- IIc emulation is very slow
 
 test.Step(
   "Key Caps - Apple IIc",

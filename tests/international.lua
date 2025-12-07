@@ -6,11 +6,7 @@
   ============================================================]]--
 
 -- Remove clock driver (to avoid build-relative dates)
-a2d.OpenPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
-a2d.WaitForRestart()
-apple2.TypeLine("DELETE /A2.DESKTOP/CLOCK.SYSTEM")
-apple2.TypeLine("PR#7")
-a2d.WaitForRestart()
+a2d.RemoveClockDriverAndReboot()
 
 test.Step(
   "International - full repaint",
@@ -19,10 +15,8 @@ test.Step(
     a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
     a2d.SelectAndOpen("INTERNATIONAL")
     a2d.OAShortcut("2") -- D/M/Y
-    apple2.DHRDarkness()
-    a2d.DialogOK()
-
-    test.Snap("Verify full repaint and D/M/Y format")
+    a2dtest.ExpectFullRepaint(a2d.DialogOK)
+    test.Snap("verify D/M/Y format")
 end)
 
 test.Step(
@@ -32,8 +26,5 @@ test.Step(
     a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
     a2d.SelectAndOpen("INTERNATIONAL")
     -- don't change anything
-    apple2.DHRDarkness()
-    a2d.DialogOK()
-
-    test.Snap("Verify minimal repaint")
+    a2dtest.ExpectMinimalRepaint(a2d.DialogOK)
 end)

@@ -20,13 +20,14 @@ test.Variants(
 
     emu.wait(1)
 
-    a2d.InMouseKeysMode(function(m) m.Click() end)
+    a2d.InMouseKeysMode(function(m)
+        m.MoveToApproximately(20,20)
+        m.Click()
+    end)
+
     a2d.WaitForRepaint()
 
-    -- cursor is in leftmost byte
-    for col = 1,79 do
-      test.ExpectEquals(apple2.GetDoubleHiresByte(0, col), 0x7F, "Menu should not be highlighted")
-    end
+    a2dtest.ExpectMenuNotHighlighted()
     a2d.CloseAllWindows()
 end)
 
@@ -38,9 +39,9 @@ test.Step(
     emu.wait(1)
 
     apple2.EscapeKey()
-    apple2.ControlKey('@') -- no-op, wait for key to be consumed
+    apple2.Type('@') -- no-op, wait for key to be consumed
 
-    test.ExpectNotEquals(apple2.GetDoubleHiresByte(4, 78), 0x7F, "Clock should be visible already")
+    a2dtest.ExpectClockVisible()
 
     a2d.CloseAllWindows()
 end)
@@ -64,18 +65,14 @@ test.Variants(
     a2d.CloseAllWindows()
 end)
 
--- Remove clock driver
-a2d.OpenPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
-a2d.WaitForRestart()
-apple2.TypeLine("DELETE /A2.DESKTOP/CLOCK.SYSTEM")
-apple2.TypeLine("PR#7")
-a2d.WaitForRestart()
+
+a2d.RemoveClockDriverAndReboot()
 
 test.Step(
   "Analog Clock shows alert if there is no system clock",
   function()
     a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/SCREEN.SAVERS/ANALOG.CLOCK")
-    test.Snap("verify alert shown")
+    a2dtest.ExpectAlertShowing()
     a2d.DialogOK()
     a2d.CloseAllWindows()
 end)
@@ -84,7 +81,7 @@ test.Step(
   "Digital Clock shows alert if there is no system clock",
   function()
     a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/SCREEN.SAVERS/DIGITAL.CLOCK")
-    test.Snap("verify alert shown")
+    a2dtest.ExpectAlertShowing()
     a2d.DialogOK()
     a2d.CloseAllWindows()
 end)

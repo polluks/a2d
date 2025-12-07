@@ -1,18 +1,14 @@
 --[[ BEGINCONFIG ========================================
 
-MODEL="apple2c4"
-MODELARGS="-ramsize 1152K -gameio joy"
-DISKARGS="-flop1 $FLOP1IMG"
+MODEL="las128ex"
+MODELARGS="-ramsize 1152K -sl7 cffa2"
+DISKARGS="-hard1 $HARDIMG"
 
 ======================================== ENDCONFIG ]]--
-
-emu.wait(50) -- IIc emulation is very slow
 
 test.Step(
   "Apple > About This Apple II",
   function()
     a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.ABOUT_THIS_APPLE_II)
-    emu.wait(5) -- IIc emulation is very slow
-    test.Snap()
-    return test.PASS
+    test.Snap(manager.machine.system.name)
 end)

@@ -1,12 +1,10 @@
 --[[ BEGINCONFIG ========================================
 
 MODEL="apple2cp"
-MODELARGS="-ramsize 1152K -gameio joy"
+MODELARGS=""
 DISKARGS="-flop3 $HARDIMG"
 
 ======================================== ENDCONFIG ]]--
-
-emu.wait(50) -- IIc emulation is very slow
 
 test.Step(
   "No prompt if no change",
@@ -19,7 +17,7 @@ test.Step(
 
     a2d.CloseWindow()
     a2d.WaitForRepaint()
-    test.Snap("verify no prompt to save")
+    a2dtest.ExpectAlertNotShowing()
 
     drive:load(current)
     a2d.CloseAllWindows()
@@ -30,14 +28,14 @@ test.Step(
   function()
     local drive = apple2.Get35Drive1()
     a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS")
-    a2d.OAShortcut("5") -- show invisible files
+    a2d.OAShortcut("5") -- show invisible files (something harmless)
 
     local current = drive.filename
     drive:unload()
 
     a2d.CloseWindow()
     a2d.WaitForRepaint()
-    test.Snap("verify prompt to save")
+    a2dtest.ExpectAlertShowing()
     a2d.DialogCancel()
 
     drive:load(current)
@@ -48,17 +46,20 @@ test.Step(
   "Repaints when obscured",
   function()
     a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS")
+    local x,y = a2dtest.GetFrontWindowDragCoords()
+
     a2d.InMouseKeysMode(function(m)
-        m.MoveToApproximately(280, 45)
+        m.MoveToApproximately(x,y)
         m.ButtonDown()
-        m.MoveToApproximately(280,192)
+        m.MoveToApproximately(apple2.SCREEN_WIDTH/2,apple2.SCREEN_HEIGHT)
         m.ButtonUp()
     end)
     a2d.WaitForRepaint()
-    a2d.OAShortcut("1")
-    a2d.OAShortcut("2")
-    a2d.OAShortcut("3")
-    test.Snap("verify no mispaints")
+    a2dtest.ExpectNothingChanged(function()
+        a2d.OAShortcut("1")
+        a2d.OAShortcut("2")
+        a2d.OAShortcut("3")
+    end)
     a2d.CloseWindow()
     a2d.CloseAllWindows()
 end)
@@ -70,5 +71,6 @@ test.Step(
     a2d.CloseWindow()
     a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.RUN_BASIC_HERE)
     a2d.WaitForRestart()
+    apple2.TypeLine("REM *** Did not crash ***")
     test.Snap("verify no crash to monitor")
 end)

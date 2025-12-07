@@ -8,7 +8,15 @@ local c = coroutine.create(function()
     test = require("test")
     apple2 = require("apple2")
     a2d = require("a2d")
+    a2dtest = require("a2dtest")
+    mgtk = require("mgtk")
     a2d.InitSystem() -- async; outside require
+
+    -- ACE 2200 is hard-coded to autostart at Slot 6
+    if manager.machine.system.name:match("^ace2200") then
+      apple2.ControlReset()
+      apple2.TypeLine("PR#7")
+    end
 
     -- Wait for DeskTop to start
     a2d.WaitForRestart()

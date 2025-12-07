@@ -5,14 +5,14 @@
 
   ============================================================]]--
 
-local INITIAL_HEADER_X = 280
-local INITIAL_HEADER_Y = 55
-
 test.Step(
   "Cursor doesn't home",
   function()
+    a2d.InMouseKeysMode(function(m)
+        m.MoveToApproximately(apple2.SCREEN_WIDTH*3/4, apple2.SCREEN_HEIGHT/2)
+    end)
     a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALCULATOR")
-    test.Snap("verify mouse cursor position not reset")
+    test.Snap("verify cursor not at 0,0")
     a2d.CloseWindow()
 end)
 
@@ -20,8 +20,10 @@ test.Step(
   "Move window and mouse cursor",
   function()
     a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALCULATOR")
+    local x,y = a2dtest.GetFrontWindowDragCoords()
+
     a2d.InMouseKeysMode(function(m)
-        m.MoveToApproximately(INITIAL_HEADER_X,INITIAL_HEADER_Y)
+        m.MoveToApproximately(x,y)
         m.ButtonDown()
         m.MoveToApproximately(400,100)
         m.ButtonUp()
@@ -35,8 +37,10 @@ test.Step(
   "Window and volume icons",
   function()
     a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALCULATOR")
+    local x,y = a2dtest.GetFrontWindowDragCoords()
+
     a2d.InMouseKeysMode(function(m)
-        m.MoveToApproximately(INITIAL_HEADER_X,INITIAL_HEADER_Y)
+        m.MoveToApproximately(x,y)
         m.ButtonDown()
         m.MoveToApproximately(500,20)
         m.ButtonUp()
@@ -46,7 +50,7 @@ test.Step(
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(500,20)
         m.ButtonDown()
-        m.MoveToApproximately(280,191)
+        m.MoveToApproximately(apple2.SCREEN_WIDTH/2,apple2.SCREEN_HEIGHT)
         m.ButtonUp()
     end)
     a2d.WaitForRepaint()
@@ -58,24 +62,27 @@ test.Step(
   "Obscured window",
   function()
     a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALCULATOR")
-    a2d.InMouseKeysMode(function(m)
-        m.MoveToApproximately(INITIAL_HEADER_X,INITIAL_HEADER_Y)
-        m.ButtonDown()
-        m.MoveToApproximately(280,191)
-        m.ButtonUp()
-    end)
-    a2d.WaitForRepaint()
-    apple2.Type("123.456")
-    test.Snap("verify no bad repaint while obscured")
+    local x,y = a2dtest.GetFrontWindowDragCoords()
 
     a2d.InMouseKeysMode(function(m)
-        m.MoveToApproximately(280,191)
+        m.MoveToApproximately(x,y)
         m.ButtonDown()
-        m.MoveToApproximately(280,30)
+        m.MoveToApproximately(apple2.SCREEN_WIDTH/2,apple2.SCREEN_HEIGHT)
         m.ButtonUp()
     end)
     a2d.WaitForRepaint()
-    test.Snap("verify digits were entered while obscured")
+    a2dtest.ExpectNothingChanged(function()
+        apple2.Type("123.456")
+    end)
+
+    a2d.InMouseKeysMode(function(m)
+        m.MoveToApproximately(apple2.SCREEN_WIDTH/2,apple2.SCREEN_HEIGHT)
+        m.ButtonDown()
+        m.MoveToApproximately(apple2.SCREEN_WIDTH/2,30)
+        m.ButtonUp()
+    end)
+    a2d.WaitForRepaint()
+    test.Snap("verify display is 123.456")
     a2d.CloseWindow()
 end)
 
@@ -99,12 +106,12 @@ test.Variants(
 
     apple2.Type("1/2=")
     a2d.WaitForRepaint()
-    test.Snap("verify 0 before decimal")
+    test.Snap("verify display is 0.5")
     apple2.EscapeKey()
 
     apple2.Type("0-.5=")
     a2d.WaitForRepaint()
-    test.Snap("verify 0 before decimal")
+    test.Snap("verify display is -0.5")
     apple2.EscapeKey()
 
     a2d.CloseWindow()
@@ -125,7 +132,7 @@ test.Variants(
 
     apple2.Type("12.34")
     a2d.WaitForRepaint()
-    test.Snap("verify decimal separator is period")
+    test.Snap("verify display is 12.34 (period)")
     apple2.EscapeKey()
 
     a2d.CloseWindow()
@@ -152,12 +159,12 @@ test.Variants(
 
     apple2.Type("12,34")
     a2d.WaitForRepaint()
-    test.Snap("verify decimal separator is comma")
+    test.Snap("verify display is 12,34 (comma)")
     apple2.EscapeKey()
 
     apple2.Type("12.34")
     a2d.WaitForRepaint()
-    test.Snap("verify decimal separator is comma")
+    test.Snap("verify display is 12,34 (comma)")
     apple2.EscapeKey()
 
     a2d.CloseWindow()
