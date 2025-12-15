@@ -16,7 +16,8 @@ bin/mametest tests/SCRIPTNAME.lua
 
 Options:
 
-* `--only PATTERN` - run only matching named test step (`*` and `?` are wildcards); useful for fast iteration
+* `--only PATTERN` - run only matching named test steps (`*` and `?` are wildcards, `|` to separate multiple patterns); useful for fast iteration
+* `--skip N` - skip the first N tests
 * `--visible` - show the emulator window (default is headless)
 * `--audible` - play the emulator audio (default is silent)
 * `--nosnaps` - don't generate snapshots
@@ -36,7 +37,7 @@ The default system configuration is:
 * Slot 2: Mouse card
 * Slot 4: Mockingboard
 * Slot 6: Disk II Controller w/ 2 (empty) drives
-* Slot 7: CFFA2, w/ 800K package image
+* Slot 7: SCSI card, w/ 800K package image
 * No-Slot Clock under system ROM
 
 Tests can define custom MAME configuration. The contents of a config block are executed by `mametest` to override environment variable that are used when MAME launches.
@@ -64,7 +65,7 @@ MODELARGS="-sl1 ssc -sl2 mouse -sl5 ramfactor -sl7 cffa2 -aux rw3"
 DISKARGS="-hard1 out/a2d_800k.2mg -flop1 res/FLOPPY1.dsk"
 RESOLUTION="560x384"
 
-================================================== ]]-- ENDCONFIG
+================================================== ENDCONFIG ]]
 ```
 
 # Files
@@ -88,3 +89,10 @@ Not tests - these just dump screenshots of the app, for documentation or e.g. va
 
 Not tests, just example machine configurations. These verify that the abstractions in `lib/apple2.lua` work.
 
+## `infrastructure/`
+
+Tests for the testing libraries themselves.
+
+## `desk_acc/`, `desktop/`, `disk_copy/`, `selector/`, `launcher/`
+
+Tests specific to various components of the application.

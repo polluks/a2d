@@ -2,7 +2,9 @@
 
   Dump all the Screen Savers
 
-  ============================================================]]--
+  ============================================================]]
+
+a2d.ConfigureRepaintTime(1)
 
 test.Step(
   "Analog Clock",
@@ -96,7 +98,7 @@ test.Step(
   "Rod's Pattern",
   function()
     a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/SCREEN.SAVERS/RODS.PATTERN")
-    emu.wait(1)
+    emu.wait(5)
     test.Snap("Rod's Pattern")
     apple2.EscapeKey()
     a2d.WaitForRepaint()

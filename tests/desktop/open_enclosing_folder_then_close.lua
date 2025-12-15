@@ -1,0 +1,124 @@
+a2d.ConfigureRepaintTime(1)
+
+--[[
+  Launch DeskTop. Open a volume window. Open a folder. Close the
+  volume window. Press Open-Apple+Solid-Apple+Up. Verify that the
+  volume window re-opens, and that the folder window closes, and that
+  the folder icon is selected. Press Open-Apple+Solid-Apple+Up again.
+  Verify that the volume window closes, and the volume icon is
+  selected.
+]]
+test.Step(
+  "Open enclosing folder",
+  function()
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU")
+    a2d.OASAUp()
+    test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
+    test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "A2.DESKTOP", "volume window should be open again")
+    test.Snap("verify folder icon is selected")
+
+    a2d.OASAUp()
+    test.ExpectEquals(a2dtest.GetWindowCount(), 0, "no windows should be open")
+    test.Snap("verify volume icon is selected")
+end)
+
+--[[
+  Launch DeskTop. Open a volume window. Open a folder. Press
+  Open-Apple+Solid-Apple+Up. Verify that the volume window is
+  activated, and that the folder window closes, and that the folder
+  icon is selected. Press Open-Apple+Solid-Apple+Up again. Verify that
+  the volume window closes, and that the volume icon is selected.
+]]
+test.Step(
+  "Reactivate existing window",
+  function()
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU", true)
+    test.ExpectEquals(a2dtest.GetWindowCount(), 2, "two windows should be open")
+
+    a2d.OASAUp()
+    test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one windows should be open")
+    test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "A2.DESKTOP", "volume window should be open again")
+    test.Snap("verify folder icon is selected")
+
+    a2d.OASAUp()
+    test.ExpectEquals(a2dtest.GetWindowCount(), 0, "no windows should be open")
+    test.Snap("verify volume icon is selected")
+end)
+
+--[[
+  Launch DeskTop. Open a volume window. Open a folder. Activate the
+  volume window. Switch the window's view to by Name. Activate the
+  folder window. Press Open-Apple+Solid-Apple+Up. Verify that the
+  volume window is activated, and that the folder window closes, and
+  that the folder icon is selected. Press Open-Apple+Solid-Apple+Up
+  again. Verify that the volume window closes, and that the volume
+  icon is selected.
+]]
+test.Step(
+  "View change",
+  function()
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU", true)
+    a2d.CycleWindows()
+    test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "A2.DESKTOP", "volume window should be on top")
+    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
+    a2d.CycleWindows()
+    test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "APPLE.MENU", "folder window should be on top")
+
+    a2d.OASAUp()
+    test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
+    test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "A2.DESKTOP", "volume window should be open again")
+    test.Snap("verify folder icon is selected")
+
+    a2d.OASAUp()
+    test.ExpectEquals(a2dtest.GetWindowCount(), 0, "no windows should be open")
+    test.Snap("verify volume icon is selected")
+end)
+
+--[[
+  Launch DeskTop. Open a volume window with multiple files. Open a
+  folder. Press Open-Apple+Solid-Apple+Up. Verify that the folder
+  window is closed, the volume window is shown, and the folder is
+  selected. Press Right Arrow. Verify that only a single icon shows as
+  selected.
+]]
+test.Step(
+  "Icon selection with keyboard",
+  function()
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU", true)
+
+    a2d.OASAUp()
+    test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
+    test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "A2.DESKTOP", "volume window should be open again")
+    test.Snap("verify folder icon is selected")
+
+    apple2.RightArrowKey()
+    a2d.WaitForRepaint()
+    test.Snap("verify single icon is selected")
+
+    a2d.CloseAllWindows()
+end)
+
+--[[
+  Launch DeskTop. Open a volume window with multiple files. Open a
+  folder. Close the volume window. Press Open-Apple+Solid-Apple+Up.
+  Verify that the folder window is closed, the volume window is shown,
+  and the folder is selected. Press Right Arrow. Verify that only a
+  single icon shows as selected.
+]]
+test.Step(
+  "Icon selection with keyboard with window cycling",
+  function()
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU")
+
+    a2d.OASAUp()
+    test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
+    test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "A2.DESKTOP", "volume window should be open again")
+    test.Snap("verify folder icon is selected")
+
+    apple2.RightArrowKey()
+    a2d.WaitForRepaint()
+    test.Snap("verify single icon is selected")
+
+    a2d.CloseAllWindows()
+end)
+

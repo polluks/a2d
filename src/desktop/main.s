@@ -216,6 +216,9 @@ tick_counter:
 ;;; Menu Dispatch
 
 .proc HandleKeydown
+        tsx
+        stx     saved_stack
+
         ;; Handle accelerator keys
         lda     event_params::modifiers
         bne     modifiers       ; either Open-Apple or Solid-Apple ?
@@ -318,8 +321,6 @@ menu_accelerators:
         rts
 
 call_proc:
-        tsx
-        stx     saved_stack
         proc_addr := *+1
         jmp     SELF_MODIFIED
 
@@ -4930,6 +4931,10 @@ show_unexpected_errors_flag:
         ;; Restore system state: devices, /RAM, ROM/ZP banks.
         jsr     RestoreSystem
 
+        ;; Reset stack
+        ldx     #$FF
+        txs
+
         ;; also used by launcher code
         target := *+1
         jmp     SELF_MODIFIED
@@ -9088,9 +9093,9 @@ kMaxAnimationStep = 7
     END_IF
 
         ;; --------------------------------------------------
-        ;; Get icon position - used as first rect
+        ;; Get icon bounds - used as first rect
 
-        ITK_CALL IconTK::GetIconBounds, icon_param ; inits `tmp_rect`
+        ITK_CALL IconTK::GetBitmapRect, icon_param ; inits `tmp_rect`
         COPY_BLOCK tmp_rect, icon_rect
 
         ;; --------------------------------------------------
@@ -11113,6 +11118,7 @@ retry:  jsr     GetSrcFileInfo
         ;; Recurse, and process directory
         jsr     ProcessDirectory
         jsr     DeleteRefreshProgress ; update path display
+        jsr     GetSrcFileInfo        ; ensure current; needed to diagnose errors
         ;; ST_VOLUME_DIRECTORY excluded because volumes are ejected.
         FALL_THROUGH_TO do_destroy
 
@@ -11129,10 +11135,18 @@ retry:  MLI_CALL DESTROY, destroy_src_params
         bcc     done
 
         ;; Failed - determine why, maybe try to unlock.
-        ;; TODO: If it's a directory, this could be because it's not empty,
-        ;; e.g. if it contained files that could not be deleted.
         cmp     #ERR_ACCESS_ERROR
         bne     error
+
+        ;; Locked?
+        lda     src_file_info_params::access
+        and     #ACCESS_DEFAULT
+      IF A = #ACCESS_DEFAULT
+        ;; Already unlocked, so we just fail with unknown error.
+        ;; TODO: If it's a directory, this could be because it's not empty,
+        TAIL_CALL ShowErrorAlert, A=#kErrUnknown
+      END_IF
+
         bit     operations::all_flag
         bmi     unlock
 
@@ -11199,6 +11213,7 @@ next_file:
 
 .proc DeleteFinishDirectory
         jsr     DeleteRefreshProgress
+        jsr     GetSrcFileInfo  ; ensure current; needed to diagnose errors
         jmp     DeleteFileCommon
 .endproc ; DeleteFinishDirectory
 

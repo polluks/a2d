@@ -2,10 +2,11 @@
 
   Utilities for Apple II DeskTop
 
-  ============================================================]]--
+  ============================================================]]
 
 local a2d = {}
 
+local util = require("util")
 local apple2 = require("apple2")
 
 --------------------------------------------------
@@ -90,21 +91,33 @@ end
 local MINIMAL_REPAINT = 0.5
 
 function a2d.WaitForCopyToRAMCard()
-  emu.wait(20)
+  a2d.WaitForDesktopReady()
 end
 
 function a2d.WaitForRestart()
+  -- TODO: Most callers should use a2d.WaitForDesktopReady() instead
+
   if manager.machine.system.name:match("^apple2c") or
+    manager.machine.system.name:match("^las128e2") or
     manager.machine.system.name:match("^ace500") then
     -- Floppy drives are slow
-    emu.wait(50)
+    emu.wait(60)
   else
     emu.wait(10)
   end
 end
 
+local repaint_time = 5
+
 function a2d.WaitForRepaint()
-  emu.wait(5)
+  emu.wait(repaint_time)
+end
+
+function a2d.ConfigureRepaintTime(s)
+  if s == nil or s == 0 then
+    error("specify a non-zero time", 2)
+  end
+  repaint_time = s
 end
 
 --------------------------------------------------
@@ -190,7 +203,7 @@ end
 
 -- Invoke nth item on mth menu (1-based)
 -- (if nth is negative, from the bottom of menu)
-function a2d.InvokeMenuItem(mth, nth)
+function a2d.InvokeMenuItem(mth, nth, options)
   a2d.OpenMenu(mth)
   if nth > 0 then
     -- down to nth item
@@ -206,22 +219,39 @@ function a2d.InvokeMenuItem(mth, nth)
   end
   -- invoke
   apple2.ReturnKey()
-  a2d.WaitForRepaint()
+
+  if not options or not options.no_wait then
+    a2d.WaitForRepaint()
+  end
 end
 
-function a2d.OAShortcut(key)
+function a2d.OAShortcut(key, options)
   apple2.OAKey(key)
-  a2d.WaitForRepaint()
+  if not options or not options.no_wait then
+    a2d.WaitForRepaint()
+  end
 end
 
-function a2d.SAShortcut(key)
+function a2d.SAShortcut(key, options)
   apple2.SAKey(key)
-  a2d.WaitForRepaint()
+  if not options or not options.no_wait then
+    a2d.WaitForRepaint()
+  end
 end
 
-function a2d.OASAShortcut(key)
+function a2d.OASAShortcut(key, options)
   apple2.OASAKey(key)
-  a2d.WaitForRepaint()
+  if not options or not options.no_wait then
+    a2d.WaitForRepaint()
+  end
+end
+
+--------------------------------------------------
+-- Text Fields
+--------------------------------------------------
+
+function a2d.ClearTextField()
+  apple2.ControlKey("X")
 end
 
 --------------------------------------------------
@@ -230,7 +260,7 @@ end
 
 function a2d.OpenSelection()
   a2d.OAShortcut("O")
-  a2d.WaitForRepaint()
+  a2d.WaitForRepaint() -- TODO: This is an extra wait - is it needed?
 end
 
 function a2d.OpenSelectionAndCloseCurrent()
@@ -241,6 +271,18 @@ end
 function a2d.Select(name)
   a2d.ClearSelection()
   apple2.Type(name)
+  emu.wait(0.25) -- TODO: spin here?
+  local selected = a2d.GetSelectedIcons()
+  if #selected ~= 1 then
+    manager.machine.video:snapshot()
+    error(string.format("Failed to select %q - have %d selected\n%s",
+                        name, #selected, debug.traceback()))
+  end
+  if name:lower() ~= selected[1].name:lower() then
+    manager.machine.video:snapshot()
+    error(string.format("Failed to select %q - have %q selected\n%s",
+                        name, selected[1].name, debug.traceback()))
+  end
 end
 
 function a2d.SelectAndOpen(name, opt_close_current)
@@ -282,6 +324,8 @@ function a2d.SelectPath(path)
   local base, name = a2d.SplitPath(path)
   if base ~= "" then
     a2d.OpenPath(base)
+  else
+    a2d.CloseAllWindows()
   end
   a2d.Select(name)
 end
@@ -293,22 +337,26 @@ function a2d.ClearSelection()
   a2d.WaitForRepaint()
 end
 
-function a2d.DialogOK()
+function a2d.DialogOK(options)
   apple2.ReturnKey()
-  a2d.WaitForRepaint()
+  if not options or not options.no_wait then
+    a2d.WaitForRepaint()
+  end
 end
 
-function a2d.DialogCancel()
+function a2d.DialogCancel(options)
   apple2.EscapeKey()
-  a2d.WaitForRepaint()
+  if not options or not options.no_wait then
+    a2d.WaitForRepaint()
+  end
 end
 
 function a2d.RenameSelection(newname)
   apple2.ReturnKey()
-  apple2.ControlKey("X") -- clear
+  a2d.ClearTextField()
   apple2.Type(newname)
   apple2.ReturnKey()
-  a2d.WaitForRepaint()
+  emu.wait(5) -- I/O
 end
 
 function a2d.RenamePath(path, newname)
@@ -316,8 +364,22 @@ function a2d.RenamePath(path, newname)
   a2d.RenameSelection(newname)
 end
 
+function a2d.DuplicateSelection(newname)
+  a2d.OAShortcut("D")
+  a2d.ClearTextField()
+  apple2.Type(newname)
+  apple2.ReturnKey()
+  a2d.WaitForRepaint()
+end
+
+function a2d.DuplicatePath(path, newname)
+  a2d.SelectPath(path)
+  a2d.DuplicateSelection(newname)
+end
+
 function a2d.DeleteSelection()
   a2d.OADelete()
+  -- TODO: Wait for alert
   emu.wait(5) -- wait for enumeration
   a2d.DialogOK() -- confirm delete
   emu.wait(5) -- wait for delete
@@ -337,21 +399,32 @@ function a2d.CreateFolder(path)
       a2d.OpenPath(base)
     end
   end
-  a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_NEW_FOLDER)
-  apple2.ControlKey("X") -- clear
+  a2d.OAShortcut("N") -- File > New Folder
+  a2d.ClearTextField()
   apple2.Type(name)
   apple2.ReturnKey()
-  a2d.WaitForRepaint()
+  emu.wait(5) -- I/O
 end
 
-function a2d.EraseVolume(name)
+function a2d.FormatVolume(name, opt_new_name)
   a2d.SelectPath("/"..name)
-  a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_ERASE_DISK)
-  apple2.Type(name) -- new name
+  a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK)
+  apple2.Type(opt_new_name or name)
   a2d.DialogOK()
   a2d.WaitForRepaint()
   a2d.DialogOK() -- confirm overwrite
-  emu.wait(5)
+  emu.wait(5) -- I/O
+end
+
+function a2d.EraseVolume(name, opt_new_name)
+  a2d.SelectPath("/"..name)
+  a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_ERASE_DISK)
+  apple2.Type(opt_new_name or name)
+  a2d.DialogOK()
+  -- TODO: WaitForAlert here (layering violation!)
+  a2d.WaitForRepaint()
+  a2d.DialogOK() -- confirm overwrite
+  emu.wait(5) -- I/O
 end
 
 function a2d.CycleWindows()
@@ -361,20 +434,29 @@ function a2d.CycleWindows()
   a2d.WaitForRepaint()
 end
 
-function a2d.AddShortcut(path)
+function a2d.AddShortcut(path, options)
   a2d.SelectPath(path)
   a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
+
+  if options then
+    if options.copy == "boot" then
+      a2d.OAShortcut("3")
+    elseif options.copy == "use" then
+      a2d.OAShortcut("4")
+    end
+  end
+
   a2d.DialogOK()
 end
 
-function a2d.CopySelectionTo(path)
+function a2d.CopySelectionTo(path, is_volume, options)
   -- Assert: there is a selection
   --[[
     But we don't know if it's 1 or more than 1 so we index
     from the bottom of the menu, which is a fixed number.
     TODO: Make this less hacky
-  ]]--
-  a2d.InvokeMenuItem(a2d.FILE_MENU, -3)
+  ]]
+  a2d.InvokeMenuItem(a2d.FILE_MENU, is_volume and -2 or -3)
 
   --Automate file picker dialog
   apple2.ControlKey("D") -- Drives
@@ -384,13 +466,17 @@ function a2d.CopySelectionTo(path)
     apple2.ControlKey("O") -- Open
     a2d.WaitForRepaint()
   end
-  a2d.DialogOK()
-  emu.wait(10)
+  a2d.DialogOK(options)
+
+  if not options or not options.no_wait then
+    emu.wait(10)
+  end
 end
 
-function a2d.CopyPath(src, dst)
+function a2d.CopyPath(src, dst, options)
   a2d.SelectPath(src)
-  a2d.CopySelectionTo(dst)
+  local is_volume = not src:match("^/.*/")
+  a2d.CopySelectionTo(dst, is_volume, options)
 end
 
 --------------------------------------------------
@@ -400,6 +486,7 @@ end
 function a2d.RemoveClockDriverAndReboot()
   a2d.DeletePath("/A2.DESKTOP/CLOCK.SYSTEM")
   a2d.Reboot()
+  a2d.WaitForDesktopReady()
 end
 
 function a2d.ToggleOptionCopyToRAMCard()
@@ -414,26 +501,64 @@ function a2d.ToggleOptionShowShortcutsOnStartup()
   a2d.CloseWindow()
   a2d.CloseAllWindows()
 end
+function a2d.ToggleOptionPreserveCase()
+  a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS")
+  a2d.OAShortcut("4") -- Toggle "Preserve uppercase and lowercase in names"
+  a2d.CloseWindow()
+  a2d.CloseAllWindows()
+end
 
 function a2d.Quit()
-  a2d.InvokeMenuItem(a2d.FILE_MENU, -1)
-  a2d.WaitForRestart()
+  a2d.OAShortcut("Q")
+  apple2.WaitForBitsy()
 end
 
 function a2d.QuitAndRestart()
   a2d.Quit()
-  apple2.ReturnKey() -- Launch PRODOS in Bitsy Bye
-  a2d.WaitForRestart()
+  apple2.BitsyInvokeFile("PRODOS")
+  a2d.WaitForDesktopReady()
 end
 
 -- Reboot via menu equivalent of PR#7 (or PR#5 on IIc+)
-function a2d.Reboot()
+function a2d.Reboot(options)
   if manager.machine.system.name:match("^apple2cp") then
     a2d.InvokeMenuItem(a2d.STARTUP_MENU, 2) -- PR#5 (list is 6,5,...)
   else
     a2d.InvokeMenuItem(a2d.STARTUP_MENU, 1) -- startup volume index
   end
-  a2d.WaitForRestart()
+  apple2.ResetMouse()
+end
+
+-- TODO: Use this in Reboot, etc.
+-- TODO: Ensure callers wait until idle, though
+function a2d.WaitForDesktopShowing(options, level)
+  if options == nil then options = {} end
+  if level == nil then level = 0 end
+
+  function IsDesktopShowing()
+    -- TODO: Is there RDDHIRES on anything but IIc?
+    if apple2.ReadSSW("RDHIRES") < 128 then
+      return false
+    end
+
+    local dhr = apple2.SnapshotDHR()
+    -- skip first column, usually has cursor in it
+    for i = 1, apple2.SCREEN_COLUMNS-1 do
+      if dhr[i] ~= 0x7F then
+        return false
+      end
+    end
+
+    return true
+  end
+
+  util.WaitFor("desktop", IsDesktopShowing, options, level+1)
+end
+
+function a2d.WaitForDesktopReady(options)
+  a2d.WaitForDesktopShowing(options, 1)
+  emu.wait(5) -- TODO: Something better here
+  -- TODO: Some sort of assertion here
 end
 
 --------------------------------------------------
@@ -450,7 +575,7 @@ end
 
 function a2d.InMouseKeysMode(func)
   a2d.EnterMouseKeysMode()
-  func({
+  local exit = func({
       ButtonDown = a2d.MouseKeysButtonDown,
       ButtonUp = a2d.MouseKeysButtonUp,
       Click = a2d.MouseKeysClick,
@@ -466,9 +591,13 @@ function a2d.InMouseKeysMode(func)
       MoveToApproximately = a2d.MouseKeysMoveToApproximately,
       MoveByApproximately = a2d.MouseKeysMoveByApproximately,
   })
-  a2d.ExitMouseKeysMode()
-  -- TODO: Without this, ClearSelection triggers menu. Why is delay needed?
-  emu.wait(10/60)
+  -- Allow returning false to not explicitly exit, e.g. if we exit
+  -- DeskTop by double-clicking an executable.
+  if exit ~= false then
+    a2d.ExitMouseKeysMode()
+    -- TODO: Without this, ClearSelection triggers menu. Why is delay needed?
+    emu.wait(10/60)
+  end
 end
 
 function a2d.MouseKeysDoubleClick()
@@ -478,10 +607,7 @@ function a2d.MouseKeysDoubleClick()
 end
 
 function a2d.MouseKeysClick()
-  a2d.MouseKeysButtonDown()
-  emu.wait(1/60)
-  a2d.MouseKeysButtonUp()
-  emu.wait(1/60)
+  apple2.SpaceKey()
 end
 
 function a2d.MouseKeysOAClick()
@@ -517,11 +643,11 @@ function a2d.MouseKeysRight(n)
 end
 
 function a2d.MouseKeysButtonDown()
-  apple2.PressSA()
+  apple2.Type(",")
 end
 
 function a2d.MouseKeysButtonUp()
-  apple2.ReleaseSA()
+  apple2.Type(".")
 end
 
 local MOUSE_KEYS_DELTA_X = 8
@@ -536,11 +662,17 @@ function a2d.MouseKeysHome()
 end
 
 function a2d.MouseKeysMoveToApproximately(x,y)
+  if x == nil then error("nil passed as x", 2) end
+  if y == nil then error("nil passed as y", 2) end
+
   a2d.MouseKeysHome() -- known location
   a2d.MouseKeysMoveByApproximately(x, y)
 end
 
 function a2d.MouseKeysMoveByApproximately(x,y)
+  if x == nil then error("nil passed as x", 2) end
+  if y == nil then error("nil passed as y", 2) end
+
   if x > 0 then
     a2d.MouseKeysRight(round(x / MOUSE_KEYS_DELTA_X))
   elseif x < 0 then
@@ -581,12 +713,52 @@ end
 -- Modifier Key Combos
 --------------------------------------------------
 
+-- Open Selection
+-- Page Down
 function a2d.OADown()
   apple2.PressOA()
   apple2.DownArrowKey()
   apple2.ReleaseOA()
 end
 
+-- Page Down (alias)
+function a2d.SADown()
+  apple2.PressSA()
+  apple2.DownArrowKey()
+  apple2.ReleaseSA()
+end
+
+-- Open Enclosing Folder
+-- Page Up
+function a2d.OAUp()
+  apple2.PressOA()
+  apple2.UpArrowKey()
+  apple2.ReleaseOA()
+end
+
+-- Page Up (alias)
+function a2d.SAUp()
+  apple2.PressSA()
+  apple2.UpArrowKey()
+  apple2.ReleaseSA()
+end
+
+-- Move to Start
+function a2d.OALeft()
+  apple2.PressOA()
+  apple2.LeftArrowKey()
+  apple2.ReleaseOA()
+end
+
+-- Move to End
+function a2d.OARight()
+  apple2.PressOA()
+  apple2.RightArrowKey()
+  apple2.ReleaseOA()
+end
+
+-- Open Selection then Close Current
+-- Scroll to End
 function a2d.OASADown()
   apple2.PressOA()
   apple2.PressSA()
@@ -595,6 +767,17 @@ function a2d.OASADown()
   apple2.ReleaseOA()
 end
 
+-- Open Enclosing then Close Current
+-- Scroll to Start
+function a2d.OASAUp()
+  apple2.PressOA()
+  apple2.PressSA()
+  apple2.UpArrowKey()
+  apple2.ReleaseSA()
+  apple2.ReleaseOA()
+end
+
+-- Shortcut: File > Delete
 function a2d.OADelete()
   apple2.PressOA()
   apple2.DeleteKey()
@@ -625,6 +808,14 @@ function a2d.GetProDOSDate()
   local y = (word >> 9) & 0x7F
   local m = (word >> 5) & 0xF
   local d = word & 0x1F
+
+  -- https://prodos8.com/docs/technote/28/
+  if y < 40 then
+    y = y + 2000
+  else
+    y = y + 1900
+  end
+
   return y,m,d
 end
 
@@ -641,5 +832,69 @@ end
 
 --------------------------------------------------
 
+local function ram_u8(addr)
+  return apple2.ReadRAMDevice(addr)
+end
+
+local function ram_u16(addr)
+  return ram_u8(addr) | (ram_u8(addr+1) << 8)
+end
+
+local function ram_s16(addr)
+  local v = ram_u16(addr)
+  if v & 0x8000 == 0 then
+    return v
+  else
+    return 0x10000 - v
+  end
+end
+
+local function ReadIcon(id)
+  local icon = {}
+  local icon_entries = 0x01F0D1
+
+  local IconEntry = {
+    state = 0,
+    win_flags = 1,
+    iconx = 2,
+    icony = 4,
+    typ = 6,
+    name = 7,
+    record_num = 23,
+    SIZE = 24,
+  }
+
+  local addr = icon_entries + (id-1) * IconEntry.SIZE
+
+  icon.id = id
+  icon.state = ram_u8(addr + IconEntry.state)
+  icon.window = ram_u8(addr + IconEntry.win_flags) & 0x0F
+  icon.flags = ram_u8(addr + IconEntry.win_flags) & 0xF0
+  icon.x = ram_s16(addr + IconEntry.iconx)
+  icon.y = ram_s16(addr + IconEntry.icony)
+  icon.name = apple2.GetPascalString(addr + IconEntry.name)
+  icon.type = ram_u8(addr + IconEntry.typ)
+  icon.record_num = ram_u8(addr + IconEntry.record_num)
+
+  return icon
+end
+
+function a2d.GetSelectedIcons()
+  -- TODO: Rework this so it's based on an actual API
+  local selected_icon_count_addr = 0x01DAEC
+  local selected_icon_list_addr = 0x01DAED
+
+  local selected_icon_count = apple2.ReadRAMDevice(selected_icon_count_addr)
+
+  local icons = {}
+
+  for i = 0, selected_icon_count-1 do
+    local id = ram_u8(selected_icon_list_addr + i)
+    table.insert(icons, ReadIcon(id))
+  end
+  return icons
+end
+
+--------------------------------------------------
 
 return a2d

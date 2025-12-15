@@ -1,8 +1,16 @@
+--[[ BEGINCONFIG ========================================
+
+DISKARGS="-hard1 $HARDIMG -flop1 res/dos33_floppy.dsk"
+
+======================================== ENDCONFIG ]]
+
 --[[============================================================
 
   Dump all the Desk Accessories
 
-  ============================================================]]--
+  ============================================================]]
+
+a2d.ConfigureRepaintTime(1)
 
 --------------------------------------------------
 -- Apple Menu
@@ -44,7 +52,7 @@ test.Step(
     a2d.WaitForRestart()
     test.Snap("Run Basic Here")
     apple2.TypeLine("BYE")
-    a2d.WaitForRestart()
+    a2d.WaitForDesktopReady()
     return test.PASS
 end)
 
@@ -83,6 +91,7 @@ test.Step(
   "DOS 3.3 Import",
   function()
     a2d.OpenPath("/A2.DESKTOP/EXTRAS/DOS33.IMPORT")
+    emu.wait(5)
     test.Snap("Drive selection")
     apple2.DownArrowKey()
     a2d.DialogOK()

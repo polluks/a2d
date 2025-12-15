@@ -1,3 +1,9 @@
+a2d.ConfigureRepaintTime(1)
+
+--[[
+  Double-click an item. Verify that the appropriate action button
+  flashes.
+]]
 test.Step(
   "Shortcuts picker (in DeskTop)",
   function()
@@ -7,8 +13,10 @@ test.Step(
     a2d.DialogOK()
 
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_DELETE_A_SHORTCUT)
+    local dialog_x, dialog_y = a2dtest.GetFrontWindowContentRect()
+
     a2d.InMouseKeysMode(function(m)
-        m.MoveToApproximately(180,60) -- over shortcut
+        m.MoveToApproximately(dialog_x+75, dialog_y+30) -- over shortcut
         m.DoubleClick()
         test.Snap("verify OK button flashes")
         a2d.WaitForRepaint()
@@ -16,13 +24,20 @@ test.Step(
     a2d.CloseAllWindows()
 end)
 
+--[[
+  Double-click an item. Verify that the appropriate action button
+  flashes.
+]]
 test.Step(
   "Format/Erase dialog (in DeskTop)",
   function()
     a2d.ClearSelection()
+
     a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_ERASE_DISK-2)
+    local dialog_x, dialog_y = a2dtest.GetFrontWindowContentRect()
+
     a2d.InMouseKeysMode(function(m)
-        m.MoveToApproximately(150,80) -- over volume
+        m.MoveToApproximately(dialog_x+70, dialog_y+40) -- over volume
         m.DoubleClick()
         test.Snap("verify OK button flashes")
         a2d.WaitForRepaint()
@@ -30,15 +45,22 @@ test.Step(
     end)
 end)
 
+--[[
+  Double-click an item. Verify that the appropriate action button
+  flashes.
+]]
 test.Step(
   "Selector (module)",
   function()
     a2d.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
     a2d.ToggleOptionShowShortcutsOnStartup() -- enable
     a2d.Reboot()
+    a2d.WaitForDesktopReady()
 
+    a2dtest.SetBankOffsetForSelectorModule()
+    local dialog_x, dialog_y = a2dtest.GetFrontWindowContentRect()
     a2d.InMouseKeysMode(function(m)
-        m.MoveToApproximately(150,60) -- over shortcut
+        m.MoveToApproximately(dialog_x + 100, dialog_y + 30) -- over shortcut
         m.DoubleClick()
         test.Snap("verify OK button flashes")
         a2d.WaitForRepaint()

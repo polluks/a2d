@@ -366,7 +366,7 @@ When steps say to a path e.g. `/TESTS/FOLDER/SUBFOLDER`, open the volume then ea
 * Launch DeskTop. Open a window for a removable disk. Quit DeskTop. Remove the disk. Restart DeskTop. Open a different volume's window. Close it. Open it again. Verify that items in the File menu needing a window (New Folder, Close, etc) are correctly enabled.
 
 
-## Open
+## Open - covered by `tests/open.lua` and `tests/open_ejected.lua`
 
 * Open a volume with double-click.
 * Open a directory with double-click.
@@ -415,7 +415,7 @@ When steps say to a path e.g. `/TESTS/FOLDER/SUBFOLDER`, open the volume then ea
 * Launch DeskTop. Open `/TESTS/FOLDER/SUBFOLDER`. Close the `TESTS` window. Close the `FOLDER` window. Verify that it animates into the volume icon, which becomes selected.
 
 
-## Open Then Close
+## Open Then Close - covered by `tests/open_then_close.lua`
 
 * Launch DeskTop. Open a window. Hold Solid-Apple and double-click a folder icon. Verify that the folder opens, and that the original window closes.
 * Launch DeskTop. Open a window. Select a folder icon. Hold Solid-Apple and select File > Open. Verify that the folder opens, and that the original window closes.
@@ -427,7 +427,7 @@ When steps say to a path e.g. `/TESTS/FOLDER/SUBFOLDER`, open the volume then ea
 * Launch DeskTop. Ensure nothing is selected. Press Open-Apple+Solid-Apple+Down. Verify that nothing happens.
 
 
-## Open Enclosing Folder
+## Open Enclosing Folder - covered by `tests/open_enclosing_folder.lua`
 
 * Launch DeskTop. Open a volume window. Open a folder. Close the volume window. Press Open-Apple+Up. Verify that the volume window re-opens, and that the folder icon is selected. Press Open-Apple+Up again. Verify that the volume icon is selected.
 * Launch DeskTop. Open a volume window. Open a folder. Press Open-Apple+Up. Verify that the volume window is activated, and that the folder icon is selected. Press Open-Apple+Up again. Verify that the volume icon is selected.
@@ -437,7 +437,7 @@ When steps say to a path e.g. `/TESTS/FOLDER/SUBFOLDER`, open the volume then ea
 * Launch DeskTop. Open a volume window with multiple files. Open a folder. Close the volume window. Press Open-Apple+Up. Verify that the volume window is shown and the folder is selected. Press Right Arrow. Verify that only a single icon shows as selected.
 
 
-## Open Enclosing Folder Then Close
+## Open Enclosing Folder Then Close - covered by `tests/open_enclosing_folder_then_close.lua`
 
 * Launch DeskTop. Open a volume window. Open a folder. Close the volume window. Press Open-Apple+Solid-Apple+Up. Verify that the volume window re-opens, and that the folder window closes, and that the folder icon is selected. Press Open-Apple+Solid-Apple+Up again. Verify that the volume window closes, and the volume icon is selected.
 * Launch DeskTop. Open a volume window. Open a folder. Press Open-Apple+Solid-Apple+Up. Verify that the volume window is activated, and that the folder window closes, and that the folder icon is selected. Press Open-Apple+Solid-Apple+Up again. Verify that the volume window closes, and that the volume icon is selected.
@@ -447,7 +447,7 @@ When steps say to a path e.g. `/TESTS/FOLDER/SUBFOLDER`, open the volume then ea
 * Launch DeskTop. Open a volume window with multiple files. Open a folder. Close the volume window. Press Open-Apple+Solid-Apple+Up. Verify that the folder window is closed, the volume window is shown, and the folder is selected. Press Right Arrow. Verify that only a single icon shows as selected.
 
 
-## Close All - partially covered by `tests/close_all.lua`
+## Close All - covered by `tests/close_all.lua`
 
 * Repeat the following case with these modifiers: Open-Apple, Solid-Apple:
   * Open two windows. Hold modifier and click the close box on the active window. Verify that all windows close.
@@ -607,7 +607,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Load DeskTop. Open a window for a volume in a Disk II drive. Remove the disk from the Disk II drive. Hold Solid-Apple and drag a file to another volume to move it. When prompted to insert the disk, click Cancel. Verify that when the window closes the disk icon is no longer dimmed.
 
 
-## File Deletion
+## File Deletion - covered by `tests/file_deletion.lua`
 
 * Launch DeskTop. Open two windows. Select a file in one window. Activate the other window by clicking its title bar. File > Delete. Click OK. Verify that the window with the deleted file refreshes.
 
@@ -622,7 +622,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Load DeskTop. Open a window for a volume in a Disk II drive. Remove the disk from the Disk II drive. Drag a file to the trash. When prompted to insert the disk, click Cancel. Verify that when the window closes the disk icon is no longer dimmed.
 
 
-## Get Info
+## Get Info - covered by `tests/get_info*.lua`
 
 * File > Get Info a non-folder file. Verify that the size shows as "_size_K".
 * File > Get Info a folder containing 0 files. Verify that the size shows as "_size_K for 1 item".
@@ -714,7 +714,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 
 * Find make a copy of a `PRODOS` system file. Rename it to have a ".SYSTEM" suffix. Verify that it updates to have an application icon. Rename it again to remove the suffix. Verify that it updates to have a system file icon. Repeat several times. Verify that the icon has not shifted in position.
 
-## Name Casing
+## Name Casing -- covered by `tests/name_casing.lua`
 
 * Verify that GS/OS volume name cases show correctly.
 * Verify that GS/OS file name cases show correctly in `/TESTS/PROPERTIES/GS.OS.NAMES`
@@ -847,7 +847,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Launch DeskTop. Add a shortcut for a file. Rename the file. Run the shortcut. Verify that the alert is specific e.g. "file not found", not an unknown error.
 
 
-## File Types
+## File Types -- covered by `tests/file_types.lua`
 
 * Put image file in `APPLE.MENU`, start DeskTop. Select it from the Apple menu. Verify image is shown.
 * Put text file in `APPLE.MENU`, start DeskTop. Select it from the Apple menu. Verify text is shown.
@@ -870,6 +870,8 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 
 * Launch DeskTop. File > New Folder.... Name it with a .A2FC suffix. Verify that it still has a folder icon.
 
+## Forked files -- covered by `tests/forked_files.lua`
+
 * Launch DeskTop. Try to copy files including a GS/OS forked file in the selection. Verify that an alert is shown, with the filename visible in the progress dialog. Verify that if OK is clicked, the operation continues with other files, and the watch cursor is shown.
 * Launch DeskTop. Try to copy files including a GS/OS forked file in the selection. Verify that an alert is shown, with the filename visible in the progress dialog. Verify that if Cancel is clicked the operation is aborted.
 * Launch DeskTop. Try to copy files including a GS/OS forked file contained in a selected folder. Verify that an alert is shown, with the filename visible in the progress dialog. Verify that if OK is clicked, the operation continues with other files, and if Cancel is clicked the operation is aborted.
@@ -882,7 +884,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Launch DeskTop. Using drag/drop, try to delete a GS/OS forked file. When the delete confirmation dialog is shown, click OK. When an alert is shown, click OK. Verify that the source window is updated.
 * Launch DeskTop. Using File > Delete try to delete a GS/OS forked file, where the containing window is visible. When the delete confirmation dialog is shown, click OK. When an alert is shown, click OK. Verify that the containing window is updated.
 
-## RAMCard - WIP in `tests/ramcard.lua` and `tests/no_ramcard.lua`
+## RAMCard - covered by `tests/ramcard*.lua` and `tests/progress_counts.lua`
 
 * Repeat the following:
   * For these permutations:
@@ -905,7 +907,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Configure a system with a RAMCard, and set DeskTop to copy itself to the RAMCard on startup. Launch DeskTop. Create a shortcut for a non-executable file at the root of a volume, set to "Copy to RAMCard" "at first use". Run the shortcut. Verify that the "Files remaining" count bottoms out at 0. Close the alert. Drag a volume icon to another volume. Verify that the "Files remaining" count bottoms out at 0.
 
 
-## Format/Erase
+## Format/Erase - covered by `tests/format_erase*.lua` and `tests/format_inserted.lua`
 
 * Repeat the following cases for Special > Format Disk and Special > Erase Disk:
   * Launch DeskTop. Run the command. Ensure left/right arrows move selection correctly.
@@ -1011,7 +1013,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Run on system with real-time clock; verify that time shows in top-right of menu.
 * Run on system with real-time clock. Click on a volume icon. Verify that the clock still renders correctly.
 
-### RAM Expansions
+### RAM Expansions - covered by `tests/ramworks.lua`, `tests/ramfactor.lua`, `tests/ramcard_ejected.lua`, `tests/progress_counts.lua`
 
 The following tests all require:
 * A RAM disk such as RAMWorks (and a ProDOS driver) or a RAMFactor/"Slinky" memory expansion card.
@@ -1030,7 +1032,9 @@ The following tests all require:
 * Launch DeskTop, ensure it copies itself to RAMCard. Drag a file icon to a same-volume window so it is moved. Configure a shortcut to copy to RAMCard "at first use". Invoke the shortcut. Verify that the shortcut's files were indeed copied, not moved.
 
 * Launch DeskTop, ensure it copies itself to RAMCard. Configure a shortcut with the target in the root of a volume, and to Copy to RAMCard at first use. Quit DeskTop. Launch Shortcuts. Invoke the shortcut. Verify that the copy count goes to zero and doesn't blank out.
+
 * Launch DeskTop, ensure it copies itself to RAMCard. Configure a shortcut with the target in a directory, not the root of a volume, and to Copy to RAMCard at first use. Quit DeskTop. Launch Shortcuts. Invoke the shortcut. Verify that the copy count goes to zero and doesn't blank out.
+
 * Launch DeskTop, ensure it copies itself to RAMCard. Configure a shortcut set to Copy to RAMCard at first use. Invoke the shortcut. Verify that it correctly copies to the RAMCard and runs.
 
 * Launch DeskTop, ensure it copies itself to RAMCard. Modify a shortcut. Verify that no prompt is shown. Power cycle and launch DeskTop. Verify that the shortcut modifications are present.
@@ -1755,8 +1759,16 @@ The following steps exercise the menu as "drop down" using the keyboard to initi
 
 # Mouse Keys - covered by `tests/mouse_keys.lua`
 
-* Enter MouseKeys mode (Open-Apple+Solid-Apple+Space). Using the Left, Right, Up and Down Arrow keys to move the mouse and the Solid-Apple (or Option) key as the mouse button, "pull down" a menu and select an item. Verify that after the item is selected that MouseKeys mode is still active. Press Escape to exit MouseKeys mode.
-* Enter MouseKeys mode (Open-Apple+Solid-Apple+Space). Using the Left, Right, Up and Down Arrow keys to move the mouse and the Solid-Apple (or Option) key as the mouse button, "drop down" a menu and select an item. Verify that after the item is selected that MouseKeys mode is still active. Press Escape to exit MouseKeys mode.
+Mouse Keys controls:
+* Enter Mouse Keys mode: Open-Apple+Solid-Apple+Space
+* Move: Arrow keys
+* Click: Space bar
+* Start a drag: Comma
+* End a drag: Period
+* Exit Mouse Keys mode: Escape
+
+* Enter MouseKeys mode. "Pull down" a menu (using Comma) and select an item (using Period). Verify that after the item is selected that MouseKeys mode is still active. Press Escape to exit MouseKeys mode.
+* Enter MouseKeys mode. "Drop down" a menu (using Space) and select an item (using Space). Verify that after the item is selected that MouseKeys mode is still active. Press Escape to exit MouseKeys mode.
 
 * Perform the following tests in DeskTop using Mouse Keys mode:
   * Use the arrow keys to move the mouse to the top, bottom, left, and right edges of the screen. Verify that the mouse is clamped to the edges and does not wrap.

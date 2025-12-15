@@ -11,9 +11,15 @@ Project Page: https://github.com/a2stuff/a2d
 * Eliminate cursor flickering when mouse is moved.
 * Improve visibility of button flashing using VBL.
 * Adjust movement scaling in MouseKeys mode.
+* Change MouseKeys mode to make dragging easier and support modifiers:
+  * Space clicks the mouse button
+  * Comma presses and holds the mouse button
+  * Period releases the mouse button
+  * Solid Apple is now just a modifier as normal
 
 ### Launcher
 
+* Fix crash after 40 restarts.
 
 ### DeskTop
 
@@ -32,9 +38,13 @@ Project Page: https://github.com/a2stuff/a2d
 * Add Apple+Escape as shortcut to clear selection.
 * Prevent volume icon flicker on startup with empty Disk II drives.
 * Don't show About dialog when Ctrl+Shift+2 is pressed.
+* Fix hang after 60 restarts.
+* Fix error shown after non-empty directory fails to delete.
+* Fix hang after non-menu shortcut if window fails to open.
 
 ### Selector
 
+* Fix potential hang after 30 restarts.
 
 ### Disk Copy
 

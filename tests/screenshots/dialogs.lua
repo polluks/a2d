@@ -2,13 +2,15 @@
 
 DISKARGS="-hard1 $HARDIMG -flop1 res/prodos_floppy1.dsk -flop2 res/prodos_floppy2.dsk"
 
-======================================== ENDCONFIG ]]--
+======================================== ENDCONFIG ]]
+
+a2d.ConfigureRepaintTime(1)
 
 --[[============================================================
 
   Dump all the dialogs
 
-  ============================================================]]--
+  ============================================================]]
 
 --------------------------------------------------
 -- Apple Menu
@@ -101,7 +103,8 @@ test.Step(
     test.Snap("Special > Format Disk... - Confirm erase")
 
     -- confirm format
-    apple2.ReturnKey() -- not a2d.DialogOK() because usual wait is too ong
+    a2d.DialogOK({no_wait=true})
+    emu.wait(0.2)
     test.Snap("Special > Format Disk... - Format in progress")
 
     return test.PASS
@@ -135,7 +138,8 @@ test.Step(
     test.Snap("Special > Erase Disk... - Confirm erase")
 
     -- confirm erase
-    apple2.ReturnKey() -- not a2d.DialogOK() because usual wait is too ong
+    a2d.DialogOK({no_wait=true})
+    emu.wait(0.15)
     test.Snap("Special > Erase Disk... - Erase in progress")
 
     return test.PASS
@@ -151,7 +155,6 @@ test.Step(
     a2d.SelectPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
     test.Snap("Shortcuts > Add a Shortcut...")
-    a2d.OAShortcut('4') -- copy to RAMCard / on first use
     a2d.DialogOK()
     return test.PASS
 end)
@@ -191,25 +194,12 @@ end)
 -- Disk Copy
 --------------------------------------------------
 
--- BUG: This managed to make a "No device connected" error????
--- with nothing in floppy drives
---[[
-  test.Step(
-  "Special > Check All Drives...",
-  function()
-  a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_CHECK_ALL_DRIVES)
-  a2d.WaitForRestart()
-  test.Snap("Special > Check All Drives...")
-  return test.PASS
-  end)
-]]--
-
 test.Step(
   "Special > Copy Disk...",
   function()
     a2d.ClearSelection()
     a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_COPY_DISK - 2)
-    a2d.WaitForRestart()
+    a2d.WaitForDesktopReady()
 
     -- "Disk Copy"
     a2d.InvokeMenuItem(3, 2)
@@ -267,9 +257,9 @@ test.Step(
 
     -- back to desktop
     a2d.DialogOK()
-    a2d.WaitForRestart() -- scanning drives
+    emu.wait(10) -- scanning drives
     a2d.OAShortcut('Q')
-    a2d.WaitForRestart()
+    a2d.WaitForDesktopReady()
     a2d.DialogOK() -- dismiss "two volumes with the same name"
 
     return test.PASS
@@ -278,12 +268,18 @@ end)
 test.Step(
   "Selector",
   function()
+    a2d.DeletePath("/A2.DESKTOP/LOCAL")
+    a2d.Reboot()
+    a2d.WaitForDesktopReady()
+
     a2d.ToggleOptionCopyToRAMCard()
     a2d.ToggleOptionShowShortcutsOnStartup()
+    a2d.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="use"})
     a2d.Reboot()
+    a2d.WaitForDesktopReady()
 
     -- Launcher: Copying to RAMCard...
-    emu.wait(10) -- copying is slow
+    emu.wait(5) -- copying is slow
     test.Snap("Selector - Copying app to RAMCard...")
 
     -- Shortcuts dialog

@@ -2,15 +2,24 @@
 
   Test Utilities
 
-  ============================================================]]--
+  ============================================================]]
 
 local test = {}
 
+local skip_count = emu.subst_env("$SKIP_COUNT")
+if skip_count == "" then
+  skip_count = 0
+else
+  skip_count = tonumber(skip_count)
+end
+
 local test_name = emu.subst_env("$TEST_NAME")
 -- Convert from "wildcard" pattern (with * and ?) to Lua pattern
-local test_pattern = "^" ..
+local test_patterns = {}
+for chunk in test_name:gmatch("([^|]+)") do
+  local pattern  = "^" ..
   string.gsub(
-    test_name, "([%^$()%%.%[%]*+%-?])", -- pattern special characters
+    chunk, "([%^$()%%.%[%]*+%-?])", -- pattern special characters
     function(s)
       if s == "*" then
         return ".*"
@@ -20,6 +29,8 @@ local test_pattern = "^" ..
         return "%" .. s
       end
   end) .. "$"
+  table.insert(test_patterns, pattern)
+end
 
 test.count = 0
 
@@ -37,10 +48,23 @@ end
 
 -- test.Step("do a thing", function() ... end)
 function test.Step(title, func)
-  if test_name ~= "" and not string.match(title, test_pattern) then
-    return
+  if #test_patterns > 0 then
+    local match = false
+    for i,pattern in ipairs(test_patterns) do
+      if string.match(title, pattern) then
+        match = true
+        break
+      end
+    end
+    if not match then
+      return
+    end
   end
   test.count = test.count+1
+  if skip_count > 0 then
+    skip_count = skip_count - 1
+    return
+  end
 
   print("-- " .. title)
   local status, err = pcall(func)
@@ -67,13 +91,6 @@ end
 
 function test.Snap(opt_title)
   snap(opt_title)
-end
-
-function test.MultiSnap(frames, opt_title)
-  for i=1,frames do
-    snap(opt_title)
-    emu.wait(1/60)
-  end
 end
 
 --------------------------------------------------
@@ -126,6 +143,20 @@ end
 
 function test.ExpectLessThanOrEqual(a, b, message, options, level)
   test.Expect(a <= b, message .. " - actual " .. format(a) .. " should be <= " .. format(b), options, inc(level))
+end
+
+function test.ExpectGreaterThan(a, b, message, options, level)
+  test.Expect(a > b, message .. " - actual " .. format(a) .. " should be > " .. format(b), options, inc(level))
+end
+
+function test.ExpectGreaterThanOrEqual(a, b, message, options, level)
+  test.Expect(a >= b, message .. " - actual " .. format(a) .. " should be >= " .. format(b), options, inc(level))
+end
+
+function test.ExpectError(pattern, func, message, options, level)
+  local status, err = pcall(func)
+  test.Expect(not status, "saw no error; " .. message, options, inc(level))
+  test.Expect(string.match(err, pattern), message .. ", error was: " .. err, options, inc(level))
 end
 
 --------------------------------------------------

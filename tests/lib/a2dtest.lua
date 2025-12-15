@@ -2,10 +2,11 @@
 
   A2D-specific Test Utilities
 
-  ============================================================]]--
+  ============================================================]]
 
 local a2dtest = {}
 
+local util = require("util")
 local apple2 = require("apple2")
 local a2d = require("a2d")
 local mgtk = require("mgtk")
@@ -126,20 +127,29 @@ end
 
 function a2dtest.ExpectMenuNotHighlighted()
   for col = 0,apple2.SCREEN_COLUMNS-1 do
-    test.ExpectEquals(apple2.GetDHRByte(0, col), 0x7F, "Menu should not be highlighted", 1)
+    test.ExpectEquals(apple2.GetDHRByte(0, col), 0x7F, "Menu should not be highlighted", {}, 1)
   end
 end
 
 function a2dtest.ExpectClockVisible()
-  test.ExpectNotEquals(apple2.GetDHRByte(4, 78), 0x7F, "Clock should be visible", 1)
+  test.ExpectNotEquals(apple2.GetDHRByte(4, 78), 0x7F, "Clock should be visible", {}, 1)
 end
 
 --------------------------------------------------
 -- MGTK-based helpers
 --------------------------------------------------
 
--- TODO: This changes if calling from DeskTop vs. Selector
 local bank_offset = 0x10000
+
+function a2dtest.SetBankOffsetForDeskTopModule()
+  bank_offset = 0x10000
+end
+function a2dtest.SetBankOffsetForDiskCopyModule()
+  bank_offset = 0x10000
+end
+function a2dtest.SetBankOffsetForSelectorModule()
+  bank_offset = 0x00000
+end
 
 function a2dtest.GetFrontWindowDragCoords()
   local window_id = mgtk.FrontWindow()
@@ -186,15 +196,39 @@ function a2dtest.GetFrontWindowTitle()
   return mgtk.GetWindowName(window_id, bank_offset)
 end
 
+-- returns x,y,width,height
 function a2dtest.GetFrontWindowContentRect()
   local winfo = bank_offset + mgtk.GetWinPtr(mgtk.FrontWindow())
   local port = winfo + 20
   local vx,vy = ram_s16(port + 0), ram_s16(port + 2)
   local x1,y1 = ram_s16(port + 8), ram_s16(port + 10)
   local x2,y2 = ram_s16(port + 12), ram_s16(port + 14)
-  return {vx, vy, (x2-x1), (y2-y1)}
+  return vx, vy, (x2-x1), (y2-y1)
 end
 
+function a2dtest.GetFrontWindowRightScrollArrowCoords()
+  local x,y,w,h = a2dtest.GetFrontWindowContentRect()
+  return x + w - 10, y + h + 5
+end
+
+function a2dtest.GetFrontWindowUpScrollArrowCoords()
+  local x,y,w,h = a2dtest.GetFrontWindowContentRect()
+  return x + w + 10, y + 5
+end
+
+function a2dtest.GetFrontWindowScrollOptions()
+  local winfo = bank_offset + mgtk.GetWinPtr(mgtk.FrontWindow())
+  local hscroll = ram_u8(winfo + 4)
+  local vscroll = ram_u8(winfo + 5)
+  return hscroll, vscroll
+end
+
+function a2dtest.GetFrontWindowScrollPos()
+  local winfo = bank_offset + mgtk.GetWinPtr(mgtk.FrontWindow())
+  local hthumbpos = ram_u8(winfo + 7)
+  local vthumbpos = ram_u8(winfo + 9)
+  return hthumbpos, vthumbpos
+end
 
 --------------------------------------------------
 
@@ -219,6 +253,57 @@ end
 
 function a2dtest.ExpectAlertNotShowing()
   test.Expect(not a2dtest.IsAlertShowing(), "an alert should not be showing", nil, 1)
+end
+
+function a2dtest.WaitForAlert(options)
+  util.WaitFor("alert", a2dtest.IsAlertShowing, options)
+end
+
+--------------------------------------------------
+
+function a2dtest.ExpectNotHanging()
+  local dhr = a2dtest.SnapshotDHRWithoutClock()
+  a2d.OpenMenu(a2d.APPLE_MENU)
+  local new = a2dtest.SnapshotDHRWithoutClock()
+  test.Expect(not a2dtest.CompareDHR(dhr, new), "about dialog should have shown", {snap=true}, 1)
+  apple2.EscapeKey()
+  a2d.WaitForRepaint()
+  local new2 = a2dtest.SnapshotDHRWithoutClock()
+  test.Expect(a2dtest.CompareDHR(dhr, new2), "about dialog should have closed", {snap=true}, 1)
+end
+
+--------------------------------------------------
+
+function a2dtest.MultiSnap(frames, opt_title)
+  local last = nil
+  for i=1,frames/2 do
+    local dhr = a2dtest.SnapshotDHRWithoutClock()
+    if not last or not a2dtest.CompareDHR(last, dhr) then
+      test.Snap(opt_title)
+      last = dhr
+    end
+    emu.wait(2/60)
+  end
+end
+
+--------------------------------------------------
+
+function a2dtest.GetSelectedIconName()
+  local icons = a2d.GetSelectedIcons()
+  if #icons == 0 then
+    error("Selection is empty", 2)
+  end
+  local icon = icons[1]
+  return icon.name
+end
+
+function a2dtest.GetSelectedIconCoords()
+  local icons = a2d.GetSelectedIcons()
+  if #icons == 0 then
+    error("Selection is empty", 2)
+  end
+  local icon = icons[1]
+  return icon.x+10, icon.y+5
 end
 
 --------------------------------------------------

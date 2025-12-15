@@ -3,13 +3,15 @@
 
   Generic utilities for Apple II
 
-  ============================================================]]--
+  ============================================================]]
 
 local apple2 = {
   SCREEN_HEIGHT = 192,
   SCREEN_WIDTH = 560,
   SCREEN_COLUMNS = 80,
 }
+
+local util = require("util")
 
 local machine = manager.machine
 
@@ -58,7 +60,7 @@ end
 local scan_for_mouse = false
 if machine.system.name:match("^apple2e") then
   -- Apple IIe
-  -- * mouse card required
+  -- * mouse card required (if mouse is used)
   -- * many possible aux memory devices
   scan_for_mouse = true
   auxram = emu.item(get_device("^:aux:").items["0/m_ram"])
@@ -165,14 +167,16 @@ else
   error("Unknown model: " .. machine.system.name)
 end
 
-if scan_for_mouse then
-  local mousedev = get_device("^:sl.:mouse$").tag
-  -- TODO: Allow operation without a mouse
-  mouse = {
-    x = { port = mousedev .. ":a2mse_x",      field = "Mouse X" },
-    y = { port = mousedev .. ":a2mse_y",      field = "Mouse Y" },
-    b = { port = mousedev .. ":a2mse_button", field = "Mouse Button" },
-  }
+function EnsureMouse()
+  if scan_for_mouse then
+    local mousedev = get_device("^:sl.:mouse$").tag
+    mouse = {
+      x = { port = mousedev .. ":a2mse_x",      field = "Mouse X" },
+      y = { port = mousedev .. ":a2mse_y",      field = "Mouse Y" },
+      b = { port = mousedev .. ":a2mse_button", field = "Mouse Button" },
+    }
+    scan_for_mouse = false
+  end
 end
 
 --------------------------------------------------
@@ -231,7 +235,7 @@ end
   IIc: bit 5 = "Bootup speed": 0="Standard", 1="4MHz"
 
   IIgs: bits 0-7 = "CPU type": 0="Standard", 1="7MHz ZipGS", 3="8MHz ZipGS", 5="12MHz ZipGS", 7="16MHz ZipGS"
-]]--
+]]
 
 
 
@@ -251,7 +255,7 @@ end
     "Color algorithm" 00_01110000
     "Lores artifacts" 00_10000000
     "Text color"      11_00000000
-  ]]--
+  ]]
 
 
 local function SetVideoConfig(field_name, value, mask, shift)
@@ -535,6 +539,31 @@ function apple2.ResetMouse()
   mouse_y = 0
 end
 
+function apple2.PressMouseButton()
+  EnsureMouse()
+  local field = get_field(mouse.b.port, mouse.b.field)
+  field:set_value(1)
+  emu.wait(1/60)
+end
+
+function apple2.ReleaseMouseButton()
+  EnsureMouse()
+  local field = get_field(mouse.b.port, mouse.b.field)
+  field:clear_value()
+  emu.wait(1/60)
+end
+
+function apple2.ClickMouseButton()
+  apple2.PressMouseButton()
+  apple2.ReleaseMouseButton()
+end
+
+function apple2.DoubleClickMouseButton()
+  apple2.ClickMouseButton()
+  emu.wait(10/60)
+  apple2.ClickMouseButton()
+end
+
 function apple2.MoveMouse(x, y)
   --[[
     reading:
@@ -548,7 +577,9 @@ function apple2.MoveMouse(x, y)
     # but there's also scaling. Ugh.
 
 
-  ]]--
+  ]]
+
+  EnsureMouse()
 
   local MAX_DELTA = 127
 
@@ -561,7 +592,7 @@ function apple2.MoveMouse(x, y)
       -- print(machine.ioport.ports[mouse.x.port]:read())
     end
   until delta_x == 0
-  emu.wait(0.5)
+  emu.wait(1)
 
   repeat
     local delta_y = clamp(y - mouse_y, -MAX_DELTA, MAX_DELTA)
@@ -572,7 +603,7 @@ function apple2.MoveMouse(x, y)
       -- print(machine.ioport.ports[mouse.y.port]:read())
     end
   until delta_y == 0
-  emu.wait(0.5)
+  emu.wait(1)
 end
 
 --------------------------------------------------
@@ -584,13 +615,16 @@ end
 -- constantly. Instead, call with explicit bank selection in the
 -- address.
 
--- Note that internally MAME models LC memory as:
+-- Note that internally MAME models LC memory on the IIe as:
 -- * $D000/1 is presented at $C000
 -- * $D000/2 is presented at $D000
 -- * $E000 is presented at $F000
 -- * $F000 is presented at $E000
 -- For Apple IIe devices, Auxiliary RAM is a separate device. For
 -- others, it just exists at 0x10000 and up.
+--
+-- The IIgs swaps E/F, but not the two D banks!
+
 
 -- The ReadRAMDevice/WriteRAMDevice calls normalize this; call with
 -- 0x0nnnn to access Main RAM and 0x1nnnn to acces Aux RAM. For
@@ -598,11 +632,21 @@ end
 
 local ram = emu.item(machine.devices[":ram"].items["0/m_pointer"])
 
-function apple2.ReadRAMDevice(addr)
+local function swizzle(addr)
   -- Assume LCBANK1 is desired
-  if (addr & 0xC000) ~= 0 then
-    addr = addr ~ 0x1000
+  if machine.system.name:match("^apple2gs") then
+    if (addr & 0xE000) == 0xE000 then
+      return addr ~ 0x1000
+    end
+  elseif (addr & 0xC000) == 0xC000 then
+    return addr ~ 0x1000
   end
+  --print("not swizzled")
+  return addr
+end
+
+function apple2.ReadRAMDevice(addr)
+  addr = swizzle(addr)
 
   -- Apple IIe exposes Aux RAM as a separate device
   if addr >= 0x10000 and auxram ~= nil then
@@ -613,10 +657,7 @@ function apple2.ReadRAMDevice(addr)
 end
 
 function apple2.WriteRAMDevice(addr, value)
-  -- Assume LCBANK1 is desired
-  if (addr & 0xC000) ~= 0 then
-    addr = addr ~ 0x1000
-  end
+  addr = swizzle(addr)
 
   -- Apple IIe exposes Aux RAM as a separate device
   if addr >= 0x10000 and auxram ~= nil then
@@ -842,24 +883,89 @@ function apple2.SetDHRByte(row, col, value)
   apple2.WriteRAMDevice(addr + 0x10000 * (1-bank), value)
 end
 
-function apple2.GrabTextScreen()
+function IterateTextScreen(char_cb, row_cb)
   local is80 = apple2.ReadSSW("RD80VID") > 127
-  local screen = ""
+  local isAlt = apple2.ReadSSW("RDALTCHAR") > 127
   for row = 0,23 do
     local base = 0x400 + (row - math.floor(row/8) * 8) * 0x80 + 40 * math.floor(row/8)
     for col = 0,39 do
       if is80 then
-        byte = apple2.ReadRAMDevice(0x10000 + base + col)
-        byte = byte & 0x7F
-        screen = screen .. string.format("%c", byte)
+        char_cb(apple2.ReadRAMDevice(0x10000 + base + col), isAlt)
       end
-      byte = apple2.ReadRAMDevice(base + col)
-      byte = byte & 0x7F
-      screen = screen .. string.format("%c", byte)
+      char_cb(apple2.ReadRAMDevice(base + col), isAlt)
     end
-    screen = screen .. "\n"
+    row_cb()
   end
+end
+function apple2.GrabTextScreen()
+  -- Apple IIe and later, non-MouseText
+  -- 0x00-0x1F: Inverse  @ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_
+  -- 0x20-0x3F: Inverse  !"#$%&'()*+,-./0123456789:;<=>?@
+  -- 0x40-0x5F: Flashing @ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_ (ALTCHAR - MouseText)
+  -- 0x60-0x7F: Flashing !"#$%&'()*+,-./0123456789:;<=>?@ (ALTCHAR - inverse lower)
+  -- 0x80-0x9F: Normal   @ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_
+  -- 0xA0-0xBF: Normal   !"#$%&'()*+,-./0123456789:;<=>?@
+  -- 0xC0-0xDF: Normal   @ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_
+  -- 0xE0-0xFF: Normal   `abcdefghijklmnopqrstuvwxyz{|}~ `
+
+  local screen = ""
+  IterateTextScreen(
+    function(byte, isAlt)
+      if     byte < 0x20 then -- 0x00-0x1F: inverse upper
+        byte = byte + 0x40
+      elseif byte < 0x40 then -- 0x20-0x3F: inverse punctuation
+        byte = byte
+      elseif byte < 0x60 then -- 0x40-0x5F: flashing upper / MouseText
+        if not isAlt then
+          byte = byte
+        else
+          byte = 0x20 -- TODO: MouseText mapping
+        end
+      elseif byte < 0x80 then -- 0x60-0x7F: flashing punctuation / inverse lower
+        if not isAlt then
+          byte = byte - 0x40
+        else
+          byte = byte
+        end
+      elseif byte < 0xA0 then -- 0x80-0x9F: normal upper
+        byte = byte - 0x40
+      else -- 0xA0-0xFF: normal punctuation / upper / lower
+        byte = byte - 0x80
+      end
+      screen = screen .. string.format("%c", byte)
+    end,
+    function()
+      screen = screen .. "\n"
+  end)
   return screen
+end
+
+function apple2.GrabInverseText()
+  local str = ""
+  IterateTextScreen(
+    function(byte, isAlt)
+      if     byte < 0x20 then -- 0x00-0x1F: inverse upper
+        byte = byte + 0x40
+      elseif byte < 0x40 then -- 0x20-0x3F: inverse punctuation
+        byte = byte
+      elseif byte < 0x60 then -- 0x40-0x5F: flashing upper / alt: MouseText
+        return
+      elseif byte < 0x80 then -- 0x60-0x7F: flashing punctuation / alt: inverse lower
+        if not isAlt then
+          return
+        else
+          byte = byte
+        end
+      elseif byte < 0xA0 then -- normal upper
+        return
+      else -- normal punctuation / upper / lower
+        return
+      end
+      str = str .. string.format("%c", byte)
+    end,
+    function()
+  end)
+  return str
 end
 
 function apple2.SnapshotDHR()
@@ -870,6 +976,57 @@ function apple2.SnapshotDHR()
     end
   end
   return bytes
+end
+
+--------------------------------------------------
+
+function apple2.IsCrashedToMonitor()
+  local cpu = manager.machine.devices[":maincpu"]
+  local sp = cpu.state.SP.value
+  if sp == 0x1FE and apple2.ReadMemory(sp) == 0x4E and apple2.ReadMemory(sp+1) == 0xEB then
+    return true
+  else
+    return false
+  end
+end
+
+--------------------------------------------------
+
+-- TODO: Implement BitsyInvokePath (tab to volume, then iterate on path segments)
+
+function apple2.WaitForBitsy(options)
+  util.WaitFor(
+    "Bitsy Bye",
+    function()
+      return apple2.GrabTextScreen():match("BITSY")
+    end,
+    options)
+end
+
+function apple2.BitsySelectSlotDrive(sd)
+  while apple2.GrabTextScreen():match("[^:]+") ~= sd do
+    apple2.TabKey()
+    emu.wait(5)
+  end
+end
+
+function apple2.BitsyInvokeFile(name)
+  while apple2.GrabInverseText() ~= name do
+    apple2.DownArrowKey()
+    emu.wait(1)
+  end
+  apple2.ReturnKey()
+end
+
+--------------------------------------------------
+
+function apple2.WaitForBasicSystem(options)
+  util.WaitFor(
+    "Basic System",
+    function()
+      return apple2.GrabTextScreen():match("PRODOS BASIC")
+    end,
+    options)
 end
 
 --------------------------------------------------

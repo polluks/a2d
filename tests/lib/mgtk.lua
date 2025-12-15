@@ -2,7 +2,7 @@
 
   MouseGraphics ToolKit interaction via automation hook
 
-  ============================================================]]--
+  ============================================================]]
 
 local mgtk = {}
 
@@ -117,6 +117,13 @@ mgtk.part = {
         page_down       = 4,
         page_right      = 4,
         thumb           = 5,
+}
+
+mgtk.scroll = {
+        option_none      = 0,
+        option_present   = 1 << 7,
+        option_thumb     = 1 << 6,
+        option_active    = 1 << 0,
 }
 
 ------------------------------------------------------------
@@ -252,6 +259,9 @@ end
 function mgtk.GetWindowName(window_id, bank_offset)
   local winfo = bank_offset + mgtk.GetWinPtr(window_id)
   local addr = apple2.ReadRAMDevice(winfo + 2) | (apple2.ReadRAMDevice(winfo + 3) << 8)
+  if addr == 0 then
+    return nil
+  end
   return apple2.GetPascalString(addr + bank_offset)
 end
 
