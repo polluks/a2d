@@ -113,7 +113,7 @@ end)
 test.Step(
   "Double-click on selection in inactive window",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU", true) -- leave parent open
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU", {leave_parent=true})
     a2d.CycleWindows() -- put volume in foreground
     a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.FIND_FILES)
     apple2.Type("CAL*")
@@ -160,7 +160,8 @@ test.Step(
     a2d.DialogOK()
     emu.wait(10) -- searching
     test.Snap("verify no crash")
-    a2d.RenamePath("/ABCDEF123456789", "/TESTS")
+    a2d.CloseWindow()
+    a2d.RenamePath("/ABCDEF123456789", "TESTS")
 end)
 
 --[[

@@ -788,7 +788,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 * Eject the startup disk. Select an accessory (e.g. Calculator) from the Apple Menu. Verify that an alert is shown prompting to reinsert the startup disk. Insert the startup disk and click OK. Verify that the accessory launches.
 * Eject the startup disk. Select a folder (e.g. Control Panels) from the Apple Menu. Verify that an alert is shown prompting to reinsert the startup disk. Insert the startup disk and click OK. Verify that the folder window opens.
 
-## Shortcuts (in DeskTop)
+## Shortcuts (in DeskTop) - covered by `tests/desktop/shortcuts*.lua`
 
 * Delete the `LOCAL/SELECTOR.LIST` file from the startup disk, if it was present. Launch DeskTop. Verify that DeskTop does not hang.
 * Delete the `LOCAL/SELECTOR.LIST` file from the startup disk, if it was present. Launch DeskTop. Verify that Shortcuts > Edit a Shortcut..., Shortcuts > Delete a Shortcut..., and Shortcuts > Run a Shortcut... are disabled, and the menu has no separator. Add a shortcut. Verify that Shortcuts > Edit a Shortcut..., Shortcuts > Delete a Shortcut..., and Shortcuts > Run a Shortcut... are now enabled, and the menu has a separator, and the shortcut appears. Delete the shortcut. Verify that the menu has its initial state again.
@@ -935,7 +935,7 @@ For the following cases, open `/TESTS` and `/TESTS/FOLDER`:
 
 * Launch DeskTop. Insert a non-formatted disk into a SmartPort drive (e.g. Virtual ][ OmniDisk). Verify that a prompt is shown to format the disk. Click OK. Enter a name, and click OK. Verify that the correct slot and drive are shown in the confirmation prompt.
 
-## Keyboard
+## Keyboard - covered by `tests/desktop/keyboard*.lua`
 
 * Close all windows. Start typing a volume name. Verify that a prefix-matching volume, or the subsequent volume (in lexicographic order) is selected, or the last volume (in lexicographic order).
 * Close all windows. Start typing a volume name. Move the mouse. Start typing another filename. Verify that the matching is reset.
@@ -1706,7 +1706,7 @@ This covers:
 
 * Double-click an item. Verify that the appropriate action button flashes.
 
-# Menus
+# Menus - covered by `tests/desktop/menus2.lua`
 
 * Click to open a menu. Without clicking again, move the mouse pointer up and down over the menu items, while simultaneously tapping the 'A' key. Verify that the key presses do not cause other menus to open instead.
 * Click to open a menu. Move the mouse over menu bar items and menu items. Verify that the highlight changes immediately when the mouse pointer hot spot is over the next item, not delayed by one movement. For example, if the mouse moves down and the next item doesn't highlight, moving the mouse right also shouldn't cause it to highlight.
