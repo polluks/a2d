@@ -284,12 +284,10 @@ local function CheckSelectionName(name, options)
 
   local selected = a2d.GetSelectedIcons()
   if #selected ~= 1 then
-    manager.machine.video:snapshot()
     error(string.format("Failed to select %q - have %d selected",
                         name, #selected), options.level)
   end
   if name:lower() ~= selected[1].name:lower() then
-    manager.machine.video:snapshot()
     error(string.format("Failed to select %q - have %q selected",
                         name, selected[1].name), options.level)
   end
@@ -311,6 +309,7 @@ function a2d.SelectAndOpen(name, options)
   a2d.Select(name, options)
   if options.close_current then
     a2d.OpenSelectionAndCloseCurrent()
+    a2d.WaitForRepaint()
   else
     a2d.OpenSelection()
   end
@@ -341,7 +340,11 @@ function a2d.OpenPath(path, options)
     options.close_current = true
   end
 
-  a2d.CloseAllWindows()
+  if options.keep_windows then
+    a2d.FocusDesktop()
+  else
+    a2d.CloseAllWindows()
+  end
   for segment in path:gmatch("([^/]+)") do
     a2d.SelectAndOpen(segment, options)
   end
@@ -356,6 +359,8 @@ function a2d.SelectPath(path, options)
   local base, name = a2d.SplitPath(path)
   if base ~= "" then
     a2d.OpenPath(base, options)
+  elseif options.keep_windows then
+    a2d.FocusDesktop()
   else
     a2d.CloseAllWindows()
   end
@@ -365,6 +370,20 @@ end
 function a2d.ClearSelection()
   apple2.PressOA()
   apple2.EscapeKey()
+  apple2.ReleaseOA()
+  a2d.WaitForRepaint()
+end
+
+function a2d.FocusDesktop()
+  apple2.PressOA()
+  apple2.ControlKey("D")
+  apple2.ReleaseOA()
+  a2d.WaitForRepaint()
+end
+
+function a2d.FocusActiveWindow()
+  apple2.PressOA()
+  apple2.ControlKey("W")
   apple2.ReleaseOA()
   a2d.WaitForRepaint()
 end
@@ -387,27 +406,33 @@ function a2d.DialogCancel(options)
   end
 end
 
-function a2d.RenameSelection(newname)
+function a2d.RenameSelection(newname, options)
+  options = default_options(options)
   apple2.ReturnKey()
   a2d.ClearTextField()
   apple2.Type(newname)
   apple2.ReturnKey()
   emu.wait(5) -- I/O
-  CheckSelectionName(newname)
+  CheckSelectionName(newname, options)
 end
 
-function a2d.RenamePath(path, newname)
-  a2d.SelectPath(path)
-  a2d.RenameSelection(newname)
+function a2d.RenamePath(path, newname, options)
+  options = default_options(options)
+  a2d.SelectPath(path, options)
+  a2d.RenameSelection(newname, options)
 end
 
-function a2d.DuplicateSelection(newname)
+function a2d.DuplicateSelection(newname, options)
+  options = default_options(options)
+  if newname == nil then
+    error("DuplicateSelection: nil passed as newname", options.level)
+  end
   a2d.OAShortcut("D")
   a2d.ClearTextField()
   apple2.Type(newname)
   apple2.ReturnKey()
   a2d.WaitForRepaint()
-  CheckSelectionName(newname)
+  CheckSelectionName(newname, options)
 end
 
 function a2d.DuplicatePath(path, newname)
@@ -458,8 +483,9 @@ function a2d.FormatVolume(name, opt_new_name)
   emu.wait(5) -- I/O
 end
 
-function a2d.EraseVolume(name, opt_new_name)
-  a2d.SelectPath("/"..name)
+function a2d.EraseVolume(name, opt_new_name, options)
+  options = default_options(options)
+  a2d.SelectPath("/"..name, options)
   a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_ERASE_DISK)
   apple2.Type(opt_new_name or name)
   a2d.DialogOK()
@@ -627,6 +653,7 @@ end
 
 function a2d.InMouseKeysMode(func)
   a2d.EnterMouseKeysMode()
+  local last_x, last_y
   local exit = func({
       ButtonDown = a2d.MouseKeysButtonDown,
       ButtonUp = a2d.MouseKeysButtonUp,
@@ -639,14 +666,37 @@ function a2d.InMouseKeysMode(func)
       Left = a2d.MouseKeysLeft,
       Right = a2d.MouseKeysRight,
 
-      Home = a2d.MouseKeysHome,
-      MoveToApproximately = a2d.MouseKeysMoveToApproximately,
-      MoveByApproximately = a2d.MouseKeysMoveByApproximately,
+      Home = function()
+        a2d.MouseKeysHome()
+        last_x, last_y = 0, 0
+      end,
+
+      MoveToApproximately = function(x, y)
+        if last_x == nil then
+          a2d.MouseKeysMoveToApproximately(x, y)
+        else
+          a2d.MouseKeysMoveByApproximately(x - last_x, y - last_y)
+        end
+        last_x, last_y = x, y
+      end,
+
+      MoveByApproximately = function(x, y)
+        a2d.MouseKeysMoveByApproximately(x, y)
+        if last_x ~= nil then
+          last_x = last_x + x
+          last_y = last_y + y
+        end
+      end,
+
   })
   -- Allow returning false to not explicitly exit, e.g. if we exit
   -- DeskTop by double-clicking an executable.
   if exit ~= false then
+    -- TODO: Without this, clicks can be treated as drags. Investigate!
+    emu.wait(10/60)
+
     a2d.ExitMouseKeysMode()
+
     -- TODO: Without this, ClearSelection triggers menu. Why is delay needed?
     emu.wait(10/60)
   end

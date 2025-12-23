@@ -64,7 +64,9 @@ if machine.system.name:match("^apple2e") then
   -- * mouse card required (if mouse is used)
   -- * many possible aux memory devices
   scan_for_mouse = true
-  auxram = emu.item(get_device("^:aux:").items["0/m_ram"])
+  if emu.subst_env("$CHECKAUXMEMORY") == "true" then
+    auxram = emu.item(get_device("^:aux:").items["0/m_ram"])
+  end
 
 elseif machine.system.name:match("^apple2c") then
   -- Apple IIc / Apple IIc Plus
@@ -165,6 +167,17 @@ elseif machine.system.name:match("^ace2200") then
   keyboard["Open Apple"].field = "Open F"
   keyboard["Solid Apple"].field = "Solid F"
   keyboard["Reset"].field = "RESET"
+elseif machine.system.name:match("^apple2p") then
+  -- minimal support for launcher testing
+  keyboard = {
+    ["Control"]     = { port = ":keyb_special", field = "Control"     },
+    ["Shift"]       = { port = ":keyb_special", field = "Left Shift"  },
+
+    ["Right Arrow"] = { port = ":X2", field = "→"      },
+    ["Down Arrow"]  = { port = ":X2", field = "↓"      },
+    ["Return"]      = { port = ":X4", field = "Return" },
+    ["Escape"]      = { port = ":X4", field = "Esc"    }
+  }
 else
   error("Unknown model: " .. machine.system.name)
 end
@@ -351,6 +364,9 @@ end
 
 function apple2.IsCapsLockOn()
   local key = keyboard["Caps Lock"]
+  if key == nil then
+    return false -- Apple ][+ compat
+  end
   local bits = get_port(key.port):read()
   return (bits & key.bits) ~= 0
 end
@@ -1017,14 +1033,14 @@ end
 
 function apple2.BitsySelectSlotDrive(sd)
   while apple2.GrabTextScreen():match("[^:]+") ~= sd do
-    apple2.TabKey()
+    apple2.ControlKey("I") -- for Apple ][+ compat
     emu.wait(5)
   end
 end
 
 function apple2.BitsyInvokeFile(name)
   while apple2.GrabInverseText() ~= name do
-    apple2.DownArrowKey()
+    apple2.RightArrowKey() -- for Apple ][+ compat
     emu.wait(1)
   end
   apple2.ReturnKey()
@@ -1039,6 +1055,51 @@ function apple2.WaitForBasicSystem(options)
       return apple2.GrabTextScreen():match("PRODOS BASIC")
     end,
     options)
+end
+
+--------------------------------------------------
+
+function apple2.IsMono()
+  --[[
+    IIgs border is 72 (left/right) x 40 (top/bottom) ... but the edge
+    pixels are blurred. So make the border black.
+    TODO: Something less hacky than this
+  ]]
+  if manager.machine.system.name:match("^apple2gs") then
+    apple2.WriteSSW("CLOCKCTL", 0)
+    emu.wait(2/60)
+  end
+
+  emu.wait_next_frame()
+
+  -- https://docs.mamedev.org/luascript/ref-core.html#video-manager
+  local bytes = manager.machine.video:snapshot_pixels()
+  local width, height = manager.machine.video:snapshot_size()
+
+  function pixel(x,y)
+    local a = string.byte(bytes, (x + y * width) * 4 + 0)
+    local b = string.byte(bytes, (x + y * width) * 4 + 1)
+    local g = string.byte(bytes, (x + y * width) * 4 + 2)
+    local r = string.byte(bytes, (x + y * width) * 4 + 3)
+    return r,g,b,a
+  end
+
+  local fr,fg,fb = pixel(0,0)
+
+  for y = 0, height-1 do
+    for x = 0, width-1 do
+      local r,g,b,a = pixel(x,y)
+      if r ~= g or r ~=b then
+        return false
+      end
+    end
+  end
+
+  return true
+end
+
+function apple2.IsColor()
+  return not apple2.IsMono()
 end
 
 --------------------------------------------------
