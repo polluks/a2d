@@ -448,17 +448,7 @@ InitDialog:
         ;; --------------------------------------------------
         ;; Draw dialog window
 
-        jsr     SetPortForDialog
-        MGTK_CALL MGTK::PaintRect, rect_erase_dialog_upper
-        MGTK_CALL MGTK::PaintRect, rect_erase_dialog_lower
-
-        MGTK_CALL MGTK::MoveTo, point_title
-        ldax    #label_quick_copy
-        bit     disk_copy_flag
-    IF NS
-        ldax    #label_disk_copy
-    END_IF
-        jsr     DrawStringCentered
+        jsr     DrawTitle
 
         BTK_CALL BTK::Draw, dialog_ok_button
         jsr     UpdateOKButton
@@ -627,7 +617,7 @@ dest_ok:
 
         ;; DOS 3.3?
         jsr     IsDOS33BootBlock
-       IF EQ
+       IF CC
         ldx     dest_drive_index
         lda     drive_unitnum_table,x
         tax                     ; slot/drive
@@ -931,6 +921,14 @@ do_jump:
         copy8   #MGTK::checkitem_check, checkitem_params::check
         MGTK_CALL MGTK::CheckItem, checkitem_params
 
+        FALL_THROUGH_TO DrawTitle
+.endproc ; SetCopyModeImpl
+CmdQuickCopy := SetCopyModeImpl::quick_copy
+CmdDiskCopy := SetCopyModeImpl::disk_copy
+
+;;; ============================================================
+
+.proc DrawTitle
         ;; Update dialog title
         jsr     SetPortForDialog
         MGTK_CALL MGTK::PaintRect, rect_erase_title
@@ -941,9 +939,7 @@ do_jump:
         ldax    #label_disk_copy
     END_IF
         TAIL_CALL DrawStringCentered
-.endproc ; SetCopyModeImpl
-CmdQuickCopy := SetCopyModeImpl::quick_copy
-CmdDiskCopy := SetCopyModeImpl::disk_copy
+.endproc ; DrawTitle
 
 ;;; ============================================================
 
@@ -1553,6 +1549,15 @@ next_device:
         CALL    main::GetDeviceBlocksUsingDriver, A=drive_unitnum_table,x, XY=addr ; result in X,Y
     END_IF
 
+        ;; MAME/CFFA2 will return $0000 for 33,554,432 byte image;
+        ;; detect this and use $FFFF instead.
+    IF X = #0
+      IF Y = #0
+        dex
+        dey
+      END_IF
+    END_IF
+
         ;; X,Y = block count
         tmp := $06
         stx     tmp
@@ -1681,7 +1686,7 @@ remainder:      .word   0              ; (out)
         bpl     show_name       ; ProDOS
 
         ASSERT_EQUALS auxlc::kSourceDiskFormatDOS33 & $40, $00
-        bvs     ret             ; DOS 3.3
+        bvc     ret             ; DOS 3.3
 
         lda     source_disk_format
         and     #$0F

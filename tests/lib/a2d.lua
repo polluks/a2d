@@ -428,6 +428,7 @@ function a2d.DuplicateSelection(newname, options)
     error("DuplicateSelection: nil passed as newname", options.level)
   end
   a2d.OAShortcut("D")
+  a2d.WaitForRepaint() -- extra, in case activation is needed
   a2d.ClearTextField()
   apple2.Type(newname)
   apple2.ReturnKey()
@@ -582,6 +583,12 @@ end
 function a2d.ToggleOptionPreserveCase()
   a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS")
   a2d.OAShortcut("4") -- Toggle "Preserve uppercase and lowercase in names"
+  a2d.CloseWindow()
+  a2d.CloseAllWindows()
+end
+function a2d.ToggleOptionShowInvisible()
+  a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS")
+  a2d.OAShortcut("5") -- Toggle "Show invisible files"
   a2d.CloseWindow()
   a2d.CloseAllWindows()
 end
@@ -808,6 +815,31 @@ function a2d.DragSelectMultipleVolumes()
       m.MoveByApproximately(-80, 130)
       m.ButtonUp()
       a2d.WaitForRepaint()
+  end)
+end
+
+function a2d.Drag(src_x, src_y, dst_x, dst_y, options)
+  a2d.InMouseKeysMode(function(m)
+      m.MoveToApproximately(src_x, src_y)
+      m.ButtonDown()
+      m.MoveToApproximately(dst_x, dst_y)
+
+      if options and options.oa_drop then
+        apple2.PressOA()
+      end
+      if options and options.sa_drop then
+        apple2.PressSA()
+      end
+
+      m.ButtonUp()
+
+      if options and options.oa_drop then
+        apple2.ReleaseOA()
+      end
+      if options and options.sa_drop then
+        apple2.ReleaseSA()
+      end
+
   end)
 end
 

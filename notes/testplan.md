@@ -19,7 +19,7 @@ When steps say to a path e.g. `/TESTS/FOLDER/SUBFOLDER`, open the volume then ea
 * Configure a system with a RAMCard, and ensure DeskTop is configured to copy to RAMCard on startup, but hasn't yet. Manually copy all DeskTop files to the RAMCard. Launch the copy of `DESKTOP.SYSTEM` on the RAMCard. Verify that it doesn't try to copy itself to that RAMCard.
 
 
-# DeskTop
+# DeskTop - covered by `tests/desktop/basics.lua`, `tests/desktop/duplicate_volumes.lua`, `tests/desktop/drives.lua`, `tests/desktop/max_icons.lua`,
 
 * Open a volume, open a folder, close just the volume window; re-open the volume, re-open the folder, ensure the previous window is activated.
 
@@ -109,10 +109,18 @@ When steps say to a path e.g. `/TESTS/FOLDER/SUBFOLDER`, open the volume then ea
 
 * Launch DeskTop. Select a volume icon. Drag it over an empty space on the desktop. Release the mouse button. Verify that the icon is moved.
 * Launch DeskTop. Select a volume icon. Drag it over an empty space on the desktop. Without releasing the mouse button, press the Escape key. Verify that the drag is canceled and the icon does not move.
+> This can not be (currently) tested in MAME.
+
 * Launch DeskTop. Select a volume icon. Drag it over an empty space on the desktop. Hold either Apple key or both Apple keys and release the mouse button. Verify that the drag is canceled and the icon does not move.
 * Launch DeskTop. Select a volume icon. Drag it over another icon on the desktop, which should highlight. Without releasing the mouse button, press the Escape key. Verify that the drag is canceled, the target icon is unhighlighted, and the dragged icon does not move.
+> This can not be (currently) tested in MAME.
+
 * Launch DeskTop. Select a file icon. Drag it over an empty space in the window. Without releasing the mouse button, press the Escape key. Verify that the drag is canceled and the icon does not move.
+> This can not be (currently) tested in MAME.
+
 * Launch DeskTop. Select a file icon. Drag it over a folder icon, which should highlight. Without releasing the mouse button, press the Escape key. Verify that the drag is canceled, the target icon is unhighlighted, and the dragged icon does not move.
+> This can not be (currently) tested in MAME.
+
 * Launch DeskTop. Clear selection. Hold both Open-Apple and Solid-Apple and start to drag a volume icon. Verify that the drag outline of the volume is shown.
 
 * Launch DeskTop. Open `/TESTS/FOLDER`. Start dragging `FLE` and do not release the button. Drag it over then off `SUBFOLDER`. Verify the folder highlights/unhighlights. Drag it over then off a volume icon. Verify that the volume icon highlights/unhighlights. Drag it over the folder icon again. Verify that the folder highlights.
@@ -1390,7 +1398,7 @@ Run these tests on a system without a real-time clock:
 
 * Open `/TESTS/FOLDER/`. Apple Menu > Find Files. Type `*` and click Search. Press Down Arrow once. Type Return. Press Down Arrow again. Verify that only one entry in the list appears highlighted.
 
-## Print Screen
+## Print Screen - partially covered by `tests/desk_acc/print_screen.lua`
 
 * Configure a system with an SSC in Slot 1 and an ImageWriter II. Invoke the Print Screen DA. Verify it prints a screenshot.
 > This can not be (currently) tested in MAME.
@@ -1470,7 +1478,7 @@ Prerequisite: In DeskTop, Apple Menu > Control Panels > Options, check Show Shor
 * Launch DeskTop. Create a shortcut for `/TESTS/ALIASES/DELETED.ALIAS`. Launch Shortcuts. Invoke the shortcut. Verify that an alert is shown.
 * Launch DeskTop. Create a shortcut for `/TESTS/ALIASES/BASIC.ALIAS`. Delete the alias. Launch Shortcuts. Invoke the shortcut. Verify that an alert is shown.
 
-# Disk Copy
+# Disk Copy - covered by `tests/disk_copy/*.lua`
 
 * Launch DeskTop. Special > Copy Disk.... File > Quit. Special > Copy Disk.... Ensure drive list is correct.
 
@@ -1539,7 +1547,7 @@ Prerequisite: In DeskTop, Apple Menu > Control Panels > Options, check Show Shor
 * Launch DeskTop. Run Special > Copy Disk. Trigger an alert with only OK (e.g. let a copy complete successfully). Verify that Escape key closes alert.
 * Launch DeskTop. Select 3 files and drag them to another volume. Drag the same 3 files to the other volume again. When the alert with Yes/No/All buttons appears, mouse down on the Yes button, drag the cursor off the button, and release the mouse button. Verify that nothing happens. Click Yes to allow the copy to continue. Repeat for No and All.
 
-# File Picker
+# File Picker - covered by `tests/file_picker.lua`
 
 This covers:
 
@@ -1606,7 +1614,7 @@ For Shortcuts's File > Run a Program... file picker:
 * Click the Drives button. Select a volume. Verify that the OK button is dimmed.
 * Select a folder. Verify that the OK button is dimmed.
 
-# Text Input Fields
+# Text Input Fields - covered by `tests/line_edit.lua`
 
 This covers:
  * DeskTop's modal name dialog, used in:
@@ -1675,7 +1683,7 @@ Watch out for:
  * Caret being placed in the wrong place by a click.
  * Mispaint when cleared with Control+X (or Clear key on IIgs)
 
-# List Box Controls
+# List Box Controls - covered by `tests/list_box.lua`
 
 This covers:
 * File Pickers
