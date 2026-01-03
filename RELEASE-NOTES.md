@@ -43,6 +43,11 @@ Project Page: https://github.com/a2stuff/a2d
 * Fix hang after non-menu shortcut if window fails to open.
 * Add Apple+Control+D as shortcut to focus desktop.
 * Add Apple+Control+W as shortcut to focus window.
+* Fix behavior after File > Duplicate failed due to space or storage type.
+* Set empty window maprect so that when restored with new file scrollbars are inactive.
+* Fix volume icon flicker after Check All Drives for removable disks.
+* Select volume icomn after Format/Erase.
+* Fix display of long device names in Format/Erase volume picker.
 
 ### Selector
 

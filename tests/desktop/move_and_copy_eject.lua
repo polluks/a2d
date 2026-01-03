@@ -5,6 +5,9 @@ DISKARGS="-hard1 $HARDIMG -flop1 res/floppy_with_files.dsk -flop2 res/prodos_flo
 
 ======================================== ENDCONFIG ]]
 
+local s6d1 = manager.machine.images[":sl6:diskiing:0:525"]
+local s6d2 = manager.machine.images[":sl6:diskiing:1:525"]
+
 a2d.ConfigureRepaintTime(1)
 
 --[[
@@ -20,15 +23,14 @@ a2d.ConfigureRepaintTime(1)
 test.Step(
   "File > Copy To with disk swapping",
   function()
-    local drive2 = apple2.GetDiskIIS6D2()
+    local drive2 = s6d2
     local dst = drive2.filename
     drive2:unload()
 
-    local drive = apple2.GetDiskIIS6D1()
+    local drive = s6d1
     local src = drive.filename
 
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_CHECK_ALL_DRIVES)
-    emu.wait(8)
+    a2d.CheckAllDrives()
 
     a2d.SelectPath("/WITH.FILES/LOREM.IPSUM")
     a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_COPY_TO)
@@ -53,21 +55,18 @@ test.Step(
     end
 
     emu.wait(8)
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_CHECK_ALL_DRIVES)
-    emu.wait(5)
+    a2d.CheckAllDrives()
 
     a2d.OpenPath("/FLOPPY2/LOREM.IPSUM")
 
     emu.wait(5)
     test.Snap("verify file contents")
 
+    -- cleanup
     a2d.CloseWindow()
-
     drive:unload()
     drive:load(src)
-
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_CHECK_ALL_DRIVES)
-    emu.wait(5)
+    a2d.CheckAllDrives()
 end)
 
 
@@ -81,7 +80,7 @@ end)
 test.Step(
   "Drag with disk ejected",
   function()
-    local drive = apple2.GetDiskIIS6D1()
+    local drive = s6d1
     local src = drive.filename
 
     a2d.SelectPath("/RAM1")

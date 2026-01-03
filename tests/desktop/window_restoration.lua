@@ -5,6 +5,8 @@ DISKARGS="-hard1 $HARDIMG -hard2 res/tests.hdv -flop1 res/prodos_floppy1.dsk"
 
 ======================================== ENDCONFIG ]]
 
+local s6d1 = manager.machine.images[":sl6:diskiing:0:525"]
+
 a2d.ConfigureRepaintTime(2)
 
 -- Need to ensure DESKTOP.FILE gets written out or window headers
@@ -134,13 +136,19 @@ test.Step(
     a2d.OpenPath("/FLOPPY1")
     a2d.Quit() -- to Bitsy Bye
 
-    apple2.GetDiskIIS6D1():unload()
+    local drive = s6d1
+    local image = drive.filename
+    drive:unload()
 
-    apple2.BitsyInvokeFile("PRODOS")
+    apple2.BitsyInvokePath("/A2.DESKTOP/PRODOS")
 
     -- TODO: Verify only polled once - watch drive access?
 
     a2d.WaitForDesktopReady()
+
+    -- cleanup
+    drive:load(image)
+    a2d.CheckAllDrives()
 end)
 
 --[[

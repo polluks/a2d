@@ -1088,8 +1088,6 @@ last_disk_in_devices_table:
 
 ;;; Preserves Y
 .proc CheckDisksInDevices
-        status_buffer := $800
-
         tya                     ; preserve Y
         pha
 
@@ -1097,7 +1095,7 @@ last_disk_in_devices_table:
     IF NOT_ZERO
         stx     disk_in_device_table
       DO
-        CALL    check_disk_in_drive, A=removable_device_table,x
+        CALL    CheckDiskInDevice, A=removable_device_table,x
         sta     disk_in_device_table,x
         dex
       WHILE NOT_ZERO
@@ -1106,10 +1104,13 @@ last_disk_in_devices_table:
         pla
         tay                     ; restore Y
         rts
+.endproc ; CheckDisksInDevices
 
 ;;; Input: A = unit_number
 ;;; Preserves X
-check_disk_in_drive:
+.proc CheckDiskInDevice
+        status_buffer := $800
+
         tay                     ; Y = unit_number
         txa                     ; preserve X
         pha
@@ -1143,7 +1144,25 @@ finish: pla
 
         ;; params for call
         DEFINE_SP_STATUS_PARAMS status_params, 1, status_buffer, 0
-.endproc ; CheckDisksInDevices
+.endproc ; CheckDiskInDevice
+
+;;; Inputs: A = unmasked unit number
+.proc UpdateDiskInDevicesTables
+        ;; Is this unit in `removable_devices_table`?
+        ldx     removable_device_table
+    IF NOT_ZERO
+      DO
+       IF A = removable_device_table,x
+        jsr     CheckDiskInDevice ; preserves X
+        sta     disk_in_device_table,x
+        sta     last_disk_in_devices_table,x
+        rts
+       END_IF
+        dex
+      WHILE NOT ZERO
+    END_IF
+        rts
+.endproc ; UpdateDiskInDevicesTables
 
 ;;; ============================================================
 
@@ -3409,7 +3428,10 @@ exec:
         RTS_IF NOT_ZERO
 
         txa
-        TAIL_CALL CheckDriveByUnitNumber, Y=#kCheckDriveDoNotShowUnexpectedErrors ; A = unit number
+        pha                     ; A = unit number
+        CALL CheckDriveByUnitNumber, Y=#kCheckDriveDoNotShowUnexpectedErrors ; A = unit number
+        pla                     ; A = unit number
+        TAIL_CALL SelectUnitNum
 
 unit:   sta     unit_num
         copy8   #FormatEraseAction::format, action
@@ -3419,6 +3441,16 @@ unit:   sta     unit_num
 CmdFormatDisk := CmdFormatEraseDiskImpl::format
 CmdEraseDisk := CmdFormatEraseDiskImpl::erase
 FormatUnitNum := CmdFormatEraseDiskImpl::unit
+
+;;; ============================================================
+
+.proc SelectUnitNum
+        jsr     UnitNumberToDeviceIndex
+        lda     device_to_icon_map,x
+        RTS_IF  ZERO
+
+        TAIL_CALL SelectIconAndEnsureVisible ; A = icon id
+.endproc ; SelectUnitNum
 
 ;;; ============================================================
 
@@ -3741,8 +3773,6 @@ END_PARAM_BLOCK
         ENTRY_POINTS_FOR_A left, kDirLeft, right, kDirRight, up, kDirUp, down, kDirDown
         sta     dir
 
-        jsr     CacheFocusedWindowIconList
-
 ;;; --------------------------------------------------
 ;;; If a list view, use index-based logic
 
@@ -3757,6 +3787,8 @@ END_PARAM_BLOCK
 
 ;;; --------------------------------------------------
 ;;; Identify a starting icon
+
+        jsr     CacheFocusedWindowIconList
 
         lda     selected_icon_count
         jeq     fallback
@@ -4010,13 +4042,19 @@ typedown_buf:
 ;;; Load the entry table for the window to be used for keyboard
 ;;; selection - usually the active window, unless the desktop
 ;;; has been clicked. Also clears selection if it isn't in
-;;; that window.
+;;; that window -- if the focused window is non-empty.
 
 .proc CacheFocusedWindowIconList
         lda     focused_window_id
     IF A <> selected_window_id
         pha
+
+        tax
+        lda     window_entry_count_table,x
+      IF NOT ZERO
         jsr     ClearSelection
+      END_IF
+
         pla
     END_IF
         jmp     CacheWindowIconList
@@ -4172,7 +4210,7 @@ ret:    rts
 
         jsr     CacheFocusedWindowIconList
         lda     cached_window_icon_count
-        beq     finish          ; nothing to select!
+        RTS_IF  ZERO            ; nothing to select!
 
         ldx     cached_window_icon_count
         dex
@@ -4192,19 +4230,7 @@ ret:    rts
         ;; --------------------------------------------------
         ;; Repaint the icons
 
-        lda     cached_window_id
-    IF ZERO
-        jsr     InitSetDesktopPort
-    ELSE
-        jsr     UnsafeSetPortFromWindowIdAndAdjustForEntries ; CHECKED
-    END_IF
-    IF ZERO                     ; Skip drawing if obscured
-        jsr     CachedIconsScreenToWindow
-        ITK_CALL IconTK::DrawAll, cached_window_id ; CHECKED
-        jsr     CachedIconsWindowToScreen
-    END_IF
-
-finish: rts
+        jmp     RedrawSelectedIcons
 .endproc ; CmdSelectAll
 
 ;;; ============================================================
@@ -4751,6 +4777,26 @@ pending_alert:
         .byte   0
 
 ;;; ============================================================
+
+;;; Input: A = unit number (masked or unmasked)
+;;; Output: X = index in `DEVLST`
+;;; Assert: unit is present in the list
+.proc UnitNumberToDeviceIndex
+        and     #UNIT_NUM_MASK
+        sta     compare
+        ldx     DEVCNT
+    DO
+        lda     DEVLST,x
+        and     #UNIT_NUM_MASK
+        compare := *+1
+        cmp     #SELF_MODIFIED_BYTE
+        BREAK_IF EQ
+        dex
+    WHILE POS
+        rts
+.endproc ; UnitNumberToDeviceIndex
+
+;;; ============================================================
 ;;; Check > [drive] command - obsolete, but core still used
 ;;; following Format (etc)
 ;;;
@@ -4765,17 +4811,8 @@ kCheckDriveShowUnexpectedErrors = $80
 ;;; Input: A = unit number, Y = show unexpected errors flag
 
 by_unit_number:
-        ;; Map unit number to index in DEVLST
-        sta     compare
-        ldx     DEVCNT
-    DO
-        lda     DEVLST,x
-        and     #UNIT_NUM_MASK
-        compare := *+1
-        cmp     #SELF_MODIFIED_BYTE
-        beq     common
-        dex
-    WHILE POS                   ; always
+        jsr     UnitNumberToDeviceIndex
+        jmp     common
 
 ;;; --------------------------------------------------
 ;;; After an Open/Eject/Rename action
@@ -4849,6 +4886,13 @@ close_loop:
         ITK_CALL IconTK::FreeIcon, icon_param
         jsr     StoreCachedWindowIconList
     END_IF
+
+        ;; --------------------------------------------------
+        ;; If removable, update table to prevent a later re-check
+
+        ldy     devlst_index
+        lda     DEVLST,y
+        jsr     UpdateDiskInDevicesTables ; A = unmasked unit num
 
         ;; --------------------------------------------------
         ;; Try to create a new volume icon
@@ -5351,6 +5395,7 @@ END_PARAM_BLOCK
         jsr     ExtendSelectionModifierDown
         bmi     :+
 clear:  jsr     ClearSelection
+        CALL    CacheWindowIconList, A=window_id
 :
 
         ;; --------------------------------------------------
@@ -5581,6 +5626,9 @@ beyond:
         ;; Close and tidy up
 
         jsr     ClearSelection
+        pla
+        pha
+        jsr     CacheWindowIconList
 
         jsr     RemoveAndFreeCachedWindowIcons
         jsr     ClearAndStoreCachedWindowIconList
@@ -6176,6 +6224,7 @@ err:    RETURN  C=1
         ;; Map icons to window space
         jsr     CachedIconsScreenToWindow
 
+        ;; Assert: window is top-most (since `IconTK::DrawAll` doesn't clip)
         ITK_CALL IconTK::DrawAll, cached_window_id
 
 .ifdef DEBUG
@@ -6243,6 +6292,7 @@ done:
 
 ;;; ============================================================
 
+;;; NOTE: May change `cached_window_id`
 .proc ClearSelection
         lda     selected_icon_count
         RTS_IF ZERO
@@ -7080,11 +7130,16 @@ assign_height:
 ;;;
 ;;; Note: Assumes icons are in window coordinates.
 .proc AdjustViewportForNewIcons
-        ;; No-op if window is empty
         lda     cached_window_icon_count
-    IF NOT_ZERO
+    IF ZERO
+        ;; This is to handle the case where an empty window is persisted
+        ;; then a file is added and the window is restored. For at least
+        ;; the single icon case it should not cause scrollbars to appear.
+        copy16  #AS_WORD(-kMaxIconTotalWidth/2), iconbb_rect+MGTK::Rect::x1
+    ELSE
         ;; Window space
         jsr     ComputeIconsBBox
+    END_IF
 
         winfo_ptr := $06
         tmpw := $08
@@ -7099,7 +7154,6 @@ assign_height:
         add16in (winfo_ptr),y, iconbb_rect+MGTK::Rect::x1, (winfo_ptr),y
         ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + MGTK::Rect::x2
         add16in (winfo_ptr),y, iconbb_rect+MGTK::Rect::x1, (winfo_ptr),y
-    END_IF
         rts
 .endproc ; AdjustViewportForNewIcons
 
@@ -10040,15 +10094,43 @@ eof:    RETURN  A=#$FF
 .proc ValidateStorageType
     IF A >= #ST_TREE_FILE+1     ; only seedling/sapling/tree supported
         ;; Unsupported type - show error, and either abort or return failure
-        CALL    ShowAlertParams, Y=#AlertButtonOptions::OKCancel, AX=#aux::str_alert_unsupported_type
-        cmp     #kAlertResultCancel
-        jeq     CloseFilesCancelDialogWithFailedResult
+
+        CALL    ShowAlertBasedOnFileCount, AX=#aux::str_alert_unsupported_type
         RETURN  C=1
     END_IF
 
         ;; Return success
         RETURN  C=0
 .endproc ; ValidateStorageType
+
+;;; ============================================================
+
+;;; Input: A,X = message, `file_count` set appropriately
+;;; Output:
+;;; * If final file (`file_count` is 0) OK shown and does not return.
+;;; * Otherwise, OK/Cancel shown and returns only if OK selected
+.proc ShowAlertBasedOnFileCount
+        ldy     file_count+1
+        bne     ok_cancel
+        ldy     file_count
+        beq     continue
+        ASSERT_EQUALS AlertButtonOptions::OK, 0
+ok_cancel:
+        ldy     #AlertButtonOptions::OKCancel
+continue:
+        sty     options
+        CALL    ShowAlertParams ; A,X set by caller, Y = AlertButtonOptions
+
+        options := *+1
+        ldy     #SELF_MODIFIED_BYTE
+        beq     fail            ; only OK was offered
+
+        cmp     #kAlertResultCancel
+        beq     fail
+        rts
+
+fail:   jmp     CloseFilesCancelDialogWithFailedResult
+.endproc ; ShowAlertBasedOnFileCount
 
 ;;; ============================================================
 
@@ -10406,10 +10488,7 @@ retry:  jsr     GetDstFileInfo
     IF NS
         ldax    #aux::str_large_move_prompt
     END_IF
-        CALL    ShowAlertParams, Y=#AlertButtonOptions::OKCancel ; A,X = string
-        cmp     #kAlertResultCancel
-        jeq     CloseFilesCancelDialogWithFailedResult
-
+        CALL    ShowAlertBasedOnFileCount ; A,X = string
         RETURN  C=1
 .endproc ; _CheckSpaceAvailable
 

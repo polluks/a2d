@@ -428,7 +428,7 @@ function a2d.DuplicateSelection(newname, options)
     error("DuplicateSelection: nil passed as newname", options.level)
   end
   a2d.OAShortcut("D")
-  a2d.WaitForRepaint() -- extra, in case activation is needed
+  emu.wait(10) -- same as CopySelectionTo
   a2d.ClearTextField()
   apple2.Type(newname)
   apple2.ReturnKey()
@@ -556,6 +556,14 @@ function a2d.CopyPath(src, dst, options)
   a2d.SelectPath(src)
   local is_volume = not src:match("^/.*/")
   a2d.CopySelectionTo(dst, is_volume, options)
+end
+
+function a2d.CheckAllDrives(options)
+  options = default_options(options)
+  a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_CHECK_ALL_DRIVES, options)
+  if not options.no_wait then
+    emu.wait(10)
+  end
 end
 
 --------------------------------------------------

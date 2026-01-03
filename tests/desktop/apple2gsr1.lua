@@ -7,6 +7,8 @@ RESOLUTION="704x462"
 
 ======================================== ENDCONFIG ]]
 
+local s5d1 = manager.machine.images[":fdc:2:35dd"]
+
 a2d.ConfigureRepaintTime(0.25)
 
 
@@ -99,7 +101,7 @@ end)
 test.Step(
   "Ejecting disks",
   function()
-    local drive = apple2.Get35Drive1()
+    local drive = s5d1
     local image = drive.filename
 
     a2d.SelectPath("/A")
@@ -107,9 +109,9 @@ test.Step(
     emu.wait(5)
     a2dtest.ExpectAlertNotShowing()
 
+    -- cleanup
     drive:load(image)
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_CHECK_ALL_DRIVES)
-    emu.wait(5)
+    a2d.CheckAllDrives()
 end)
 
 --[[
