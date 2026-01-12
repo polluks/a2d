@@ -84,9 +84,7 @@ test.Step(
     s5d2:unload()
     emu.wait(5)
 
-    a2d.ClearSelection()
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_COPY_DISK-2)
-    a2d.WaitForDesktopReady()
+    a2d.CopyDisk()
 
     test.Snap("verify S5D2 shows 'Unknown' in source list")
 
@@ -127,9 +125,7 @@ end)
 test.Step(
   "errors if destination disk ejected",
   function()
-    a2d.ClearSelection()
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_COPY_DISK-2)
-    a2d.WaitForDesktopReady()
+    a2d.CopyDisk()
 
     -- source
     apple2.UpArrowKey() -- S5D2
@@ -163,9 +159,11 @@ test.Step(
     apple2.EscapeKey() -- abort the copy
     a2dtest.WaitForAlert()
 
+    test.Snap("verify tip is erased")
     a2d.DialogOK()
     s5d2:load(image)
-    apple2.ControlOAReset()
+
+    a2d.OAShortcut("Q")
     a2d.WaitForDesktopReady()
 end)
 

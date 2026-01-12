@@ -22,7 +22,6 @@ test.Step(
     a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.ABOUT_APPLE_II_DESKTOP)
     test.Snap("Apple > About Apple II DeskTop")
     a2d.CloseWindow()
-    return test.PASS
 end)
 
 test.Step(
@@ -31,7 +30,6 @@ test.Step(
     a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.ABOUT_THIS_APPLE_II)
     test.Snap("Apple > About This Apple II")
     a2d.CloseWindow()
-    return test.PASS
 end)
 
 --------------------------------------------------
@@ -46,7 +44,6 @@ test.Step(
     emu.wait(5) -- enumerating takes a bit
     test.Snap("File > Get Info (volume)")
     a2d.DialogCancel()
-    return test.PASS
 end)
 
 test.Step(
@@ -57,7 +54,6 @@ test.Step(
     test.Snap("File > Get Info (file)")
     a2d.DialogCancel()
     a2d.CloseAllWindows()
-    return test.PASS
 end)
 
 test.Step(
@@ -68,7 +64,6 @@ test.Step(
     test.Snap("File > Copy To...")
     a2d.DialogCancel()
     a2d.CloseAllWindows()
-    return test.PASS
 end)
 
 --------------------------------------------------
@@ -106,8 +101,6 @@ test.Step(
     a2d.DialogOK({no_wait=true})
     emu.wait(0.2)
     test.Snap("Special > Format Disk... - Format in progress")
-
-    return test.PASS
 end)
 
 test.Step(
@@ -141,8 +134,6 @@ test.Step(
     a2d.DialogOK({no_wait=true})
     emu.wait(0.15)
     test.Snap("Special > Erase Disk... - Erase in progress")
-
-    return test.PASS
 end)
 
 --------------------------------------------------
@@ -156,7 +147,6 @@ test.Step(
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
     test.Snap("Shortcuts > Add a Shortcut...")
     a2d.DialogOK()
-    return test.PASS
 end)
 
 test.Step(
@@ -169,7 +159,6 @@ test.Step(
     test.Snap("Shortcuts > Edit a Shortcut... - Editing")
     a2d.DialogCancel()
     a2d.CloseAllWindows()
-    return test.PASS
 end)
 
 test.Step(
@@ -178,7 +167,6 @@ test.Step(
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_DELETE_A_SHORTCUT)
     test.Snap("Shortcuts > Delete a Shortcut...")
     a2d.DialogCancel()
-    return test.PASS
 end)
 
 test.Step(
@@ -187,7 +175,6 @@ test.Step(
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_RUN_A_SHORTCUT)
     test.Snap("Shortcuts > Run a Shortcut...")
     a2d.DialogCancel()
-    return test.PASS
 end)
 
 --------------------------------------------------
@@ -197,9 +184,7 @@ end)
 test.Step(
   "Special > Copy Disk...",
   function()
-    a2d.ClearSelection()
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_COPY_DISK - 2)
-    a2d.WaitForDesktopReady()
+    a2d.CopyDisk()
 
     -- "Disk Copy"
     a2d.InvokeMenuItem(3, 2)
@@ -211,8 +196,8 @@ test.Step(
     apple2.DownArrowKey()
     apple2.DownArrowKey()
     apple2.DownArrowKey()
-    test.Snap("Special > Copy Disk...")
-    a2d.DialogOK("Disk Copy - \"Quick Copy\" option")
+    test.Snap("Disk Copy - \"Quick Copy\" option")
+    a2d.DialogOK()
 
     -- select destination
     apple2.DownArrowKey()
@@ -261,8 +246,6 @@ test.Step(
     a2d.OAShortcut('Q')
     a2d.WaitForDesktopReady()
     a2d.DialogOK() -- dismiss "two volumes with the same name"
-
-    return test.PASS
 end)
 
 test.Step(
@@ -276,11 +259,11 @@ test.Step(
     a2d.ToggleOptionShowShortcutsOnStartup()
     a2d.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="use"})
     a2d.Reboot()
-    a2d.WaitForDesktopReady()
 
     -- Launcher: Copying to RAMCard...
-    emu.wait(5) -- copying is slow
+    emu.wait(5)
     test.Snap("Selector - Copying app to RAMCard...")
+    a2d.WaitForDesktopReady()
 
     -- Shortcuts dialog
     emu.wait(10) -- let copying finish
@@ -297,6 +280,4 @@ test.Step(
     apple2.ReturnKey()
     emu.wait(2)
     test.Snap("Selector - Copying shortcut to RAMCard...")
-
-    return test.PASS
 end)

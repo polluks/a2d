@@ -469,7 +469,7 @@ offset_table:
       IF NOT_ZERO
         cmp16   event_params::xcoord, #460 ; TODO: Hard coded?
        IF GE
-        TAIL_CALL InvokeDeskAccWithIcon, Y=#$FF, AX=#str_date_and_time
+        TAIL_CALL LaunchPassedPathOnSystemDisk, AX=#str_date_and_time
        END_IF
       END_IF
 
@@ -991,8 +991,7 @@ clicked_window_id := _ActivateClickedWindow::window_id
 .proc EraseWindowBackground
         MGTK_CALL MGTK::ShieldCursor, window_grafport+MGTK::GrafPort::maprect
         MGTK_CALL MGTK::PaintRect, window_grafport+MGTK::GrafPort::maprect
-        MGTK_CALL MGTK::UnshieldCursor
-        rts
+        jmp     UnshieldCursor
 .endproc ; EraseWindowBackground
 
 ;;; ============================================================
@@ -1143,7 +1142,7 @@ finish: pla
         rts
 
         ;; params for call
-        DEFINE_SP_STATUS_PARAMS status_params, 1, status_buffer, 0
+        DEFINE_SP_STATUS_PARAMS status_params, 1, status_buffer, SPStatusRequest::DeviceStatus
 .endproc ; CheckDiskInDevice
 
 ;;; Inputs: A = unmasked unit number
@@ -1516,6 +1515,7 @@ invoke_table := * - (4 * IconType::VOL_COUNT)
         INVOKE_TABLE_ENTRY      interpreter, str_unshrink      ; archive
         INVOKE_TABLE_ENTRY      interpreter, str_binscii       ; encoded
         INVOKE_TABLE_ENTRY      _InvokeLink, 0                 ; link
+        INVOKE_TABLE_ENTRY      interpreter, str_chip8         ; chip8
         INVOKE_TABLE_ENTRY      InvokeDeskAccByPath, 0         ; desk_accessory
         INVOKE_TABLE_ENTRY      basic, 0                       ; basic
         INVOKE_TABLE_ENTRY      interpreter, str_intbasic      ; intbasic
@@ -1778,6 +1778,9 @@ str_unshrink:
 
 str_binscii:
         PASCAL_STRING .concat(kFilenameExtrasDir, "/BinSCII")
+
+str_chip8:
+        PASCAL_STRING .concat(kFilenameExtrasDir, "/CHIP8.system")
 
 str_preview_fot:
         PASCAL_STRING .concat(kFilenameModulesDir, "/show.image.file")
@@ -2123,8 +2126,16 @@ CmdAbout := AboutDialogProc
 ;;; ============================================================
 
 .proc CmdAboutThisApple
-        TAIL_CALL InvokeDeskAccWithIcon, Y=#$FF, AX=#str_about_this_apple
+        ldax    #str_about_this_apple
+        FALL_THROUGH_TO LaunchPassedPathOnSystemDisk
 .endproc ; CmdAboutThisApple
+
+;;; ============================================================
+
+.proc LaunchPassedPathOnSystemDisk
+        CALL    CopyToSrcPath
+        TAIL_CALL LaunchFileWithPathOnSystemDisk
+.endproc ; LaunchPassedPathOnSystemDisk
 
 ;;; ============================================================
 
@@ -4373,8 +4384,8 @@ END_PARAM_BLOCK
 
 _Preamble:
         jsr     CacheActiveWindowIconList
-
-        jsr     GetActiveWindowViewBy ; N=0 is icon view, N=1 is list view
+_PreamblePreCached:
+        jsr     GetCachedWindowViewBy ; N=0 is icon view, N=1 is list view
     IF NC
         ;; Icon view
         ldx     #kIconViewScrollTickH
@@ -4388,7 +4399,8 @@ _Preamble:
         sty     tick_v
 
         ;; Compute effective viewport
-        jsr     ApplyActiveWinfoToWindowGrafport
+        lda     cached_window_id
+        jsr     ApplyWinfoToWindowGrafport
         add16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
         COPY_STRUCT MGTK::Point, viewport+MGTK::Rect::topleft, old
 
@@ -4636,6 +4648,8 @@ _Preamble:
         rts
 .endproc ; _MaybeUpdateVThumb
 
+;;; Input: X=axis (`MGTK::Point::xcoord` or `MGTK::Point::ycoord`)
+;;; Output: N=0 is scrollbar should be inactive, N=1 if it should be active
 .proc _CheckDeactivate
         scmp16  ubox+MGTK::Rect::topleft,x, viewport+MGTK::Rect::topleft,x
     IF POS
@@ -4656,6 +4670,8 @@ _Preamble:
         TAIL_CALL _UpdateThumb, A=setthumb_muldiv_params::result, X=#MGTK::Ctl::vertical_scroll_bar
 .endproc ; _SetVThumbFromViewport
 
+;;; Input: X=axis (`MGTK::Point::xcoord` or `MGTK::Point::ycoord`)
+;;; Scrambles A,X,Y
 .proc _CalcThumbFromViewport
         sub16   viewport+MGTK::Rect::topleft,x, ubox+MGTK::Rect::topleft,x, setthumb_muldiv_params::number
         sub16   ubox+MGTK::Rect::bottomright,x, ubox+MGTK::Rect::topleft,x, tmpw
@@ -4681,38 +4697,80 @@ _Preamble:
 .proc ActivateCtlsSetThumbs
         jsr     _Preamble
 
-        scmp16  ubox+MGTK::Rect::x1, viewport+MGTK::Rect::x1
-        bmi     activate_hscroll
-        scmp16  viewport+MGTK::Rect::x2, ubox+MGTK::Rect::x2
-        bmi     activate_hscroll
+        ;; --------------------------------------------------
+        ;; Horizontal scrollbar
 
+        CALL    _CheckDeactivate, X=#MGTK::Point::xcoord
+    IF POS
         ;; deactivate horizontal scrollbar
         CALL    _ActivateCtl, X=#MGTK::Ctl::horizontal_scroll_bar, A=#MGTK::activatectl_deactivate
-        beq     check_vscroll   ; always
-
-activate_hscroll:
+    ELSE
         ;; activate horizontal scrollbar
         CALL    _ActivateCtl, X=#MGTK::Ctl::horizontal_scroll_bar, A=#MGTK::activatectl_activate
-
         jsr     _SetHThumbFromViewport
-        FALL_THROUGH_TO check_vscroll
+    END_IF
 
         ;; --------------------------------------------------
+        ;; Vertical scrollbar
 
-check_vscroll:
-        scmp16  ubox+MGTK::Rect::y1, viewport+MGTK::Rect::y1
-        bmi     activate_vscroll
-        scmp16  viewport+MGTK::Rect::y2, ubox+MGTK::Rect::y2
-        bmi     activate_vscroll
-
+        CALL    _CheckDeactivate, X=#MGTK::Point::ycoord
+    IF POS
         ;; deactivate vertical scrollbar
         TAIL_CALL _ActivateCtl, X=#MGTK::Ctl::vertical_scroll_bar, A=#MGTK::activatectl_deactivate
+    END_IF
 
-activate_vscroll:
         ;; activate vertical scrollbar
         CALL    _ActivateCtl, X=#MGTK::Ctl::vertical_scroll_bar, A=#MGTK::activatectl_activate
         jmp     _SetVThumbFromViewport
 .endproc ; ActivateCtlsSetThumbs
+
+;;; --------------------------------------------------
+;;; Like `ActivateCtlsSetThumbs` but updates Winfo directly, so
+;;; no repaints are done. Needed after a resize where a repaint
+;;; will follow.
+;;; Input: `cached_window_id` set (and actually cached)
+.proc ActivateCtlsSetThumbsWinfo
+        jsr     _PreamblePreCached
+
+        winfo_ptr := $06
+        CALL    GetWindowPtr, A=active_window_id
+        stax    winfo_ptr
+
+        ;; Horizontal scrollbar
+        ldx     #MGTK::Point::xcoord
+        ldy     #MGTK::Winfo::hscroll
+        copy8   #MGTK::Winfo::hthumbpos, pos_offset
+        jsr     do_axis
+
+        ;; Vertical scrollbar
+        ldx     #MGTK::Point::ycoord
+        ldy     #MGTK::Winfo::vscroll
+        copy8   #MGTK::Winfo::vthumbpos, pos_offset
+        FALL_THROUGH_TO do_axis
+
+do_axis:
+        jsr     _CheckDeactivate
+    IF POS
+        ;; deactivate
+        lda     (winfo_ptr),y
+        and     #AS_BYTE(~MGTK::Scroll::option_active)
+        sta     (winfo_ptr),y
+        rts
+    END_IF
+
+        ;; activate
+        lda     (winfo_ptr),y
+        ora     #MGTK::Scroll::option_active
+        sta     (winfo_ptr),y
+
+        ;; update thumb
+        CALL    _CalcThumbFromViewport ; X=#MGTK::Point::xcoord set above
+        pos_offset := *+1
+        ldy     #SELF_MODIFIED_BYTE
+        lda     setthumb_muldiv_params::result
+        sta     (winfo_ptr),y
+        rts
+.endproc ; ActivateCtlsSetThumbsWinfo
 
 ;;; --------------------------------------------------
 ;;; Inputs: A=activate/deactivate, X=which_ctl
@@ -4752,6 +4810,7 @@ ScrollTrackVThumb := ScrollManager::TrackVThumb
 ;;; both horizontal and vertical scrollbars, based on the window's
 ;;; viewport and contents.
 ScrollUpdate    := ScrollManager::ActivateCtlsSetThumbs
+ScrollUpdateWinfo := ScrollManager::ActivateCtlsSetThumbsWinfo
 
 ;;; ============================================================
 
@@ -5574,7 +5633,11 @@ beyond:
 .proc DoWindowResize
         copy8   active_window_id, growwindow_params::window_id
         MGTK_CALL MGTK::GrowWindow, growwindow_params
-        jmp     ScrollUpdate
+
+        ;; Modify the Winfo directly to avoid scrollbars painting
+        ;; before the rest of the window.
+        jsr     CacheActiveWindowIconList
+        TAIL_CALL ScrollUpdateWinfo
 .endproc ; DoWindowResize
 
 ;;; ============================================================
@@ -5894,14 +5957,16 @@ no_win:
         ;; Set path, name, size, contents, and volume free/used.
         jsr     _PrepareNewWindow
 
+        ;; Initialize scrollbar state in Winfo
+        jsr     CachedIconsWindowToScreen
+        jsr     ScrollUpdateWinfo
+
         ;; Create the window
         CALL    GetWindowPtr, A=cached_window_id ; A,X points at Winfo
         stax    @addr
         MGTK_CALL MGTK::OpenWindow, 0, @addr
 
-        jsr     CachedIconsWindowToScreen
-        jsr     DrawCachedWindowHeaderAndEntries
-        jmp     ScrollUpdate
+        jmp     DrawCachedWindowHeaderAndEntries
 
 ;;; ------------------------------------------------------------
 ;;; Set up path and coords for new window, contents and free/used.
@@ -8113,6 +8178,7 @@ records_base_ptr:
         scmp16  pos_col::ycoord, viewport+MGTK::Rect::y2
         bpl     ret
 
+        copy16  pos_col::ycoord, list_view_shield_rect::y1
         add16   pos_col::ycoord, #kListViewRowHeight, pos_col::ycoord
 
         ;; Above top?
@@ -8122,6 +8188,9 @@ ret:    rts
 
         ;; Draw it!
 in_range:
+        copy16  pos_col::ycoord, list_view_shield_rect::y2
+        MGTK_CALL MGTK::ShieldCursor, list_view_shield_rect
+
         CALL    set_pos, AX=#kColLock
         jsr     _PrepareColLock
         lda     text_buffer2
@@ -8140,7 +8209,7 @@ in_range:
         CALL    set_pos, AX=#kColDate
         jsr     ComposeDateString
         MGTK_CALL MGTK::DrawString, text_buffer2
-        rts
+        jmp     UnshieldCursor
 
 set_pos:
         stax    pos_col::xcoord
@@ -8712,7 +8781,7 @@ map_delta_y:    .word   0
 
 .proc GetDeviceTypeImpl
 dib_buffer := $800
-        DEFINE_SP_STATUS_PARAMS status_params, 1, dib_buffer, 3 ; Return Device Information Block (DIB)
+        DEFINE_SP_STATUS_PARAMS status_params, 1, dib_buffer, SPStatusRequest::DIB
 
         ;; Avoid Initializer memory ($800-$1200)
         block_buffer := $1E00
@@ -10204,14 +10273,17 @@ operation_traversal_callbacks_for_copy:
         jmp     OpenProgressDialog
 
 .proc _CopyDialogEnumerationCallback
-        jsr     SetPortForProgressDialog
+        jsr     SetPortForProgressDialogAndShieldCursor
+
         bit     move_flags
     IF NC
         CALL    DrawProgressDialogLabel, Y=#0, AX=#aux::str_copy_copying
     ELSE
         CALL    DrawProgressDialogLabel, Y=#0, AX=#aux::str_move_moving
     END_IF
-        jmp     DrawFileCountWithSuffix
+        jsr     DrawFileCountWithSuffix
+
+        jmp     UnshieldCursor
 .endproc ; _CopyDialogEnumerationCallback
 
 ;;; Lifecycle callbacks for copy operation (`operation_lifecycle_callbacks`)
@@ -10525,7 +10597,7 @@ retry:  MLI_CALL DESTROY, destroy_src_params
 
 .proc CopyUpdateProgress
         jsr     DecrementFileCount
-        jsr     SetPortForProgressDialog
+        jsr     SetPortForProgressDialogAndShieldCursor
 
         CALL    CopyToBuf0, AX=#src_path_buf
         CALL    DrawProgressDialogLabel, Y=#1, AX=#aux::str_copy_from
@@ -10535,7 +10607,9 @@ retry:  MLI_CALL DESTROY, destroy_src_params
         CALL    DrawProgressDialogLabel, Y=#2, AX=#aux::str_copy_to
         jsr     DrawDestFilePath
 
-        jmp     DrawProgressDialogFilesRemaining
+        jsr     DrawProgressDialogFilesRemaining
+
+        jmp     UnshieldCursor
 .endproc ; CopyUpdateProgress
 
 ;;; ============================================================
@@ -11146,9 +11220,12 @@ operation_traversal_callbacks_for_delete:
         jmp     OpenProgressDialog
 
 .proc _DeleteDialogEnumerationCallback
-        jsr     SetPortForProgressDialog
+        jsr     SetPortForProgressDialogAndShieldCursor
+
         CALL    DrawProgressDialogLabel, Y=#0, AX=#aux::str_delete_count
-        jmp     DrawFileCountWithSuffix
+        jsr     DrawFileCountWithSuffix
+
+        jmp     UnshieldCursor
 .endproc ; _DeleteDialogEnumerationCallback
 
 .proc _DeleteDialogConfirmCallback
@@ -11325,13 +11402,14 @@ next_file:
 ;;; Does not decrement count, just repaints path so that the correct
 ;;; path is visible if an alert is shown when finishing a directory.
 .proc DeleteRefreshProgress
-        jsr     SetPortForProgressDialog
+        jsr     SetPortForProgressDialogAndShieldCursor
 
         CALL    CopyToBuf0, AX=#src_path_buf
         CALL    DrawProgressDialogLabel, Y=#1, AX=#aux::str_file_colon
         jsr     DrawTargetFilePath
 
-        jmp     DrawProgressDialogFilesRemaining
+        jsr     DrawProgressDialogFilesRemaining
+        jmp     UnshieldCursor
 .endproc ; DeleteRefreshProgress
 
 ;;; ============================================================
@@ -12675,8 +12753,8 @@ do_str2:
 
         rts
 
-        DEFINE_SP_STATUS_PARAMS status_params, SELF_MODIFIED_BYTE, dib_buffer, 3 ; Return Device Information Block (DIB)
-        DEFINE_SP_CONTROL_PARAMS control_params, SELF_MODIFIED_BYTE, list, $04 ; For Apple/UniDisk 3.3: Eject disk
+        DEFINE_SP_STATUS_PARAMS status_params, SELF_MODIFIED_BYTE, dib_buffer, SPStatusRequest::DIB
+        DEFINE_SP_CONTROL_PARAMS control_params, SELF_MODIFIED_BYTE, list, SPControlRequest::Eject
 
 list:   .word   0               ; 0 items in list
 .endproc ; SmartportEject
@@ -12914,6 +12992,12 @@ ok:     RETURN  A=#0
 ;;; "About" dialog
 
 .proc AboutDialogProc
+        ;; Use system disk as animation source
+        MLI_CALL GET_PREFIX, get_prefix_params
+        dec     src_path_buf    ; remove trailing '/'
+        CALL    IconToAnimate, AX=#src_path_buf
+        pha
+        CALL    AnimateWindowOpen, X=#$FF ; desktop
 
         MGTK_CALL MGTK::OpenWindow, winfo_about_dialog
         CALL    SafeSetPortFromWindowId, A=#winfo_about_dialog::kWindowId
@@ -12936,7 +13020,13 @@ ok:     RETURN  A=#0
     WHILE A <> #MGTK::EventKind::key_down
 
         MGTK_CALL MGTK::CloseWindow, winfo_about_dialog
-        jmp     ClearUpdates ; following CloseWindow
+        jsr     ClearUpdates ; following CloseWindow
+
+        pla
+        TAIL_CALL AnimateWindowClose, X=#$FF ; desktop
+
+        DEFINE_GET_PREFIX_PARAMS get_prefix_params, src_path_buf
+
 .endproc ; AboutDialogProc
 
 ;;; ============================================================
@@ -13501,6 +13591,12 @@ ignore: RETURN  C=1
         TAIL_CALL SafeSetPortFromWindowId, A=#winfo_progress_dialog::kWindowId
 .endproc ; SetPortForProgressDialog
 
+.proc SetPortForProgressDialogAndShieldCursor
+        jsr     SetPortForProgressDialog
+        MGTK_CALL MGTK::ShieldCursor, aux::progress_dialog_frame_rect
+        rts
+.endproc ; SetPortForProgressDialogAndShieldCursor
+
 ;;; ============================================================
 
 .proc CloseProgressDialog
@@ -13987,6 +14083,13 @@ params:  .res    3
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
         rts
 .endproc ; SetCursorIBeam
+
+;;; ============================================================
+
+.proc UnshieldCursor
+        MGTK_CALL MGTK::UnshieldCursor
+        rts
+.endproc ; UnshieldCursor
 
 ;;; ============================================================
 
@@ -14684,6 +14787,7 @@ icontype_table:
         DEFINE_ICTRECORD 0, 0, ICT_FLAGS_SUFFIX, str_btc_suffix, 0, IconType::audio ; Binary Time Constant Audio
         DEFINE_ICTRECORD 0, 0, ICT_FLAGS_SUFFIX, str_zc_suffix, 0, IconType::audio ; Zero-Crossing Audio
         DEFINE_ICTRECORD 0, 0, ICT_FLAGS_SUFFIX, str_pt3_suffix, 0, IconType::tracker ; Vortex Tracker PT3
+        DEFINE_ICTRECORD 0, 0, ICT_FLAGS_SUFFIX, str_ch8_suffix, 0, IconType::chip8 ; CHIP-8
 
         ;; Binary files ($06) identified as graphics (hi-res, double hi-res, minipix)
         DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $2000, 17, IconType::graphics ; HR image as FOT
@@ -14773,6 +14877,9 @@ str_bsq_suffix:                 ; BinSCII - ShrinkIt
 
 str_pt3_suffix:                 ; Vortex Tracker PT3
         PASCAL_STRING ".PT3"
+
+str_ch8_suffix:                 ; CHIP-8
+        PASCAL_STRING ".CH8"
 
 ;;; ============================================================
 ;;; DeskTop icon placement
@@ -14928,6 +15035,7 @@ icontype_iconentryflags_table := * - IconType::VOL_COUNT
         .byte   0               ; archive
         .byte   0               ; encoded
         .byte   0               ; link
+        .byte   0               ; chip8
         .byte   0               ; desk_accessory
         .byte   0               ; basic
         .byte   0               ; intbasic
@@ -14960,6 +15068,7 @@ icontype_to_smicon_table := * - IconType::VOL_COUNT
         .byte   IconType::small_generic ; archive
         .byte   IconType::small_generic ; encoded
         .byte   IconType::small_generic ; link
+        .byte   IconType::small_generic ; chip8
         .byte   IconType::small_generic ; desk_accessory
         .byte   IconType::small_generic ; basic
         .byte   IconType::small_generic ; intbasic

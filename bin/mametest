@@ -127,6 +127,45 @@ export UNFORMATTED_IMG="$TMPDIR/disks/unformatted.2mg"
 cp "res/unformatted.2mg" "$UNFORMATTED_IMG"
 
 # --------------------------------------------------
+# VEDrive
+
+# From https://github.com/bobbimanners/ProDOS-Utils/
+
+VESERVER="../ProDOS-Utils/veserver.py"
+VESERVERARGS=""
+if [ -n "$VEDISK1" ]; then
+  ext="${VEDISK1##*.}"
+  target="$TMPDIR/disks/vdisk1.${ext}"
+  cp "$VEDISK1" "$target"
+  VESERVERARGS="$VESERVERARGS --disk1=$target"
+fi
+if [ -n "$VEDISK2" ]; then
+  ext="${VEDISK2##*.}"
+  target="$TMPDIR/disks/vdisk2.${ext}"
+  cp "$VEDISK2" "$target"
+  VESERVERARGS="$VESERVERARGS --disk2=$target"
+fi
+if [ -n "$VESERVERARGS" ]; then
+  if [ ! -x "$VESERVER" ]; then
+    echo "$VESERVER not found!" 1>&2
+    exit 1
+  fi
+  ../ProDOS-Utils/veserver.py $VESERVERARGS >/dev/null &
+  VESERVER_PID=$!
+  trap "kill $VESERVER_PID" EXIT
+fi
+
+# --------------------------------------------------
+# Symbols
+
+DESKTOP_SYMBOLS=""
+for sym in selected_icon_count selected_icon_list icon_entries; do
+  addr="$(egrep $sym: out/desktop.list | cut -d' ' -f1)"
+  DESKTOP_SYMBOLS="${DESKTOP_SYMBOLS} ${sym}=${addr}"
+done
+export DESKTOP_SYMBOLS
+
+# --------------------------------------------------
 # Prepare snapshots dir
 
 SNAPDIR="$TMPDIR"/snaps
@@ -168,6 +207,9 @@ export RUN_COUNT
 export WAITFORDESKTOP
 export CHECKAUXMEMORY
 
+export COLOR_RED="$(tput setaf 1)"
+export COLOR_RESET="$(tput sgr0)"
+
 pushd "$MAMEDIR" > /dev/null
 exec 5>&1 # duplicate stdout filehandle
 output=$(
@@ -183,7 +225,7 @@ output=$(
     $THROTTLE \
     $MAMEFLAGS \
     $SCRIPTARGS" \
-    2>&1 | \
+       2> >(IFS='' ; while read line; do echo "${COLOR_RED}${line}${COLOR_RESET}" >&1; done) | \
     egrep --line-buffered -v "Secure coding is automatically enabled" | \
     tee /dev/fd/5
       )

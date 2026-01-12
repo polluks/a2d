@@ -15,9 +15,7 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "OK button resets after cancel",
   function()
-    a2d.ClearSelection()
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_COPY_DISK-2)
-    a2d.WaitForDesktopReady()
+    a2d.CopyDisk()
 
     -- select source
     apple2.UpArrowKey() -- S6D2
@@ -66,9 +64,7 @@ end)
 test.Step(
   "OK button reset after success",
   function()
-    a2d.ClearSelection()
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_COPY_DISK-2)
-    a2d.WaitForDesktopReady()
+    a2d.CopyDisk()
 
     -- select source
     apple2.UpArrowKey() -- S6D2
@@ -94,6 +90,7 @@ test.Step(
     -- copying...
     a2dtest.WaitForAlert({timeout=480})
     test.Snap("verify block counts have thousands separators")
+    test.Snap("verify tip is erased")
     a2d.DialogOK()
 
     emu.wait(5)

@@ -16,6 +16,7 @@ Project Page: https://github.com/a2stuff/a2d
   * Comma presses and holds the mouse button
   * Period releases the mouse button
   * Solid Apple is now just a modifier as normal
+* Improve appearance of watch cursor.
 
 ### Launcher
 
@@ -48,6 +49,13 @@ Project Page: https://github.com/a2stuff/a2d
 * Fix volume icon flicker after Check All Drives for removable disks.
 * Select volume icomn after Format/Erase.
 * Fix display of long device names in Format/Erase volume picker.
+* Animate Apple > About Apple II DeskTop window open/closed.
+* Animate Apple > About This Apple II window open/closed.
+* Animate Date & Time DA window open/closed when menu clock is clicked.
+* Reduce cursor flickering when copying / deleting files.
+* Reduce cursor flickering while list view rows are drawn.
+* Don't repaint scrollbars before window when resizing.
+* Eliminate scrollbar repaint after window opens.
 
 ### Selector
 
@@ -57,11 +65,15 @@ Project Page: https://github.com/a2stuff/a2d
 
 * Don't erroneously show "DOS 3.3 disk copy" when source format is unknown.
 * Flash OK button when a disk is selected via double-click.
-* Fix copying all blocks on 32MB volumes
+* Fix copying all blocks on 32MB volumes.
+* Erase tip once copy is complete.
+* Reduce cursor flickering during copy.
 
 ### Desk Accessories
 
-* About This Apple II: Add accessories to IIgs bitmap.
+* About This Apple II
+  * Add accessories to IIgs bitmap.
+  * Show Aux slot separately from Slot 3; include aux-specific memory count
 * DOS 3.3 Import: Fix keyboard shortcut handling.
 * Sounds: Time "Silent" menu bar flash using VBL.
 

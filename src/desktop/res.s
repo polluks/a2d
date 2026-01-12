@@ -649,6 +649,7 @@ type_icons_table:
         .addr   arc             ; archive
         .addr   arc             ; encoded
         .addr   lnk             ; link
+        .addr   ch8             ; chip8
         .addr   a2d             ; desk_accessory
         .addr   bas             ; basic
         .addr   int             ; intbasic
@@ -863,6 +864,8 @@ win_view_by_table:
         kColType = 200
         kColDate = 231
 
+        DEFINE_RECT list_view_shield_rect, kColSize - 50, SELF_MODIFIED, kListViewWidth, SELF_MODIFIED
+
 ;;; Scratch buffer visible to MGTK, primarily used for list view columns.
 kTextBuffer2Len = 49
 text_buffer2:    .res   kTextBuffer2Len, 0
@@ -1056,6 +1059,7 @@ portptr:        .addr   0
         DEFINE_ICON_RESOURCE asp, asp_icon, 4, 25, 15, generic_mask
         DEFINE_ICON_RESOURCE arc, archive_icon, 4, 25, 14, archive_mask
         DEFINE_ICON_RESOURCE lnk, lnk_icon, 3, 19, 10, graphics_mask
+        DEFINE_ICON_RESOURCE ch8, chip8_icon, 4, 27, 14, basic_mask
         DEFINE_ICON_RESOURCE a2d, a2d_file_icon, 4, 25, 15, generic_mask
         DEFINE_ICON_RESOURCE fnt, font_icon, 4, 25, 15, generic_mask
         DEFINE_ICON_RESOURCE app, app_icon, 5, 34, 16, app_mask
@@ -1329,6 +1333,24 @@ intbasic_icon:
         PIXELS  ".###...##..##..###....###..."
         PIXELS  ".###...###..##.###....###..."
         PIXELS  ".###...###...#####....###..."
+        PIXELS  "............................"
+        PIXELS  ".......##..........##......."
+        PIXELS  ".........##......##........."
+        PIXELS  "...........##..##..........."
+        PIXELS  ".............##............."
+        ;; shares `basic_mask`
+
+chip8_icon:
+        PIXELS  ".............##............."
+        PIXELS  "...........##..##..........."
+        PIXELS  ".........##......##........."
+        PIXELS  ".......##..........##......."
+        PIXELS  "............................"
+        PIXELS  ".###..#..#..#..####....###.."
+        PIXELS  ".#....#..#..#..#..#...#...#."
+        PIXELS  ".#....####..#..####.#..###.."
+        PIXELS  ".#....#..#..#..#......#...#."
+        PIXELS  ".###..#..#..#..#.......###.."
         PIXELS  "............................"
         PIXELS  ".......##..........##......."
         PIXELS  ".........##......##........."
