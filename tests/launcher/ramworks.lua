@@ -2,7 +2,7 @@
 
 MODEL="apple2ee"
 MODELARGS="-sl2 mouse -sl7 cffa2 -aux rw3"
-DISKARGS="-hard1 $HARDIMG -hard2 res/tests.hdv"
+DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv"
 
   ======================================== ENDCONFIG ]]
 
@@ -23,7 +23,7 @@ test.Step(
 
     a2d.ToggleOptionCopyToRAMCard() -- Enable
     a2d.Reboot()
-    a2d.WaitForDesktopReady()
+    a2d.WaitForDesktopReady({timeout=120})
 
     a2d.OpenPath("/RAM/DESKTOP/APPLE.MENU/TOYS")
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "TOYS", "should be copied to RAMCard")

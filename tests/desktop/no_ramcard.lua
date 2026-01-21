@@ -1,7 +1,6 @@
 --[[ BEGINCONFIG ========================================
 
-MODELARGS="-sl2 mouse -sl7 cffa2 -aux ext80"
-DISKARGS="-hard1 $HARDIMG -hard2 res/tests.hdv -flop1 $FLOP1IMG -flop2 $FLOP2IMG"
+DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv -flop1 $FLOP1IMG -flop2 $FLOP2IMG"
 
 ======================================== ENDCONFIG ]]
 

@@ -1,8 +1,8 @@
 --[[ BEGINCONFIG ==================================================
 
 MODEL="apple2ee"
-MODELARGS="-sl1 cffa2 -sl2 mouse -sl7 cffa2 -aux ext80"
-DISKARGS="-hard1 res/disk_b.2mg -hard3 $HARDIMG -hard4 res/disk_a.2mg"
+MODELARGS="-sl1 cffa2 -sl2 mouse -sl7 cffa2"
+DISKARGS="-hard1 disk_b.2mg -hard3 $HARDIMG -hard4 disk_a.2mg"
 
 ================================================== ENDCONFIG ]]
 

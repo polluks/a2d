@@ -1,6 +1,6 @@
 --[[ BEGINCONFIG ========================================
 
-MODELARGS="-aux ext80 -sl2 mouse \
+MODELARGS="-sl2 mouse \
   -sl7 scsi \
   -sl7:scsi:scsibus:6 harddisk           \
   -sl7:scsi:scsibus:5 aplcdsc            \
@@ -54,15 +54,16 @@ end
   Show the dialog. Snapshots verifying long device names don't mispaint.
 ]]
 FormatEraseTest(
-  "Long names",
+  "Long device names",
   function(invoke)
     invoke(false)
-    test.Snap("long names on device selection")
-    for i = 1, 13 do
+    test.Snap("verify long names ellipsified if needed")
+    for i = 1, #apple2.GetProDOSDeviceList() do
       apple2.DownArrowKey()
     end
-    test.Snap("long names with selection device selection")
+    test.Snap("verify selection rect covers name, doesn't overlap border")
     a2d.DialogOK()
-    test.Snap("long names erased after device selection")
+    test.Snap("verify long names erased after device selection")
+    test.Snap("verify location line shows full name without ellipsis")
     a2d.DialogCancel()
 end)

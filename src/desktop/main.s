@@ -1115,34 +1115,38 @@ last_disk_in_devices_table:
         pha
         tya                     ; A = unit_number
 
-        jsr     FindSmartportDispatchAddress
-    IF CC                       ; is SmartPort
-        stax    dispatch
-        sty     status_params::unit_num
+        sta     ALTZPOFF        ; Main ZP/LCBANKs
 
-        ;; Execute SmartPort call
+        and     #UNIT_NUM_MASK  ; %DSSS0000
+        sta     DRIVER_UNIT_NUMBER
+        lsr                     ; %0DSSS000
+        lsr                     ; %00DSSS00
+        lsr                     ; %000DSSS0
+        tax
+        copy16  DEVADR,x, dispatch
+
+        copy8   #DRIVER_COMMAND_STATUS, DRIVER_COMMAND
+        copy16  #0, DRIVER_BUFFER
+        copy16  #0, DRIVER_BLOCK_NUMBER
         dispatch := *+1
         jsr     SELF_MODIFIED
-        .byte   SPCall::Status
-        .addr   status_params
 
-        lda     status_buffer
-        and     #$10            ; general status byte, $10 = disk in drive
-      IF NOT_ZERO
-        ldy     #$FF            ; is SmartPort and disk in drive
-        bne     finish          ; always
-      END_IF
+        sta     ALTZPON         ; Aux ZP/LCBANKs
+
+        ;; Assume no disk in drive
+        ldy     #$00
+
+        ;; ProDOS's SmartPort driver maps ~$10 to $2F (Device Offline)
+        ;; Some drivers report $27 (I/O Error)
+    IF NOT A IN #ERR_DEVICE_OFFLINE, #ERR_IO_ERROR
+        ;; Disk in drive
+        ldy     #$FF
     END_IF
 
-        ldy     #0              ; not SmartPort or no disk in drive
-
-finish: pla
+        pla
         tax                     ; restore X
         tya                     ; A = result
         rts
-
-        ;; params for call
-        DEFINE_SP_STATUS_PARAMS status_params, 1, status_buffer, SPStatusRequest::DeviceStatus
 .endproc ; CheckDiskInDevice
 
 ;;; Inputs: A = unmasked unit number
@@ -2483,10 +2487,6 @@ main_length:    .word   0
 .proc CmdOpen
         ptr := $06
 
-        selected_icon_count_copy := $1F80
-        selected_icon_list_copy := $1F81
-        .assert selected_icon_list_copy + kMaxIconCount <= $2000, error, "overlap"
-
         ;; --------------------------------------------------
         ;; Entry point from menu
 
@@ -2536,18 +2536,10 @@ from_double_click:
 common:
         CLEAR_BIT7_FLAG dir_flag
 
-        ;; Make a copy of selection
-        ldx     selected_icon_count
-        stx     selected_icon_count_copy
-    DO
-        copy8   selected_icon_list-1,x, selected_icon_list_copy-1,x
-        dex
-    WHILE NOT_ZERO
-
         ;; Iterate selected icons
         ldx     #0
     DO
-        cpx     selected_icon_count_copy
+        cpx     selected_icon_count
         bne     next
 
         ;; Finish up...
@@ -2563,7 +2555,7 @@ common:
 
 next:   txa
         pha                     ; A = index
-        lda     selected_icon_list_copy,x
+        lda     selected_icon_list,x
 
         ;; Trash?
         cmp     trash_icon_num
@@ -2597,7 +2589,7 @@ maybe_open_file:
         pla                     ; A = icon id
         tax                     ; X = icon id
 
-        lda     selected_icon_count_copy
+        lda     selected_icon_count
         cmp     #2              ; multiple files open?
         bcs     next_icon       ; don't try to invoke
 
@@ -2705,12 +2697,12 @@ CmdOpenParentThenCloseCurrent := CmdOpenParentImpl::close_current
 ;;; ============================================================
 
 .proc CmdCloseAll
-repeat:
+    REPEAT
         lda     active_window_id ; current window
         RTS_IF ZERO              ; nope, done!
 
         jsr     CloseActiveWindow ; close it...
-        jmp     repeat            ; and try again
+    FOREVER                       ; and try again
 .endproc ; CmdCloseAll
 
 ;;; ============================================================
@@ -2797,18 +2789,17 @@ start:
         COPY_STRING str_new_folder, stashed_name
 
         ;; Repeat to find a free name
-retry:
+   REPEAT
         CALL    GetWindowPath, A=active_window_id
         jsr     CopyToSrcPath
         CALL    AppendFilenameToSrcPath, AX=#stashed_name
         jsr     GetSrcFileInfo
         bcc     spin
-        cmp     #ERR_FILE_NOT_FOUND
-        beq     create
-        bne     error
+        BREAK_IF A = #ERR_FILE_NOT_FOUND
+        bne     error           ; always
 
 spin:   jsr     SpinName
-        jmp     retry
+    FOREVER
 
         ;; --------------------------------------------------
         ;; Try creating the folder
@@ -3427,6 +3418,15 @@ RefreshView := RefreshViewImpl::entry3
         jsr     GetSelectedUnitNum
         sta     unit_num
 
+        jsr     GetSingleSelectedIcon
+    IF NOT ZERO
+        jsr     GetIconName
+        stax    $06
+        CALL    CopyPtr1ToBuf, AX=#text_input_buf
+    ELSE
+        copy8   #0, text_input_buf
+    END_IF
+
 exec:
         CALL    LoadDynamicRoutine, A=#kDynamicRoutineFormatErase
         RTS_IF NS
@@ -3446,7 +3446,8 @@ exec:
 
 unit:   sta     unit_num
         copy8   #FormatEraseAction::format, action
-        bne     exec            ; always
+        copy8   #0, text_input_buf
+        beq     exec            ; always
 
 .endproc ; CmdFormatEraseDiskImpl
 CmdFormatDisk := CmdFormatEraseDiskImpl::format
@@ -3628,13 +3629,14 @@ CmdRenameWithDefaultNameGiven := CmdRename::ep2 ; A,X = name
         CALL    AppendFilenameToSrcPath, AX=#stashed_name
 
         ;; Repeat to find a free name
-spin:   jsr     GetSelectionWindow
+    REPEAT
+        jsr     GetSelectionWindow
         jsr     GetWindowPath
         jsr     CopyToDstPath
         jsr     SpinName
         CALL    AppendFilenameToDstPath, AX=#stashed_name
         jsr     GetDstFileInfo
-        bcc     spin
+    UNTIL CS
         cmp     #ERR_FILE_NOT_FOUND
         bne     error
 
@@ -3694,6 +3696,9 @@ alpha:  jsr     ShiftDown
 
         sta     delta
         jsr     GetKeyboardSelectableIconsSorted
+
+        CLEAR_BIT7_FLAG extend_selection_flag
+
         jmp     common
 
         ;; ----------------------------------------
@@ -3703,7 +3708,20 @@ alpha:  jsr     ShiftDown
 
         sta     delta
         jsr     GetKeyboardSelectableIcons
+
+        jsr     ShiftDown
+        sta     extend_selection_flag
+
         FALL_THROUGH_TO common
+
+        ;; TODO: If shift is down and there is a selection then:
+        ;; * current = last selected
+        ;; * while true
+        ;;   * current = current + delta
+        ;;   * if current does not exist, break
+        ;;   * if current is selected, continue
+        ;;   * otherwise, select current
+
 
 ;;; --------------------------------------------------
 ;;; Figure out current selected index, based on selection.
@@ -3720,7 +3738,8 @@ common:
         beq     fallback
 
         ;; Try to find actual selection in our list
-        lda     selected_icon_list ; Only consider first, otherwise N^2
+        ldx     selected_icon_count
+        lda     selected_icon_list-1,x ; Only consider last, otherwise N^2
         ldx     buffer             ; count
         dex                        ; index
     DO
@@ -3750,9 +3769,24 @@ pick_next_prev:
         FALL_THROUGH_TO select_index
 
 select_index:
+        bit     extend_selection_flag
+    IF NS
+        stx     cur_index
+        CALL    IsIconSelected, A=buffer+1,x
+      IF ZS
+        cur_index := *+1
+        ldx     #SELF_MODIFIED_BYTE
+        jmp     pick_next_prev
+      END_IF
+        ldx     cur_index
+        TAIL_CALL AddIconToSelectionAndEnsureVisible, A=buffer+1,x
+    END_IF
+
         TAIL_CALL SelectIconAndEnsureVisible, A=buffer+1,x
 
 ret:    rts
+
+extend_selection_flag:  .byte   0 ; bit7
 
 .endproc ; KeyboardHighlightImpl
 KeyboardHighlightPrev := KeyboardHighlightImpl::prev
@@ -3799,19 +3833,35 @@ END_PARAM_BLOCK
 ;;; --------------------------------------------------
 ;;; Identify a starting icon
 
+        jsr     ShiftDown
+        sta     shift_flag
+
         jsr     CacheFocusedWindowIconList
 
-        lda     selected_icon_count
+        ldx     selected_icon_count
         jeq     fallback
-        cmp     cached_window_icon_count
-        jeq     fallback
+        cpx     cached_window_icon_count
+    IF EQ
+        ;; All icons in window are selected; use fallback if not
+        ;; extending selection w/ Shift
+        bit     shift_flag
+        RTS_IF NS
+        jmp     fallback
+    END_IF
 
-        copy8   selected_icon_list, icon_param ; use first
+        ;; Use last in list
+        lda     selected_icon_list-1,x
+        sta     start_icon
+        sta     icon_param
 
 ;;; --------------------------------------------------
 ;;; Get bounds
 
+        ;; NOTE: Intentionally uses bitmap rect as this seems
+        ;; to match intuitive expectations better.
         ITK_CALL IconTK::GetBitmapRect, icon_param ; inits `tmp_rect`
+
+        ;; TODO: What about small icon views?
 
 ;;; --------------------------------------------------
 ;;; Extend rect, based on dir
@@ -3834,9 +3884,8 @@ END_PARAM_BLOCK
         adc     tmp_rect,y
         sta     tmp_rect,y
         txa
-        iny
-        adc     tmp_rect,y
-        sta     tmp_rect,y
+        adc     tmp_rect+1,y
+        sta     tmp_rect+1,y
 
 ;;; --------------------------------------------------
 ;;; Iterate over icons, consider any in rect
@@ -3850,10 +3899,23 @@ END_PARAM_BLOCK
         BREAK_IF X = cached_window_icon_count
 
         lda     cached_window_icon_list,x
+
+        ;; Filter out the starter icon. This is necessary as our
+        ;; search rect is based on the starter icon's bitmap, but we
+        ;; compare against the full bounds so we would match against
+        ;; the label, e.g. Shift+Down in large icon view, Shift+Right
+        ;; in small icon view.
+        cmp     start_icon
+        beq     next_icon
+
         sta     cur_icon
         sta     icon_param
         jsr     IsIconSelected
-        beq     next_icon
+    IF ZS
+        ;; Already selected. If we're not extending, skip it.
+        bit     shift_flag
+        bpl     next_icon
+    END_IF
 
         ITK_CALL IconTK::IconInRect, icon_param ; tests against `tmp_rect`
         beq     next_icon
@@ -3924,10 +3986,19 @@ fallback:
     IF CC
         lda     cached_window_icon_list,y
     END_IF
-
-select:
         jmp     SelectIconAndEnsureVisible
 
+select:
+        jsr     ShiftDown
+    IF NS
+        TAIL_CALL AddIconToSelectionAndEnsureVisible, A=best_icon
+    END_IF
+        TAIL_CALL SelectIconAndEnsureVisible, A=best_icon
+
+shift_flag:
+        .byte   0
+start_icon:
+        .byte   0
 .endproc ; KeyboardHighlightSpatialImpl
 KeyboardHighlightLeft  := KeyboardHighlightSpatialImpl::left
 KeyboardHighlightRight := KeyboardHighlightSpatialImpl::right
@@ -4180,11 +4251,11 @@ ret:    rts
         ;; No-op if already single selected icon
         ldy     selected_icon_count
         dey
-        bne     continue
+    IF ZERO
         cmp     selected_icon_list
-        beq     ret
+        RTS_IF EQ
+    END_IF
 
-continue:
         pha
         jsr     ClearSelection
         pla
@@ -4194,25 +4265,39 @@ continue:
         jsr     ActivateWindow  ; no-op if already active, or 0
         pla
 
-        sta     icon_param
+        FALL_THROUGH_TO AddIconToSelectionAndEnsureVisible
+.endproc ; SelectIconAndEnsureVisible
+
+;;; ============================================================
+
+;;; If icon is already selected (1) it is moved to the end of the
+;;; selection list (so it can function as the "key" for future
+;;; selection operations) and (2) redrawn so it is "on top".
+
+;;; Input: A = icon id
+.proc AddIconToSelectionAndEnsureVisible
+        CALL    IsIconSelected  ; sets `icon_param`
+    IF ZS
+        CALL    RemoveFromSelectionList, A=icon_param
+    END_IF
+
         ITK_CALL IconTK::HighlightIcon, icon_param
 
         ;; Find icon's window, and set selection
         CALL    GetIconWindow, A=icon_param
         sta     selected_window_id
-        copy8   #1, selected_icon_count
-        copy8   icon_param, selected_icon_list
+        CALL    AddToSelectionList, A=icon_param
 
         ;; If windowed, ensure it is visible
-        lda     selected_window_id
+        ldy     selected_window_id
     IF NOT_ZERO
-        CALL    ScrollIconIntoView, A=selected_icon_list
+        CALL    ScrollIconIntoView, A=icon_param
     END_IF
 
-        ITK_CALL IconTK::DrawIcon, selected_icon_list
+        ITK_CALL IconTK::DrawIcon, icon_param
 
-ret:    rts
-.endproc ; SelectIconAndEnsureVisible
+        rts
+.endproc ; AddIconToSelectionAndEnsureVisible
 
 ;;; ============================================================
 
@@ -5141,20 +5226,19 @@ arbitrary_target:
     WHILE POS
 
         ;; Repeat to find a free name
-retry:  CALL    CopyToDstPath, AX=#operation_dst_path
+    REPEAT
+        CALL    CopyToDstPath, AX=#operation_dst_path
         CALL    AppendFilenameToDstPath, AX=#stashed_name
         jsr     GetDstFileInfo
-    IF CS
-        cmp     #ERR_FILE_NOT_FOUND
-        beq     create
+      IF CS
+        BREAK_IF A=#ERR_FILE_NOT_FOUND
         bne     err
-    END_IF
+      END_IF
         jsr     SpinName
-        jmp     retry
+    FOREVER
 
         ;; --------------------------------------------------
         ;; Create and write link file
-create:
         MLI_CALL CREATE, create_params
         bcs     err
 
@@ -5527,7 +5611,7 @@ event_loop:
         ITK_CALL IconTK::DrawIconRaw, icon_param ; CHECKED (drag select)
         END_IF
        ELSE
-        MGTK_CALL MGTK::CheckEvents
+        jsr     CheckEvents
        END_IF
 
         pla                     ; A = index
@@ -6317,7 +6401,8 @@ err:    RETURN  C=1
 
         ;; Draw each list view row
         ldx     #0              ; X = index
-rloop:  cpx     cached_window_icon_count
+      REPEAT
+        cpx     cached_window_icon_count
         beq     done
         txa                     ; A = index
         pha
@@ -6327,12 +6412,12 @@ rloop:  cpx     cached_window_icon_count
         jsr     GetIconRecordNum
         jsr     DrawListViewRow
 
-        MGTK_CALL MGTK::CheckEvents
+        jsr     CheckEvents
 
         pla                     ; A = index
         tax                     ; X = index
         inx
-        jmp     rloop
+      FOREVER
     END_IF
 
         ;; --------------------------------------------------
@@ -6415,7 +6500,7 @@ done:
         IF NOT ZERO
         ITK_CALL IconTK::DrawIconRaw, icon_param ; CHECKED
         ELSE
-        MGTK_CALL MGTK::CheckEvents
+        jsr     CheckEvents
         END_IF
 
         pla                     ; A = index
@@ -6701,12 +6786,13 @@ new_window_flag:        .byte   0
         jsr     PushPointers
         jsr     SetCursorWatch ; before loading directory
 
+        jsr     GetVolUsedFreeViaPath ; uses `src_path_buf`
+
         jsr     _DoOpen
         lda     open_params::ref_num
         sta     read_params::ref_num
         sta     close_params::ref_num
         jsr     _DoRead
-        jsr     GetVolUsedFreeViaPath ; uses `src_path_buf`
 
         ldx     #0
     DO
@@ -6835,6 +6921,9 @@ next:   inc     index_in_block
         bit     LCBANK1
         bit     LCBANK1
         add16_8 record_ptr, #.sizeof(FileRecord)
+
+        jsr     CheckEvents
+
         jmp     do_entry
 
 finish: copy16  record_ptr, filerecords_free_start
@@ -7243,12 +7332,13 @@ assign_height:
         jsr     PushPointers
         copy16  #icontype_table, ptr
 
-loop:   ldy     #ICTRecord::mask ; $00 if done
+    REPEAT
+        ldy     #ICTRecord::mask ; $00 if done
         lda     (ptr),y
-    IF A = #kICTSentinel
+      IF A = #kICTSentinel
         jsr     PopPointers
         RETURN  A=#IconType::generic
-    END_IF
+      END_IF
 
         ;; Check type (with mask)
         and     file_type       ; A = type & mask
@@ -7264,7 +7354,7 @@ loop:   ldy     #ICTRecord::mask ; $00 if done
 
         ;; Does Aux Type matter, and if so does it match?
         bit     flags
-    IF NS                       ; bit 7 = compare aux
+      IF NS                     ; bit 7 = compare aux
         iny                     ; ASSERT: Y = FTORecord::aux_suf
         ASSERT_EQUALS ICTRecord::aux_suf, ICTRecord::flags+1
         lda     aux_type
@@ -7274,11 +7364,11 @@ loop:   ldy     #ICTRecord::mask ; $00 if done
         lda     aux_type+1
         cmp     (ptr),y
         bne     next
-    END_IF
+      END_IF
 
         ;; Does Block Count matter, and if so does it match?
         bit     flags
-    IF VS                       ; bit 6 = compare blocks
+      IF VS                     ; bit 6 = compare blocks
         ldy     #ICTRecord::blocks
         lda     blocks_used
         cmp     (ptr),y
@@ -7287,12 +7377,12 @@ loop:   ldy     #ICTRecord::mask ; $00 if done
         lda     blocks_used+1
         cmp     (ptr),y
         bne     next
-    END_IF
+      END_IF
 
         ;; Filename suffix?
         lda     flags
         and     #ICT_FLAGS_SUFFIX
-    IF NOT_ZERO
+      IF NOT_ZERO
         ;; Set up pointers to suffix and filename
         ptr_suffix      := $08
         ldy     #ICTRecord::aux_suf
@@ -7303,7 +7393,7 @@ loop:   ldy     #ICTRecord::mask ; $00 if done
         copy8   (ptr_filename),y, filename_pos
 
         ;; Case-insensitive compare each character
-      DO
+       DO
         filename_pos := *+1
         ldy     #SELF_MODIFIED_BYTE
         lda     (ptr_filename),y
@@ -7318,8 +7408,8 @@ loop:   ldy     #ICTRecord::mask ; $00 if done
         BREAK_IF ZERO           ; if we ran out of suffix, it's a match
         dec     filename_pos
         beq     next            ; but if we ran out of filename, it's not
-      WHILE NOT_ZERO            ; otherwise, keep going
-    END_IF
+       WHILE NOT_ZERO           ; otherwise, keep going
+      END_IF
 
         ;; Have a match
         ldy     #ICTRecord::icontype
@@ -7329,7 +7419,7 @@ loop:   ldy     #ICTRecord::mask ; $00 if done
 
         ;; Next entry
 next:   add16_8 ptr, #.sizeof(ICTRecord)
-        jmp     loop
+    FOREVER
 .endproc ; DetermineIconType
 
 ;;; ============================================================
@@ -7903,6 +7993,8 @@ END_PARAM_BLOCK
         addax   records_base_ptr, record_ptr
         pla                     ; A = record_num-1
         jsr     _AllocAndPopulateFileIcon
+
+        jsr     CheckEvents
 
         pla                     ; A = index
         tax                     ; X = index
@@ -9303,6 +9395,7 @@ table:
 
     DO
         MGTK_CALL MGTK::WaitVBL
+        jsr     CheckEvents
 
         ;; If N in 0..11, draw N
         lda     step            ; draw the Nth
@@ -9337,6 +9430,7 @@ table:
 
     DO
         MGTK_CALL MGTK::WaitVBL
+        jsr     CheckEvents
 
         ;; If N in 0..11, draw N
         lda     step
@@ -10032,7 +10126,7 @@ retry:  MLI_CALL READ, read_src_dir_entry_params
         beq     retry           ; always
 .else
         .refto retry
-fail:   jmp     OpHandleErrorCode
+        jmp     OpHandleErrorCode
 .endif
     END_IF
 
@@ -10042,15 +10136,18 @@ fail:   jmp     OpHandleErrorCode
         ;; Advance to first entry in next "block"
         copy8   #0, entry_index_in_block
 retry2: MLI_CALL READ, read_padding_bytes_params
-.if ::kCopyInteractive
       IF CS
+        cmp     #ERR_END_OF_FILE
+        beq     eof
+
+.if ::kCopyInteractive
         jsr     OpCheckRetry
         beq     retry2          ; always
-      END_IF
 .else
         .refto retry2
-        bcs     fail
+        jmp     OpHandleErrorCode
 .endif
+      END_IF
     END_IF
 
         RETURN  A=#0
@@ -11864,7 +11961,7 @@ ShowErrorAlertDst := ShowErrorAlertImpl::dst
         sta     icon_index
         sta     result_flag
 
-loop:
+    REPEAT
         icon_index := *+1
         ldx     #SELF_MODIFIED_BYTE
         cpx     selected_icon_count
@@ -11878,41 +11975,41 @@ loop:
         ;; Get the file / volume info from ProDOS
 
         jsr     GetIconPath     ; `operation_src_path` set to path; A=0 on success
-    IF NE
+      IF NE
         jsr     ShowAlert
         jmp     next
-    END_IF
+      END_IF
         CALL    CopyToSrcPath, AX=#operation_src_path
 
         ;; Try to get file/volume info
 common: jsr     GetSrcFileInfo
-    IF CS
+      IF CS
         jsr     ShowAlert
         cmp     #kAlertResultTryAgain
         beq     common
         jmp     next
-    END_IF
+      END_IF
 
         ;; Special cases for volumes
         lda     selected_window_id
-    IF ZERO
+      IF ZERO
         ;; Volume - determine write-protect state
         CLEAR_BIT7_FLAG write_protected_flag
         ldx     icon_index
         CALL    IconToDeviceIndex, A=selected_icon_list,x
-      IF ZERO
+       IF ZERO
         lda     DEVLST,x
         and     #UNIT_NUM_MASK
         sta     getinfo_block_params::unit_num
         MLI_CALL READ_BLOCK, getinfo_block_params
-       IF CC
+        IF CC
         MLI_CALL WRITE_BLOCK, getinfo_block_params
-        IF A = #ERR_WRITE_PROTECTED
+         IF A = #ERR_WRITE_PROTECTED
         SET_BIT7_FLAG write_protected_flag
+         END_IF
         END_IF
        END_IF
       END_IF
-    END_IF
 
         ;; --------------------------------------------------
         ;; Open and populate dialog
@@ -11923,20 +12020,20 @@ common: jsr     GetSrcFileInfo
         ;; Descendant size/file count
 
         lda     src_file_info_params::storage_type
-    IF A IN #ST_VOLUME_DIRECTORY, #ST_LINKED_DIRECTORY
+      IF A IN #ST_VOLUME_DIRECTORY, #ST_LINKED_DIRECTORY
         jsr     SetCursorWatch  ; before directory enumeration
         jsr     _GetDirSize
         jsr     SetCursorPointer ; after directory enumeration
         jsr     GetSrcFileInfo  ; needed for toggling lock
-    END_IF
+      END_IF
         ;; --------------------------------------------------
         ;; Run the dialog, until OK or Cancel
 
         jsr     _DialogRun
-        bne     done
+        BREAK_IF ZC
 
 next:   inc     icon_index
-        jmp     loop
+    FOREVER
 
 done:   copy8   #0, operation_dst_path
         RETURN  A=result_flag
@@ -12488,8 +12585,9 @@ DoRename        := DoRenameImpl::start
 ;;; ============================================================
 
 .proc _DialogRun
-loop:   jsr     _InputLoop
-        bmi     loop            ; continue?
+    REPEAT
+        jsr     _InputLoop
+        CONTINUE_IF NS          ; continue?
         bne     _DialogClose    ; canceled!
 
         lda     text_input_buf  ; treat empty as cancel
@@ -12501,10 +12599,10 @@ loop:   jsr     _InputLoop
         lda     path_buf0       ; full path okay?
         clc
         adc     text_input_buf
-    IF A >= #::kMaxPathLength   ; not +1 because we'll add '/'
+        BREAK_IF A < #::kMaxPathLength   ; not +1 because we'll add '/'
+
         CALL    ShowAlertParams, Y=#AlertButtonOptions::OK, AX=#aux::str_alert_name_too_long
-        jmp     loop
-    END_IF
+    FOREVER
 
         ldxy    #text_input_buf
         RETURN  A=#0
@@ -14026,7 +14124,7 @@ mli_relay_checkevents_flag:     ; bit7
         ;; so the mouse stays responsive.
         bit     mli_relay_checkevents_flag
     IF NS
-        MGTK_CALL MGTK::CheckEvents
+        jsr     CheckEvents
     END_IF
 
         ;; Adjust return address on stack, compute
@@ -14086,6 +14184,13 @@ params:  .res    3
 
 ;;; ============================================================
 
+.proc CheckEvents
+        MGTK_CALL MGTK::CheckEvents
+        rts
+.endproc ; CheckEvents
+
+;;; ============================================================
+
 .proc UnshieldCursor
         MGTK_CALL MGTK::UnshieldCursor
         rts
@@ -14099,8 +14204,6 @@ params:  .res    3
 
 .proc OpenPromptDialog
         sta     prompt_button_flags
-
-        copy8   #0, text_input_buf
 
         copy8   #BTK::kButtonStateNormal, ok_button::state
 
@@ -14386,7 +14489,7 @@ plural: RETURN  C=0
 ;;; ============================================================
 ;;; Determine if an icon is in the current selection.
 ;;; Inputs: A=icon number
-;;; Outputs: Z=1 if found
+;;; Outputs: Z=1 if found; sets `icon_param`
 
 .proc IsIconSelected
         sta     icon_param

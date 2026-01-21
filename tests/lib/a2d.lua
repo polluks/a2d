@@ -8,6 +8,7 @@ local a2d = {}
 
 local util = require("util")
 local apple2 = require("apple2")
+local mgtk = require("mgtk")
 
 local function default_options(o)
   local options = {}
@@ -39,8 +40,10 @@ function a2d.InitSystem()
 
   if not system.name:match("^apple2gs") then
     -- Monitor type
-    if system.name:match("^apple2e") then
-      -- Apple IIe
+    if system.name:match("^apple2e")
+      or system.name:match("^tk3000")
+      or system.name:match("^prav8c") then
+      -- Apple IIe or TK3000//e or Pravetz 8C
       apple2.SetMonitorType(apple2.MONITOR_TYPE_VIDEO7)
     elseif system.name:match("^apple2c") then
       -- Apple IIc
@@ -68,7 +71,9 @@ function a2d.InitSystem()
     -- "CPU type": "Standard", "7MHz ZipGS", "8MHz ZipGS", "12MHz ZipGS", "16MHz ZipGS"
     apple2.SetSystemConfig(":a2_config", "CPU type", 0xFF, 1 | (3 << 1))
 
-  elseif system.name:match("^apple2e") then
+  elseif system.name:match("^apple2e")
+    or system.name:match("^tk3000")
+    or system.name:match("^prav8c") then
     -- bit 4 = "CPU type": 0="Standard", 1="4MHz Zip Chip"
     apple2.SetSystemConfig(":a2_config", "CPU type", 1 << 4, 1 << 4)
     -- bit 5 = "Bootup speed": 0="Standard", 1="4MHz"
@@ -298,7 +303,7 @@ function a2d.Select(name, options)
 
   a2d.ClearSelection()
   apple2.Type(name)
-  emu.wait(0.25) -- TODO: spin here?
+  a2d.WaitForRepaint() -- TODO: spin here?
   CheckSelectionName(name, options)
 end
 
@@ -309,7 +314,7 @@ function a2d.SelectAndOpen(name, options)
   a2d.Select(name, options)
   if options.close_current then
     a2d.OpenSelectionAndCloseCurrent()
-    a2d.WaitForRepaint()
+    emu.wait(1)
   else
     a2d.OpenSelection()
   end
@@ -330,7 +335,8 @@ end
 
 function a2d.CloseAllWindows()
   a2d.OASAShortcut("W")
-  a2d.WaitForRepaint()
+  util.WaitFor("all windows to close",
+               function() return mgtk.FrontWindow() == 0 end)
 end
 
 -- additional option: {leave_parent=true}
@@ -492,8 +498,12 @@ end
 function a2d.FormatVolume(name, opt_new_name)
   a2d.SelectPath("/"..name)
   a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK)
-  apple2.Type(opt_new_name or name)
+  if opt_new_name then
+    a2d.ClearTextField()
+    apple2.Type(opt_new_name)
+  end
   a2d.DialogOK()
+  -- TODO: WaitForAlert here (layering violation!)
   a2d.WaitForRepaint()
   a2d.DialogOK() -- confirm overwrite
   emu.wait(5) -- I/O
@@ -503,8 +513,10 @@ function a2d.EraseVolume(name, opt_new_name, options)
   options = default_options(options)
   a2d.SelectPath("/"..name, options)
   a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_ERASE_DISK)
-  a2d.ClearTextField()
-  apple2.Type(opt_new_name or name)
+  if opt_new_name then
+    a2d.ClearTextField()
+    apple2.Type(opt_new_name)
+  end
   a2d.DialogOK()
   -- TODO: WaitForAlert here (layering violation!)
   a2d.WaitForRepaint()
@@ -593,6 +605,26 @@ function a2d.CheckAllDrives(options)
   end
 end
 
+function a2d.FormatEraseSelectSlotDrive(slot, drive, options)
+  options = default_options(options)
+  -- List is presented in reverse order
+  local list = apple2.GetProDOSDeviceList()
+  local found = false
+  for index = #list, 1, -1 do
+    apple2.DownArrowKey()
+    if list[index].slot == slot and list[index].drive == drive then
+      found = true
+      break
+    end
+  end
+  if not found then
+    error(string.format("Failed to select S%d,D%d", slot, drive))
+  end
+  if not options.no_ok then
+    a2d.DialogOK()
+  end
+end
+
 --------------------------------------------------
 -- Configuration
 --------------------------------------------------
@@ -677,6 +709,7 @@ function a2d.WaitForDesktopShowing(options, level)
 end
 
 function a2d.WaitForDesktopReady(options)
+  emu.wait(1) -- Don't check too soon and see old module
   a2d.WaitForDesktopShowing(options, 1)
   emu.wait(5) -- TODO: Something better here
   -- TODO: Some sort of assertion here
@@ -891,145 +924,148 @@ end
 
 -- Open Selection
 -- Page Down
-function a2d.OADown()
+function a2d.OADown(options)
+  options = default_options(options)
   apple2.PressOA()
   apple2.DownArrowKey()
   apple2.ReleaseOA()
+
+  if not options.no_wait then
+    a2d.WaitForRepaint()
+  end
 end
 
 -- Page Down (alias)
-function a2d.SADown()
+function a2d.SADown(options)
+  options = default_options(options)
   apple2.PressSA()
   apple2.DownArrowKey()
   apple2.ReleaseSA()
+
+  if not options.no_wait then
+    a2d.WaitForRepaint()
+  end
 end
 
 -- Open Enclosing Folder
 -- Page Up
-function a2d.OAUp()
+function a2d.OAUp(options)
+  options = default_options(options)
   apple2.PressOA()
   apple2.UpArrowKey()
   apple2.ReleaseOA()
+
+  if not options.no_wait then
+    a2d.WaitForRepaint()
+  end
 end
 
 -- Page Up (alias)
-function a2d.SAUp()
+function a2d.SAUp(options)
+  options = default_options(options)
   apple2.PressSA()
   apple2.UpArrowKey()
   apple2.ReleaseSA()
+
+  if not options.no_wait then
+    a2d.WaitForRepaint()
+  end
 end
 
 -- Move to Start
-function a2d.OALeft()
+function a2d.OALeft(options)
+  options = default_options(options)
   apple2.PressOA()
   apple2.LeftArrowKey()
   apple2.ReleaseOA()
+
+  if not options.no_wait then
+    a2d.WaitForRepaint()
+  end
 end
 
 -- Move to End
-function a2d.OARight()
+function a2d.OARight(options)
+  options = default_options(options)
   apple2.PressOA()
   apple2.RightArrowKey()
   apple2.ReleaseOA()
+
+  if not options.no_wait then
+    a2d.WaitForRepaint()
+  end
 end
 
 -- Open Selection then Close Current
 -- Scroll to End
-function a2d.OASADown()
+function a2d.OASADown(options)
+  options = default_options(options)
   apple2.PressOA()
   apple2.PressSA()
   apple2.DownArrowKey()
   apple2.ReleaseSA()
   apple2.ReleaseOA()
+
+  if not options.no_wait then
+    -- Double wait since it's a more complex action
+    a2d.WaitForRepaint()
+    a2d.WaitForRepaint()
+  end
 end
 
 -- Open Enclosing then Close Current
 -- Scroll to Start
-function a2d.OASAUp()
+function a2d.OASAUp(options)
+  options = default_options(options)
   apple2.PressOA()
   apple2.PressSA()
   apple2.UpArrowKey()
   apple2.ReleaseSA()
   apple2.ReleaseOA()
+
+  if not options.no_wait then
+    -- Double wait since it's a more complex action
+    a2d.WaitForRepaint()
+    a2d.WaitForRepaint()
+  end
 end
 
 -- Shortcut: File > Delete
-function a2d.OADelete()
+function a2d.OADelete(options)
+  options = default_options(options)
   apple2.PressOA()
   apple2.DeleteKey()
   apple2.ReleaseOA()
-end
 
---------------------------------------------------
--- Dates
---------------------------------------------------
-
--- TODO: API to disable clock driver (clear MACHID bit and JMP)
-
-local DATELO, DATEHI, TIMELO, TIMEHI = 0xBF90, 0xBF91, 0xBF92, 0xBF93
-
-function a2d.SetProDOSDate(y,m,d)
-  local hi = (y % 100) << 1 | (m >> 3)
-  local lo = (m << 5) | d
-  apple2.WriteRAMDevice(DATELO, lo)
-  apple2.WriteRAMDevice(DATEHI, hi)
-end
-
-function a2d.GetProDOSDate()
-  local word = (apple2.ReadRAMDevice(DATEHI) << 8) | apple2.ReadRAMDevice(DATELO)
-  local y = (word >> 9) & 0x7F
-  local m = (word >> 5) & 0xF
-  local d = word & 0x1F
-
-  -- https://prodos8.com/docs/technote/28/
-  if y < 40 then
-    y = y + 2000
-  else
-    y = y + 1900
+  if not options.no_wait then
+    a2d.WaitForRepaint()
   end
-
-  return y,m,d
 end
 
-function a2d.SetProDOSTime(h, m)
-  apple2.WriteRAMDevice(TIMELO, m)
-  apple2.WriteRAMDevice(TIMEHI, h)
+--------------------------------------------------
+-- Helpers
+--------------------------------------------------
+
+local function ram_u8(addr)
+  return apple2.GetRAMDeviceProxy().read_u8(addr)
 end
 
-function a2d.GetProDOSTime()
-  local m = apple2.ReadRAMDevice(TIMELO) & 0x3F
-  local h = apple2.ReadRAMDevice(TIMEHI) & 0x1F
-  return h,m
+local function ram_u16(addr)
+  return apple2.GetRAMDeviceProxy().read_u16(addr)
+end
+
+local function ram_s16(addr)
+  return apple2.GetRAMDeviceProxy().read_s16(addr)
 end
 
 --------------------------------------------------
 -- Icons
 --------------------------------------------------
 
--- TODO: Build some sort of proper API
-
-
 local DESKTOP_SYMBOLS = {}
 for pair in emu.subst_env("$DESKTOP_SYMBOLS"):gmatch("([^ ]+)") do
   local k,v = pair:match("^(.+)=(.+)$")
   DESKTOP_SYMBOLS[k] = tonumber(v, 16)
-end
-
-local function ram_u8(addr)
-  return apple2.ReadRAMDevice(addr)
-end
-
-local function ram_u16(addr)
-  return ram_u8(addr) | (ram_u8(addr+1) << 8)
-end
-
-local function ram_s16(addr)
-  local v = ram_u16(addr)
-  if v & 0x8000 == 0 then
-    return v
-  else
-    return 0x10000 - v
-  end
 end
 
 local function ReadIcon(id)
@@ -1068,7 +1104,7 @@ function a2d.GetSelectedIcons()
   local selected_icon_count_addr = DESKTOP_SYMBOLS['selected_icon_count'] | 0x010000
   local selected_icon_list_addr = DESKTOP_SYMBOLS['selected_icon_list'] | 0x010000
 
-  local selected_icon_count = apple2.ReadRAMDevice(selected_icon_count_addr)
+  local selected_icon_count = ram_u8(selected_icon_count_addr)
 
   local icons = {}
 

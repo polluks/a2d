@@ -1,6 +1,6 @@
 --[[ BEGINCONFIG ========================================
 
-MODELARGS="-sl2 mouse -sl6 superdrive -aux ext80"
+MODELARGS="-sl2 mouse -sl6 superdrive"
 DISKARGS="-flop1 $HARDIMG"
 
 ======================================== ENDCONFIG ]]
@@ -14,6 +14,8 @@ a2d.ConfigureRepaintTime(0.25)
   Info. During the count of the files, eject the disk. Verify that an
   alert appears. Reinsert the disk. Click Try Again. Verify that the
   count of files continues and paints in the correct location.
+
+  NOTE: Fails if unloaded while reading; very timing sensitive
 ]]
 test.Step(
   "Alert shown during File > Get Info if disk ejected, Try Again works",

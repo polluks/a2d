@@ -139,16 +139,40 @@ end
 -- MGTK-based helpers
 --------------------------------------------------
 
-local bank_offset = 0x10000
+local bank_offset
 
-function a2dtest.SetBankOffsetForDeskTopModule()
-  bank_offset = 0x10000
+local DESKTOP_SYMBOLS = {}
+for pair in emu.subst_env("$DESKTOP_SYMBOLS"):gmatch("([^ ]+)") do
+  local k,v = pair:match("^(.+)=(.+)$")
+  DESKTOP_SYMBOLS[k] = tonumber(v, 16)
 end
-function a2dtest.SetBankOffsetForDiskCopyModule()
-  bank_offset = 0x10000
+local SELECTOR_SYMBOLS = {}
+for pair in emu.subst_env("$SELECTOR_SYMBOLS"):gmatch("([^ ]+)") do
+  local k,v = pair:match("^(.+)=(.+)$")
+  SELECTOR_SYMBOLS[k] = tonumber(v, 16)
 end
-function a2dtest.SetBankOffsetForSelectorModule()
+
+function a2dtest.ConfigureForDeskTop()
+  bank_offset = 0x10000
+  mgtk.Configure(bank_offset, DESKTOP_SYMBOLS["current_window"])
+end
+a2dtest.ConfigureForDiskCopy = a2dtest.ConfigureForDeskTop
+
+function a2dtest.ConfigureForSelector()
   bank_offset = 0x00000
+  mgtk.Configure(bank_offset, SELECTOR_SYMBOLS["current_window"])
+end
+
+local function ram_u8(addr)
+  return apple2.GetRAMDeviceProxy().read_u8(addr)
+end
+
+local function ram_u16(addr)
+  return apple2.GetRAMDeviceProxy().read_u16(addr)
+end
+
+local function ram_s16(addr)
+  return apple2.GetRAMDeviceProxy().read_s16(addr)
 end
 
 function a2dtest.GetFrontWindowID()
@@ -161,11 +185,11 @@ end
 
 function a2dtest.GetNextWindowID(window_id)
   local winfo = mgtk.GetWinPtr(window_id) + bank_offset
-  local next = apple2.ReadRAMDevice(winfo + 56) | (apple2.ReadRAMDevice(winfo + 57) << 8)
+  local next = ram_u16(winfo + 56)
   if next == 0 then
     return 0
   end
-  return apple2.ReadRAMDevice(next + bank_offset)
+  return ram_u8(next + bank_offset)
 end
 
 function a2dtest.GetFrontWindowDragCoords()
@@ -173,10 +197,8 @@ function a2dtest.GetFrontWindowDragCoords()
 end
 
 function a2dtest.GetWindowDragCoords(window_id)
-  local rect = mgtk.GetWinFrameRect(window_id)
-  local x = math.floor((rect[1] + rect[3]) / 2)
-  local y = rect[2] + 4
-  return x,y
+  local x, y, w, h = a2dtest.GetWindowContentRect(window_id)
+  return x + w / 2, y - 5
 end
 
 function a2dtest.GetFrontWindowCloseBoxCoords()
@@ -184,10 +206,8 @@ function a2dtest.GetFrontWindowCloseBoxCoords()
   if window_id == 0 then
     error("No front window!", 2)
   end
-  local rect = mgtk.GetWinFrameRect(window_id)
-  local x = rect[1] + 20
-  local y = rect[2] + 4
-  return x,y
+  local x, y, w, h = a2dtest.GetFrontWindowContentRect()
+  return x + 20, y - 8
 end
 
 function a2dtest.GetWindowCount()
@@ -200,7 +220,7 @@ function a2dtest.GetWindowCount()
   repeat
     count = count + 1
     winfo = winfo + bank_offset
-    winfo = apple2.ReadRAMDevice(winfo + 56) | (apple2.ReadRAMDevice(winfo + 57) << 8)
+    winfo = ram_u16(winfo + 56)
   until winfo == 0
   return count
 end
@@ -209,7 +229,7 @@ function a2dtest.GetFrontWindowTitle()
   return a2dtest.GetWindowTitle(a2dtest.GetFrontWindowID())
 end
 function a2dtest.GetWindowTitle(window_id)
-  return mgtk.GetWindowName(window_id, bank_offset)
+  return mgtk.GetWindowName(window_id)
 end
 
 -- returns x,y,width,height
@@ -284,6 +304,7 @@ end
 
 function a2dtest.WaitForAlert(options)
   util.WaitFor("alert", a2dtest.IsAlertShowing, options)
+  emu.wait(0.5) -- let the alert finish drawing
 end
 
 --------------------------------------------------

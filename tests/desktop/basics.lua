@@ -1,7 +1,7 @@
 --[[ BEGINCONFIG ========================================
 
-MODELARGS="-sl1 ramfactor -sl2 mouse -sl7 cffa2 -aux ext80"
-DISKARGS="-hard1 $HARDIMG -hard2 res/tests.hdv"
+MODELARGS="-sl1 ramfactor -sl2 mouse -sl7 cffa2"
+DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv"
 
 ======================================== ENDCONFIG ]]
 
@@ -752,7 +752,6 @@ test.Step(
     a2d.CloseAllWindows()
     emu.wait(1)
     a2d.SelectAll()
-    test.Snap("selection?")
     test.ExpectEquals(a2dtest.GetSelectedIconName(), "Trash", "trash should be first")
     local x, y = a2dtest.GetSelectedIconCoords()
     a2d.InMouseKeysMode(function(m)

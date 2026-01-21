@@ -1,7 +1,7 @@
 --[[ BEGINCONFIG ========================================
 
-MODELARGS="-sl1 ramfactor -sl2 mouse -sl4 ramfactor -sl5 ramfactor -sl7 cffa2 -aux ext80"
-DISKARGS="-hard1 $HARDIMG -flop1 res/dos33_floppy.dsk"
+MODELARGS="-sl1 ramfactor -sl2 mouse -sl4 ramfactor -sl5 ramfactor -sl7 cffa2"
+DISKARGS="-hard1 $HARDIMG -flop1 dos33_floppy.dsk"
 
 ======================================== ENDCONFIG ]]
 
@@ -403,7 +403,7 @@ ListBoxTest(
   {},
   function()
     a2d.CopyDisk()
-    a2dtest.SetBankOffsetForDiskCopyModule()
+    a2dtest.ConfigureForDiskCopy()
     emu.wait(10)
   end,
   function()
@@ -415,7 +415,7 @@ ListBoxTest(
   function()
     -- double_click_func
     a2d.OAShortcut("Q")
-    a2dtest.SetBankOffsetForDeskTopModule()
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
   end
 )

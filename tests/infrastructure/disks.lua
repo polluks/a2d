@@ -1,7 +1,7 @@
 --[[ BEGINCONFIG ========================================
 
 MODEL="apple2ee"
-MODELARGS="-sl2 mouse -sl7 scsi -aux ext80"
+MODELARGS="-sl2 mouse -sl7 scsi"
 DISKARGS="-hard1 $HARDIMG -flop1 $FLOP1IMG"
 
 ======================================== ENDCONFIG ]]
@@ -16,7 +16,7 @@ test.Step(
   "swap images",
   function()
 
-    s7d1:load("/Users/josh/dev/a2d/res/tests.hdv")
+    s7d1:load("/Users/josh/dev/a2d/tests.hdv")
     a2d.CheckAllDrives()
     test.Snap("swapped hard1")
 

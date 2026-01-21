@@ -83,7 +83,9 @@ fi
 BASEDIR="$(pwd)"
 SCRIPTDIR="$(dirname "$SCRIPT")"
 TMPDIR=/tmp/mametest
-mkdir -p "$TMPDIR"/disks
+
+DISKSDIR="$TMPDIR"/disks
+mkdir -p "$DISKSDIR"
 
 NVRAMDIR="$TMPDIR"/nvram
 mkdir -p "$NVRAMDIR"
@@ -92,22 +94,22 @@ rm -rf "$NVRAMDIR"/*
 # --------------------------------------------------
 # Configuration
 
-HARDIMG="out/A2DeskTop-${version}_800k.2mg"
-FLOP1IMG="out/A2DeskTop-${version}_140k_disk1.po"
-FLOP2IMG="out/A2DeskTop-${version}_140k_disk2.po"
+HARDIMG="../../out/A2DeskTop-${version}_800k.2mg"
+FLOP1IMG="../../out/A2DeskTop-${version}_140k_disk1.po"
+FLOP2IMG="../../out/A2DeskTop-${version}_140k_disk2.po"
 
-if [ ! -f "$HARDIMG" ]; then
-  make && make package
+if [ ! -f "tests/images/$HARDIMG" ]; then
+  make package
 fi
 
 MODEL="apple2ee"
-MODELARGS="-sl1 ramfactor -sl2 mouse -sl7 scsi -aux rw3"
+MODELARGS="-sl2 mouse -sl7 cffa2"
 DISKARGS="-hard1 $HARDIMG"
 RESOLUTION="560x384"
 WAITFORDESKTOP="true"
 CHECKAUXMEMORY="true"
 
-CONFIG="$(cat "$SCRIPT" | sed -n '/BEGINCONFIG/,/ENDCONFIG/p' | egrep -v 'BEGINCONFIG|ENDCONFIG' || true)"
+CONFIG="$(cat "$SCRIPT" | sed -n '/BEGINCONFIG/,/ENDCONFIG/p' | grep -E -v 'BEGINCONFIG|ENDCONFIG' || true)"
 if [ -n "$CONFIG" ]; then
   eval "$CONFIG"
 fi
@@ -117,14 +119,14 @@ fi
 
 NEWDISKARGS=""
 while read -r arg disk; do
-  target="$TMPDIR/disks/${arg#?}"
-  cp "$disk" "$target"
+  target="$DISKSDIR/${arg#?}"
+  cp "tests/images/$disk" "$target"
   NEWDISKARGS="$NEWDISKARGS $arg $target"
 done < <(echo $DISKARGS | xargs -n 2)
 DISKARGS="$NEWDISKARGS"
 
-export UNFORMATTED_IMG="$TMPDIR/disks/unformatted.2mg"
-cp "res/unformatted.2mg" "$UNFORMATTED_IMG"
+export UNFORMATTED_IMG="$DISKSDIR/unformatted.2mg"
+cp "tests/images/unformatted.2mg" "$UNFORMATTED_IMG"
 
 # --------------------------------------------------
 # VEDrive
@@ -135,13 +137,13 @@ VESERVER="../ProDOS-Utils/veserver.py"
 VESERVERARGS=""
 if [ -n "$VEDISK1" ]; then
   ext="${VEDISK1##*.}"
-  target="$TMPDIR/disks/vdisk1.${ext}"
+  target="$DISKSDIR/vdisk1.${ext}"
   cp "$VEDISK1" "$target"
   VESERVERARGS="$VESERVERARGS --disk1=$target"
 fi
 if [ -n "$VEDISK2" ]; then
   ext="${VEDISK2##*.}"
-  target="$TMPDIR/disks/vdisk2.${ext}"
+  target="$DISKSDIR/vdisk2.${ext}"
   cp "$VEDISK2" "$target"
   VESERVERARGS="$VESERVERARGS --disk2=$target"
 fi
@@ -159,11 +161,17 @@ fi
 # Symbols
 
 DESKTOP_SYMBOLS=""
-for sym in selected_icon_count selected_icon_list icon_entries; do
-  addr="$(egrep $sym: out/desktop.list | cut -d' ' -f1)"
+for sym in selected_icon_count selected_icon_list icon_entries current_window; do
+  addr="$(grep -E $sym: out/desktop.list | cut -d' ' -f1)"
   DESKTOP_SYMBOLS="${DESKTOP_SYMBOLS} ${sym}=${addr}"
 done
 export DESKTOP_SYMBOLS
+SELECTOR_SYMBOLS=""
+for sym in current_window; do
+  addr="$(grep -E $sym: out/selector.list | cut -d' ' -f1)"
+  SELECTOR_SYMBOLS="${SELECTOR_SYMBOLS} ${sym}=${addr}"
+done
+export SELECTOR_SYMBOLS
 
 # --------------------------------------------------
 # Prepare snapshots dir
@@ -171,6 +179,14 @@ export DESKTOP_SYMBOLS
 SNAPDIR="$TMPDIR"/snaps
 mkdir -p "$SNAPDIR/$MODEL"
 rm -rf "$SNAPDIR/$MODEL/"*
+
+# --------------------------------------------------
+# Prepare configs dir
+
+CFGDIR="$TMPDIR"/cfg
+mkdir -p "$CFGDIR"
+
+cp "${BASEDIR}/tests/cfg/${MODEL}.cfg" "$CFGDIR"
 
 # --------------------------------------------------
 # Run MAME
@@ -218,6 +234,7 @@ output=$(
     -skip_gameinfo -nosamples \
     -window -nomax -resolution '$RESOLUTION' -nounevenstretch \
     -mouse \
+    -cfg_directory '$CFGDIR' \
     -nvram_directory '$NVRAMDIR' \
     -snapshot_directory '$SNAPDIR' -snapsize '$RESOLUTION' \
     $OUTPUTARGS \
@@ -226,7 +243,7 @@ output=$(
     $MAMEFLAGS \
     $SCRIPTARGS" \
        2> >(IFS='' ; while read line; do echo "${COLOR_RED}${line}${COLOR_RESET}" >&1; done) | \
-    egrep --line-buffered -v "Secure coding is automatically enabled" | \
+    grep -E --line-buffered -v "Secure coding is automatically enabled" | \
     tee /dev/fd/5
       )
 popd > /dev/null

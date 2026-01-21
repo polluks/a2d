@@ -1,8 +1,8 @@
 --[[ BEGINCONFIG ==================================================
 
 MODEL="apple2ee"
-MODELARGS="-aux ext80 -sl2 mouse -sl4 cffa2 -sl6 '' -sl7 cffa2"
-DISKARGS="-hard1 res/disk_a.2mg -hard3 $HARDIMG"
+MODELARGS="-sl2 mouse -sl4 cffa2 -sl6 '' -sl7 cffa2"
+DISKARGS="-hard1 disk_a.2mg -hard3 $HARDIMG"
 
 ================================================== ENDCONFIG ]]
 
@@ -21,9 +21,7 @@ test.Step(
     a2d.CloseAllWindows()
     a2d.ClearSelection()
     a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK-2)
-    apple2.DownArrowKey() -- to S7,D1
-    apple2.DownArrowKey() -- to S4,D1
-    a2d.DialogOK()
+    a2d.FormatEraseSelectSlotDrive(4, 1)
     apple2.Type("A") -- same name
     a2d.DialogOK()
     a2dtest.WaitForAlert() -- confirmation

@@ -348,7 +348,7 @@ retry:  MLI_CALL READ, read_src_dir_entry_params
         beq     retry           ; always
 .else
         .refto retry
-fail:   jmp     OpHandleErrorCode
+        jmp     OpHandleErrorCode
 .endif
     END_IF
 
@@ -358,15 +358,18 @@ fail:   jmp     OpHandleErrorCode
         ;; Advance to first entry in next "block"
         copy8   #0, entry_index_in_block
 retry2: MLI_CALL READ, read_padding_bytes_params
-.if ::kCopyInteractive
       IF CS
+        cmp     #ERR_END_OF_FILE
+        beq     eof
+
+.if ::kCopyInteractive
         jsr     OpCheckRetry
         beq     retry2          ; always
-      END_IF
 .else
         .refto retry2
-        bcs     fail
+        jmp     OpHandleErrorCode
 .endif
+      END_IF
     END_IF
 
         RETURN  A=#0
@@ -521,18 +524,6 @@ eof:    RETURN  A=#$FF
 ;;;         `pathname_dst` is destination path
 
 .proc DoCopy
-        ;; Check destination
-        MLI_CALL GET_FILE_INFO, dst_file_info_params
-.if ::kCopyIgnoreDuplicateErrorOnCreate
-    IF_CS
-.endif
-      IF A NOT_IN #ERR_FILE_NOT_FOUND, #ERR_VOL_NOT_FOUND, #ERR_PATH_NOT_FOUND
-        jmp     OpHandleErrorCode
-      END_IF
-.if ::kCopyIgnoreDuplicateErrorOnCreate
-    END_IF
-.endif
-
         ;; Get source info
 retry:  MLI_CALL GET_FILE_INFO, src_file_info_params
     IF CS

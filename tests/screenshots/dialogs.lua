@@ -1,6 +1,7 @@
 --[[ BEGINCONFIG ========================================
 
-DISKARGS="-hard1 $HARDIMG -flop1 res/prodos_floppy1.dsk -flop2 res/prodos_floppy2.dsk"
+MODELARGS="-sl1 ramfactor -sl2 mouse -sl7 cffa2"
+DISKARGS="-hard1 $HARDIMG -flop1 prodos_floppy1.dsk -flop2 prodos_floppy2.dsk"
 
 ======================================== ENDCONFIG ]]
 
@@ -80,9 +81,7 @@ test.Step(
     test.Snap("Special > Format Disk... - Prompt for drive")
 
     -- select RAMFactor
-    apple2.DownArrowKey() -- S7D1
-    apple2.DownArrowKey() -- S7D2
-    apple2.DownArrowKey() -- S1D1
+    a2d.FormatEraseSelectSlotDrive(1, 1, {no_ok=true})
     test.Snap("Special > Format Disk... - Drive selected")
 
     -- accept selection
@@ -113,9 +112,7 @@ test.Step(
     test.Snap("Special > Erase Disk... - Prompt for drive")
 
     -- select RAMFactor
-    apple2.DownArrowKey() -- S7D1
-    apple2.DownArrowKey() -- S7D2
-    apple2.DownArrowKey() -- S1D1
+    a2d.FormatEraseSelectSlotDrive(1, 1, {no_ok=true})
     test.Snap("Special > Erase Disk... - Drive selected")
 
     -- accept selection
@@ -192,16 +189,15 @@ test.Step(
 
     -- "Quick Copy" / select source
     a2d.InvokeMenuItem(3, 1)
-    apple2.DownArrowKey()
-    apple2.DownArrowKey()
-    apple2.DownArrowKey()
-    apple2.DownArrowKey()
+    apple2.DownArrowKey() -- S7,D1
+    apple2.DownArrowKey() -- S1,D1
+    apple2.DownArrowKey() -- S6,D1
     test.Snap("Disk Copy - \"Quick Copy\" option")
     a2d.DialogOK()
 
     -- select destination
-    apple2.DownArrowKey()
-    apple2.DownArrowKey()
+    apple2.DownArrowKey() -- S6,D1
+    apple2.DownArrowKey() -- S6,D2
     test.Snap("Disk Copy - Select destination")
     a2d.DialogOK()
 

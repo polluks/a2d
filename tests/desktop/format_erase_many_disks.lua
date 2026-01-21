@@ -1,6 +1,6 @@
 --[[ BEGINCONFIG ========================================
 
-MODELARGS="-aux ext80 -sl2 mouse \
+MODELARGS="-sl2 mouse \
   -sl7 scsi \
   -sl7:scsi:scsibus:2 harddisk              \
   -sl7:scsi:scsibus:3 harddisk              \
@@ -28,18 +28,18 @@ MODELARGS="-aux ext80 -sl2 mouse \
   "
 DISKARGS="\
   -hard20 $HARDIMG  \
-  -hard19 res/disk_a.2mg  \
-  -hard18 res/disk_j.2mg  \
-  -hard17 res/disk_k.2mg  \
-  -hard16 res/disk_l.2mg  \
-  -hard15 res/disk_b.2mg  \
-  -hard14 res/disk_c.2mg  \
-  -hard10 res/disk_d.2mg  \
-  -hard9  res/disk_e.2mg  \
-  -hard8  res/disk_f.2mg  \
-  -hard7  res/disk_g.2mg  \
-  -hard5  res/disk_h.2mg  \
-  -hard4  res/disk_i.2mg  \
+  -hard19 disk_a.2mg  \
+  -hard18 disk_j.2mg  \
+  -hard17 disk_k.2mg  \
+  -hard16 disk_l.2mg  \
+  -hard15 disk_b.2mg  \
+  -hard14 disk_c.2mg  \
+  -hard10 disk_d.2mg  \
+  -hard9  disk_e.2mg  \
+  -hard8  disk_f.2mg  \
+  -hard7  disk_g.2mg  \
+  -hard5  disk_h.2mg  \
+  -hard4  disk_i.2mg  \
   "
 ======================================== ENDCONFIG ]]
 
@@ -79,7 +79,7 @@ FormatEraseTest(
   "Right arrow key",
   function(invoke)
     invoke(false)
-    for i=1,14 do
+    for i=1,#apple2.GetProDOSDeviceList() do
       apple2.RightArrowKey()
       test.Snap("verify selection moves right then down")
     end
@@ -94,7 +94,7 @@ FormatEraseTest(
   "Left arrow key",
   function(invoke)
     invoke(false)
-    for i=1,14 do
+    for i=1,#apple2.GetProDOSDeviceList() do
       apple2.LeftArrowKey()
       test.Snap("verify selection moves left then up")
     end
@@ -105,7 +105,7 @@ FormatEraseTest(
   "Down arrow key",
   function(invoke)
     invoke(false)
-    for i=1,14 do
+    for i=1,#apple2.GetProDOSDeviceList() do
       apple2.DownArrowKey()
       test.Snap("verify selection moves down then right")
     end
@@ -116,7 +116,7 @@ FormatEraseTest(
   "Up arrow key",
   function(invoke)
     invoke(false)
-    for i=1,14 do
+    for i=1,#apple2.GetProDOSDeviceList() do
       apple2.UpArrowKey()
       test.Snap("verify selection moves up then left")
     end

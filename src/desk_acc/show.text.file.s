@@ -89,6 +89,7 @@ kLineHeight = kSystemFontHeight + 1
 
 kLinesPerPage = kDAHeight / kLineHeight
 
+        DEFINE_RECT_SZ line_shield_rect, kLinePosLeft, 0, kWrapWidth, 0
 
 ;;; Number of lines per scroll tick
 kLineScrollDelta = 1
@@ -562,14 +563,6 @@ end:    rts
 .endproc ; CheckButtonRelease
 
 ;;; ============================================================
-;;; UI Helpers
-
-.proc ClearWindow
-        MGTK_CALL MGTK::PaintRect, winfo::maprect::x1
-        rts
-.endproc ; ClearWindow
-
-;;; ============================================================
 ;;; Content Rendering
 
 .proc DrawContent
@@ -644,75 +637,89 @@ end:    rts
 
         copy8   #0, visible_flag
 
-        jsr     ClearWindow
+        MGTK_CALL MGTK::ShieldCursor, winfo::maprect
+        MGTK_CALL MGTK::PaintRect, winfo::maprect
+        MGTK_CALL MGTK::UnshieldCursor
 
         ;; --------------------------------------------------
         ;; Loop over lines
 
-do_line:
+    REPEAT
         ;; Reset state / flags
+        copy16  line_pos::base, line_shield_rect::y1
         add16_8 line_pos::base, #kLineSpacing
+        copy16  line_pos::base, line_shield_rect::y2
         copy16  #kWrapWidth, remaining_width
         copy16  #kLinePosLeft, line_pos::left
         copy8   #0, tab_flag
 
-        copy8   #0, visible_flag
+        ldx     #0
         cmp16   current_line, first_visible_line
-    IF GE
-        cmp16   last_visible_line, current_line
       IF GE
-        inc     visible_flag
+        cmp16   last_visible_line, current_line
+       IF GE
+        inx
+       END_IF
       END_IF
-    END_IF
+        stx     visible_flag
+
+        MGTK_CALL MGTK::ShieldCursor, line_shield_rect
 
         ;; Position cursor, update remaining width
-moveto: MGTK_CALL MGTK::MoveTo, line_pos
+    DO
+        MGTK_CALL MGTK::MoveTo, line_pos
         sub16   #kWrapWidth, line_pos::left, remaining_width
 
         ;; Identify next run of characters
         jsr     FindTextRun
-        jcs     done
+      IF CS
+        ;; EOF - finish up
+        MGTK_CALL MGTK::UnshieldCursor
+        jmp     done
+      END_IF
 
         ;; Update pointer into buffer for next time
         add16_8 ptr, drawtext_params::textlen
 
         ;; Did the run end due to a tab?
         lda     tab_flag
-        bne     moveto          ; yes, keep going
+    WHILE NOT ZERO              ; yes, keep going
 
         ;; --------------------------------------------------
         ;; End of line
 
+        MGTK_CALL MGTK::UnshieldCursor
+
         bit     record_offsets_flag
-    IF NS
+      IF NS
         ;; Doing a full pass. Determine current file offset.
         sub16   ptr, #default_buffer, cur_offset
         add16   cur_offset, buf_mark, cur_offset
 
         ;; Maybe record it
         dec     offset_counter
-      IF ZERO
+       IF ZERO
         ldy     #0
         copy16in cur_offset, (offset_ptr),y
         add16_8 offset_ptr, #2
         copy8   #kLineOffsetDelta, offset_counter ; reset
-
-        ;; Keep mouse cursor somewhat responsive
-        MGTK_CALL MGTK::CheckEvents
-      END_IF
+       END_IF
 
         ;; EOF? If so, stop!
         cmp16   cur_offset, get_eof_params::eof
         bcs     done
-    ELSE
+      ELSE
         ;; Just rendering what's visible. Are we done?
         ecmp16  current_line, last_visible_line
         beq     done
-    END_IF
+      END_IF
 
         ;; Nope - continue on next line
         inc16   current_line
-        jmp     do_line
+
+        ;; Keep mouse cursor somewhat responsive
+        MGTK_CALL MGTK::CheckEvents
+    FOREVER
 
         ;; --------------------------------------------------
 

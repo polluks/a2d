@@ -56,10 +56,13 @@ Project Page: https://github.com/a2stuff/a2d
 * Reduce cursor flickering while list view rows are drawn.
 * Don't repaint scrollbars before window when resizing.
 * Eliminate scrollbar repaint after window opens.
+* Fix "Unexpected error" seen when copying certain directories.
+* Allow Shift+Arrow keys to extend icon selection (IIgs/Platinum IIe)
 
 ### Selector
 
 * Fix potential hang after 30 restarts.
+* Reduce cursor flickering when copying programs to RAMCard.
 
 ### Disk Copy
 
@@ -68,6 +71,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Fix copying all blocks on 32MB volumes.
 * Erase tip once copy is complete.
 * Reduce cursor flickering during copy.
+* Fix copying all blocks on volumes with unusual sizes.
 
 ### Desk Accessories
 
@@ -76,6 +80,7 @@ Project Page: https://github.com/a2stuff/a2d
   * Show Aux slot separately from Slot 3; include aux-specific memory count
 * DOS 3.3 Import: Fix keyboard shortcut handling.
 * Sounds: Time "Silent" menu bar flash using VBL.
+* Screen Savers: improve animation for Flying Toasters, Hexix, Message and Melt.
 
 ### Misc
 

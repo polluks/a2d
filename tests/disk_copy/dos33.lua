@@ -1,7 +1,6 @@
 --[[ BEGINCONFIG ========================================
 
-MODELARGS="-sl2 mouse -sl7 cffa2 -aux ext80"
-DISKARGS="-hard1 $HARDIMG -flop1 res/dos33_floppy.dsk -flop2 res/prodos_floppy1.dsk"
+DISKARGS="-hard1 $HARDIMG -flop1 dos33_floppy.dsk -flop2 prodos_floppy1.dsk"
 
 ======================================== ENDCONFIG ]]
 

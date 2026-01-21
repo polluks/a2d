@@ -1,19 +1,19 @@
 --[[ BEGINCONFIG ==================================================
 
 MODEL="apple2ee"
-  MODELARGS="-aux ext80 -sl2 mouse -sl5 scsi -sl6 '' -sl7 cffa2 \
+  MODELARGS="-sl2 mouse -sl5 scsi -sl6 '' -sl7 cffa2 \
   -sl5:scsi:scsibus:3 harddisk              \
   -sl5:scsi:scsibus:4 harddisk              \
   -sl5:scsi:scsibus:5 harddisk              \
   -sl5:scsi:scsibus:6 harddisk              \
   "
 DISKARGS="\
-  -hard1 res/disk_d.2mg \
-  -hard2 res/disk_c.2mg \
-  -hard3 res/disk_b.2mg \
-  -hard4 res/disk_a.2mg \
+  -hard1 disk_d.2mg \
+  -hard2 disk_c.2mg \
+  -hard3 disk_b.2mg \
+  -hard4 disk_a.2mg \
   -hard5 $HARDIMG \
-  -hard6 res/tests.hdv \
+  -hard6 tests.hdv \
   "
 
 ================================================== ENDCONFIG ]]
@@ -51,7 +51,7 @@ test.Variants(
     a2d.CloseAllWindows()
     a2d.ClearSelection()
     a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK-2)
-    test.Snap("verify hard drives in S7,D1/2, S5D1/2 and S4,D1/2 (mirrored)")
+    test.Snap("verify hard drives in S7,D1/2, S5D1/2 and S2,D1/2 (mirrored)")
     a2d.DialogCancel()
 
     for i, name in ipairs({"A", "B", "C", "D"}) do
@@ -59,7 +59,7 @@ test.Variants(
       a2d.CloseAllWindows()
       a2d.ClearSelection()
       a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK-2)
-      for i = 1, i+2 do -- skip over S7,D1/2
+      for j = 1, i+2 do -- skip over S7,D1/2
         apple2.DownArrowKey()
       end
       a2d.DialogOK()

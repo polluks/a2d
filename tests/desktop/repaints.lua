@@ -1,8 +1,8 @@
 --[[ BEGINCONFIG ========================================
 
 MODEL="apple2ep"
-MODELARGS="-sl1 ramfactor -sl2 mouse -sl5 ramfactor -sl7 cffa2 -aux ext80"
-DISKARGS="-hard1 $HARDIMG -hard2 res/tests.hdv"
+MODELARGS="-sl1 ramfactor -sl2 mouse -sl5 ramfactor -sl7 cffa2"
+DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv"
 
 ======================================== ENDCONFIG ]]
 
@@ -213,9 +213,8 @@ test.Step(
         m.Click()
     end)
 
-    local rect = mgtk.GetWinFrameRect(mgtk.FrontWindow())
-    a2d.Drag(rect[1] - 20, rect[2] - 10,
-             rect[3] + 20, rect[4] + 10)
+    a2d.Drag(x - 20, y - 30,
+             x + w + 40, y + h + 20)
     a2d.InMouseKeysMode(function(m) m.Home() end)
 
     test.Snap("verify no mispaint")
@@ -234,9 +233,9 @@ test.Step(
     a2d.SelectPath("/A2.DESKTOP/READ.ME")
     a2d.MoveWindowBy(40, 30)
 
-    local rect = mgtk.GetWinFrameRect(mgtk.FrontWindow())
-    a2d.Drag(rect[1] - 20, rect[2] - 10,
-             rect[3] + 20, rect[4] + 10)
+    local x, y, w, h = a2dtest.GetFrontWindowContentRect()
+    a2d.Drag(x - 20, y - 30,
+             x + w + 40, y + h + 20)
     a2d.InMouseKeysMode(function(m) m.Home() end)
 
     test.Snap("verify no mispaint")
@@ -273,9 +272,9 @@ test.Step(
         m.Click()
     end)
 
-    local rect = mgtk.GetWinFrameRect(mgtk.FrontWindow())
-    a2d.Drag(rect[1] - 20, rect[2] - 10,
-             rect[3] + 20, rect[4] + 10)
+    local x, y, w, h = a2dtest.GetFrontWindowContentRect()
+    a2d.Drag(x - 20, y - 30,
+             x + w + 40, y + h + 20)
     a2d.InMouseKeysMode(function(m) m.Home() end)
     test.Snap("verify no mispaint")
     test.ExpectEquals(#a2d.GetSelectedIcons(), 0, "nothing should be selected")
@@ -299,7 +298,6 @@ test.Step(
     a2d.CycleWindows()
     local drag_x, drag_y = a2dtest.GetFrontWindowDragCoords()
     a2d.Drag(drag_x, drag_y, x, y+5)
-    test.Snap("overlap?")
 
     a2d.RenameSelection("NEW.NAME")
     test.Snap("verify no mispaint")
@@ -907,6 +905,7 @@ test.Step(
   function()
     a2d.CloseAllWindows()
     a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.CONTROL_PANELS)
+    emu.wait(1)
     local x, y = a2dtest.GetFrontWindowCloseBoxCoords()
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x, y)

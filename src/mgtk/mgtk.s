@@ -4903,6 +4903,13 @@ savesize        .word
         inx
         stx     mouse_scale_x
 
+        ;; --------------------------------------------------
+        ;; With ROM banked in, determine mouse scaling and VBL
+
+        bit     RDLCRAM
+        php
+        bit     ROMIN2          ; Bank ROM
+
         ldax    #vbl_iie_proc   ; default
         bit     subid
     IF VC
@@ -4912,11 +4919,16 @@ savesize        .word
         inc     mouse_scale_y
 
         ldax    #vbl_iic_proc
+
+        ;; Franklin ACE 500?
+        ldy     $FB1E
+      IF Y = #$AD
+        ;; From testing on real hardware, ACE 500 (unlike ACE 2x00)
+        ;; does not seem to support either IIe-like or IIc-like VBL.
+        ldax    #vbl_none_proc
+      END_IF
     ELSE
         ;; IIe or IIgs?
-        bit     RDLCRAM
-        php
-        bit     ROMIN2          ; Bank ROM
 
         CALL    IDROUTINE, C=1
       IF CC
@@ -4934,13 +4946,16 @@ savesize        .word
         ldax    #vbl_none_proc
       END_IF
 
+    END_IF
+        stax    vbl_proc_addr
+
         plp
       IF NS
         bit     LCBANK1         ; Bank RAM back in if needed
         bit     LCBANK1
       END_IF
-    END_IF
-        stax    vbl_proc_addr
+
+        ;; --------------------------------------------------
 
         ldx     slot_num
         jsr     FindMouse
@@ -5462,10 +5477,6 @@ irq_entry:
         and     #CHAR_MASK
         sta     input::key
         bit     KBDSTRB         ; clear strobe
-
-        ;; Check if automation hook
-        jsr     CheckAutomationHook
-        bcc     end
 
         ;; Check if "MouseKeys" mode should be activated
         jsr     CheckActivateMouseKeys
@@ -9891,37 +9902,6 @@ scale_y:
     END_IF
         rts
 .endproc ; GetKey
-
-
-.proc CheckAutomationHook
-        ;; Check for OA+SA+Ctrl+Shift+2
-        lda     input::modifiers
-        cmp     #3
-        bne     ignore
-        lda     input::key
-        cmp     #0              ; Ctrl-@
-        bne     ignore
-
-        jsr     wait_for_key
-
-        COPY_BYTES 3, $00, params
-
-        jsr     SaveParamsAndStack ; restored by call below
-        jsr     MGTKEntry
-params: .res    3
-        sta     $00
-        jsr     RestoreParamsAndStack
-
-        FALL_THROUGH_TO wait_for_key
-wait_for_key:
-:       lda     KBD
-        bpl     :-
-        sta     KBDSTRB
-        RETURN C=0
-
-ignore:
-        RETURN C=1
-.endproc ; CheckAutomationHook
 
 
 ;;; Assert: `kbd_mouse_state` is not `kKeyboardMouseStateInactive`

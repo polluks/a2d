@@ -1,6 +1,6 @@
 --[[ BEGINCONFIG ========================================
 
-MODELARGS="-aux ext80 -sl2 mouse \
+MODELARGS="-sl2 mouse \
   -sl7 scsi \
   -sl7:scsi:scsibus:2 harddisk              \
   -sl7:scsi:scsibus:3 harddisk              \
@@ -28,18 +28,18 @@ MODELARGS="-aux ext80 -sl2 mouse \
   "
 DISKARGS="\
   -hard20 $HARDIMG  \
-  -hard19 res/disk_a.2mg  \
-  -hard18 res/disk_j.2mg  \
-  -hard17 res/disk_k.2mg  \
-  -hard16 res/disk_l.2mg  \
-  -hard15 res/disk_b.2mg  \
-  -hard14 res/disk_c.2mg  \
-  -hard10 res/disk_d.2mg  \
-  -hard9  res/disk_e.2mg  \
-  -hard8  res/disk_f.2mg  \
-  -hard7  res/disk_g.2mg  \
-  -hard5  res/disk_h.2mg  \
-  -hard4  res/disk_i.2mg  \
+  -hard19 disk_a.2mg  \
+  -hard18 disk_j.2mg  \
+  -hard17 disk_k.2mg  \
+  -hard16 disk_l.2mg  \
+  -hard15 disk_b.2mg  \
+  -hard14 disk_c.2mg  \
+  -hard10 disk_d.2mg  \
+  -hard9  disk_e.2mg  \
+  -hard8  disk_f.2mg  \
+  -hard7  disk_g.2mg  \
+  -hard5  disk_h.2mg  \
+  -hard4  disk_i.2mg  \
   "
 ======================================== ENDCONFIG ]]
 
@@ -57,15 +57,10 @@ test.Step(
     a2d.Quit()
     apple2.WaitForBitsy()
 
-    local DEVCNT = 0xBF31
-    local DEVLST = 0xBF32
-    local count = apple2.ReadRAMDevice(DEVCNT) + 1
-    test.ExpectEquals(count, 14, "should have 14 devices")
+    local list = apple2.GetProDOSDeviceList()
+    test.ExpectEquals(#list, 14, "should have 14 devices")
 
-    for i = 0, count-1 do
-      local unit = apple2.ReadRAMDevice(DEVLST + i)
-      local slot = (unit & 0x70) >> 4
-      local drive = ((unit & 0x80) >> 7) + 1
-      test.ExpectNotEquals(slot, 0, "should not have slot 0 device")
+    for i,device in ipairs(list) do
+      test.ExpectNotEquals(device.slot, 0, "should not have slot 0 device")
     end
 end)

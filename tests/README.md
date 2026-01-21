@@ -33,36 +33,29 @@ Options:
 The default system configuration is:
 
 * Apple IIe Enhanced (`apple2ee`)
-* Aux: 8MB RAMWorks card
-* Slot 1: 8MB RAMFactor card
+* Aux: Extended 80 Column Card (MAME default for `apple2ee`)
 * Slot 2: Mouse card
-* Slot 4: Mockingboard
-* Slot 6: Disk II Controller w/ 2 (empty) drives
-* Slot 7: SCSI card, w/ 800K package image
-* No-Slot Clock under system ROM
+* Slot 4: Mockingboard (MAME default for `apple2ee`)
+* Slot 6: Disk II Controller w/ 2 (empty) drives (MAME default for `apple2ee`)
+* Slot 7: CFFA2 card, w/ 800K package image
+* No-Slot Clock under system ROM (MAME default for `apple2ee`)
 
-> TODO: Make the default config simpler:
-> * aux ext80 instead of rw3
-> * slot 1 empty by default
-> * slot 4 empty by default
-> * slot 7 CFFA2 instead of SCSI
-
-Tests can define custom MAME configuration. The contents of a config block are executed by `mametest` to override environment variable that are used when MAME launches.
+Tests can define custom MAME configurations. The contents of an optional config block are executed by `mametest` to override environment variable that are used when MAME launches.
 
 * `MODEL` - the system type, e.g. `"apple2ee"`, `"apple2gsr1"` etc
 * `MODELARGS` - slot and other configuration, e.g. `"-sl2 mouse"`
   * A slot can be emptied with empty single-quoted string, e.g. `-sl6 ''`
+  * Note that MAME's defaults for each model are different. See the [MAMEDEV Page](https://wiki.mamedev.org/index.php/Driver:Apple_II#The_default_configurations) for specifics.
 * `DISKARGS` - disk configuration, e.g. `"-hard1 a2d.hdv"`
-  * NOTE: This is parsed as space-delimited pairs and the second argument is copied to a temp directory so that the original disk images are not modified
+  * NOTE: This is parsed as space-delimited pairs and the second argument is copied from `tests/images` to a temp directory so that the original disk images are not modified
+  * These environment variables can be used.
+    * `HARDIMG` has the path to the 800K package disk
+    * `FLOP1IMG` has the path to the 140K package disk #1 (desktop)
+    * `FLOP2IMG` has the path to the 140K package disk #2 (accessories)
 * `RESOLUTION` - defaults to `"560x384"`; for IIgs should be set to `"704x462"`
-* `WAITFORDESKTOP` - defaults to `true`, set to `false` for the rare tests that shouldn't wait for DeskTop to be ready before starting the script
-* `CHECKAUXMEMORY` - defaults to `true`, set to `false` for the rare tests that run on an Apple IIe without an 80 column card
+* `WAITFORDESKTOP` - defaults to `true`; set it to `false` for the rare tests that shouldn't wait for DeskTop to be ready before starting the script
+* `CHECKAUXMEMORY` - defaults to `true`; set it to `false` for the rare tests that run on an Apple IIe without an 80 column card
 
-These variables can be used:
-
-* `HARDIMG` has the path to the 800K package disk
-* `FLOP1IMG` has the path to the 140K package disk #1 (desktop)
-* `FLOP2IMG` has the path to the 140K package disk #2 (accessories)
 
 Example:
 
@@ -70,7 +63,7 @@ Example:
 --[[ BEGINCONFIG ==================================================
 
 MODEL="apple2ee"
-MODELARGS="-sl1 ssc -sl2 mouse -sl5 ramfactor -sl7 cffa2 -aux rw3"
+MODELARGS="-sl1 ssc -sl2 mouse -sl5 ramfactor -sl7 scsi -aux rw3"
 DISKARGS="-hard1 out/a2d_800k.2mg -flop1 res/FLOPPY1.dsk"
 RESOLUTION="560x384"
 
@@ -150,4 +143,7 @@ Tests specific to various components of the application.
       * `local s5d2 = manager.machine.images[":fdc:3:35dd"]`
   * ... and so on. Since this depends so heavily on the configuration which varies between tests, no abstraction is (currently) provided for this. The convention is to provide this mapping at the top of the test file for tests that do interact with the virtual drives.
 
+# Miscellaneous
 
+* If you exit MAME unexpectedly (e.g. Ctrl+C while a test is running), macOS likes to show a crash report window. You can run this in the terminal to suppress that: `defaults write com.apple.CrashReporter DialogType Server`.
+  * TODO: Find a more localized fix.
