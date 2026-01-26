@@ -139,7 +139,7 @@ adjust_stack:                   ; Adjust stack to account for params
         tya                     ; hide cursor
         pha
 
-        bit     disable_autohide_flag ; unless globally overridden!
+        bit     cursor_shield_count ; unless globally overridden!
     IF NC
         lda     params_addr
         pha
@@ -6088,13 +6088,16 @@ filler: ldx     menu_item_index
 .proc FillAndFrameRect
         stax    fill_params
         stax    draw_params
+        stax    shield_params
         lda     #MGTK::pencopy
         jsr     SetFillMode
+
+        MGTK_CALL MGTK::ShieldCursor, 0, shield_params
         MGTK_CALL MGTK::PaintRect, 0, fill_params
         lda     #MGTK::notpencopy
         jsr     SetFillMode
         MGTK_CALL MGTK::FrameRect, 0, draw_params
-        rts
+        jmp     UnshieldCursorImpl
 .endproc ; FillAndFrameRect
 
 
@@ -6256,8 +6259,9 @@ loop:   lda     curmenu::x_min,x
         bpl     loop
 
         jsr     SetFillModeXOR
+        MGTK_CALL MGTK::ShieldCursor, hilite_menu_rect
         MGTK_CALL MGTK::PaintRect, hilite_menu_rect
-        rts
+        jmp     UnshieldCursorImpl
 .endproc ; HiliteMenu
 
 ;;; ============================================================
@@ -7481,10 +7485,16 @@ end:    rts
         EXIT_CALL MGTK::Error::window_not_found
 .endproc ; WindowByIdOrExit
 
+.proc PaintWinRect
+        MGTK_CALL MGTK::ShieldCursor, winrect
+        MGTK_CALL MGTK::PaintRect, winrect
+        jmp     UnshieldCursorImpl
+.endproc ; PaintWinRect
 
 .proc FrameWinRect
+        MGTK_CALL MGTK::ShieldCursor, winrect
         MGTK_CALL MGTK::FrameRect, winrect
-        rts
+        jmp     UnshieldCursorImpl
 .endproc ; FrameWinRect
 
 .proc InWinRect
@@ -8457,7 +8467,7 @@ in_close_box:  .byte   0
 toggle: sta     in_close_box
 
         jsr     SetFillModeXOR
-        MGTK_CALL MGTK::PaintRect, winrect
+        jsr     PaintWinRect
 
 loop:   jsr     GetAndReturnEvent
 
@@ -9027,22 +9037,23 @@ toggle: eor     params::activate
         RTS_IF A = (window),y   ; no-op if no change
         sta     (window),y
 
-        jsr     HideCursorAndSaveParams ; restored by call below
-        lda     params::activate
-        jsr     DrawOrEraseScrollbar
-        jmp     ShowCursorAndRestoreParams
+        jsr     SaveParamsAndStack
+        CALL    DrawOrEraseScrollbar, A=params::activate
+        jmp     RestoreParamsAndStack
 .endproc ; ActivateCtlImpl
 
-
+;;; Z=1 to erase, Z=0 to draw
 .proc DrawOrEraseScrollbar
-        bne     do_draw
-
+    IF ZERO
+        ;; erase
         jsr     GetScrollbarScrollArea
         jsr     SetStandardPort
-        MGTK_CALL MGTK::PaintRect, winrect
-        rts
+        jmp     PaintWinRect
+    END_IF
 
-do_draw:
+        ;; ----------------------------------------
+        ;; track
+
         bit     which_control
         bmi     vert_scrollbar
         bit     current_winfo::hscroll
@@ -9057,8 +9068,11 @@ has_scroll:
         jsr     GetScrollbarScrollArea
 
         MGTK_CALL MGTK::SetPattern, light_speckles_pattern
-        MGTK_CALL MGTK::PaintRect, winrect
+        jsr     PaintWinRect
         MGTK_CALL MGTK::SetPattern, standard_port::pattern
+
+        ;; ----------------------------------------
+        ;; thumb
 
         bit     which_control
         bmi     vert_thumb
@@ -9703,11 +9717,11 @@ check_win:
         RTS_IF A = (window),y   ; no-op if no change
         sta     (window),y
 
-        jsr     HideCursorAndSaveParams ; restored by call below
+        jsr     SaveParamsAndStack ; restored by call below
         jsr     SetStandardPort
         ;; TODO: Clarify dependency on `SetStandardPort`'s return value
         jsr     DrawOrEraseScrollbar
-        jmp     ShowCursorAndRestoreParams
+        jmp     RestoreParamsAndStack
 .endproc ; UpdateThumbImpl
 
 ;;; ============================================================
@@ -10886,7 +10900,10 @@ finish:
 ;;; 8 bytes of params, copied to $92
 
 .proc ShieldCursorImpl
-        SET_BIT7_FLAG disable_autohide_flag
+        dec     cursor_shield_count
+
+        bit     cursor_flag
+        RTS_IF NS
 
         jsr     ClipRect
         RTS_IF CC
@@ -10987,9 +11004,15 @@ ret:    rts
 .endproc ; ShieldCursorImpl
 
 .proc UnshieldCursorImpl
-        CLEAR_BIT7_FLAG disable_autohide_flag
+        ret := ShieldCursorImpl::ret
+
+        ;; No-op unless we're unwound all the way
+        inc     cursor_shield_count
+        bne     ret
+
+        ;; read and clear the flag
         asl     cursor_shielded_flag
-        bcc     ShieldCursorImpl::ret
+        bcc     ret
         jmp     ShowCursorImpl
 .endproc ; UnshieldCursorImpl
 
@@ -10997,9 +11020,10 @@ ret:    rts
 cursor_shielded_flag:
         .byte   0
 
-;;; bit7 set between `ShieldCursor` and `UnshieldCursor` regardless of
-;;; whether or not the cursor was hidden.
-disable_autohide_flag:
+;;; Count of `ShieldCursor` calls, undone by `UnshieldCursor`; if
+;;; non-zero then cursor should not be auto-hidden around draws.
+;;; NOTE: negative, so can be tested with `BIT`
+cursor_shield_count:
         .byte   0
 
 ;;; ============================================================

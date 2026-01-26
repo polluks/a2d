@@ -467,7 +467,7 @@ offset_table:
         lda     MACHID
         and     #kMachIDHasClock
       IF NOT_ZERO
-        cmp16   event_params::xcoord, #460 ; TODO: Hard coded?
+        cmp16   event_params::xcoord, rect_clock::x1
        IF GE
         TAIL_CALL LaunchPassedPathOnSystemDisk, AX=#str_date_and_time
        END_IF
@@ -8915,7 +8915,7 @@ vdrive: RETURN  AX=#str_device_type_vdrive, Y=#IconType::fileshare
         ;; Look up driver address
         CALL    DeviceDriverAddress, A=block_params::unit_num ; Z=1 if $Cn
         bvs     is_sp
-        bne     generic         ; not $CnXX, unknown type
+        jne     generic         ; not $CnXX, unknown type
 
         ;; Firmware driver; maybe SmartPort?
 is_sp:  CALL    FindSmartportDispatchAddress, A=block_params::unit_num
@@ -8948,6 +8948,20 @@ is_sp:  CALL    FindSmartportDispatchAddress, A=block_params::unit_num
 .scope
         ldy     dib_buffer+SPDIB::ID_String_Length
     IF NOT_ZERO
+
+        ;; Any characters lowercase? If so, don't adjust.
+      DO
+        CALL    IsAlpha, A=dib_buffer+SPDIB::Device_Name,y
+       IF ZS
+        lda     dib_buffer+SPDIB::Device_Name,y
+        IF A >= #'a' ; guarded by `kBuildSupportsLowercase`
+        bcs     done_adjust_case  ; is lower case
+        END_IF
+       END_IF
+        dey
+      WHILE POS
+
+        ldy     dib_buffer+SPDIB::ID_String_Length
         dey
       IF NOT_ZERO
 
@@ -8967,6 +8981,7 @@ is_sp:  CALL    FindSmartportDispatchAddress, A=block_params::unit_num
        WHILE NOT_ZERO
       END_IF
     END_IF
+done_adjust_case:
 .endscope
 .endif
 
