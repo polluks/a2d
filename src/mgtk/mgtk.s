@@ -87,15 +87,16 @@ kScreenHeight   = 192
         sta     SET80STORE
 
         bit     preserve_zp_flag ; save ZP?
-        bpl     adjust_stack
-
+    IF NS
         ;; Save $80...$FF, swap in what MGTK needs at $F4...$FF
         COPY_BYTES $80, $80, zp_saved
         COPY_BYTES $C, active_saved, active_port
         jsr     ApplyActivePortToPort
+    END_IF
 
-adjust_stack:                   ; Adjust stack to account for params
-        pla                     ; and stash address at params_addr.
+        ;; Adjust stack to account for params and stash address at
+        ;; params_addr.
+        pla
         sta     params_addr
         clc
         adc     #<3
@@ -111,7 +112,7 @@ adjust_stack:                   ; Adjust stack to account for params
         ldy     #1              ; Command index
         lda     (params_addr),y
         asl     a
-        tax
+        tax                     ; X = command index * 2
         copy16  jump_table,x, jump_addr
                                 ; not copylohi because parm table
                                 ; is cleaner as words not bytes
@@ -130,52 +131,61 @@ adjust_stack:                   ; Adjust stack to account for params
         ;; * rest of second byte is # bytes to copy
 
         ldy     param_lengths+1,x ; Check "hide cursor" flag
-        bpl     done_hiding
-
+    IF NS
         bit     desktop_initialized_flag
-        bpl     done_hiding
+      IF NS
         txa                     ; if high bit was set, stash
         pha                     ; registers and params_addr and then
         tya                     ; hide cursor
         pha
 
         bit     cursor_shield_count ; unless globally overridden!
-    IF NC
+       IF NC
         lda     params_addr
         pha
         lda     params_addr+1
         pha
-        jsr     HideCursor
+        dec     autohide_cursor_flag ; set flag
+        jsr     HideCursorImpl
         pla
         sta     params_addr+1
         pla
         sta     params_addr
-    END_IF
+       END_IF
 
         pla
         and     #$7F            ; clear high bit in length count
-        tay
+        tay                     ; Y = length
         pla
-        tax
+        tax                     ; X = command index * 2
+      END_IF
+    END_IF
 
-done_hiding:
+        ;; Copy params (X = index * 2, Y = length)
         lda     param_lengths,x ; ZP offset for params
-        beq     jump            ; nothing to copy
-        sta     store+1
+    IF NOT ZERO
+        sta     store_addr
         dey
-:       lda     (params_addr),y
-store:  sta     $FF,y           ; self modified
+      DO
+        lda     (params_addr),y
+        store_addr := *+1
+        sta     SELF_MODIFIED_BYTE,y
         dey
-        bpl     :-
+      WHILE POS
+    END_IF
 
         jump_addr := *+1
-jump:   jsr     $FFFF           ; the actual call
+        jsr     $FFFF           ; the actual call
 
         ;; Exposed for routines to call directly
 cleanup:
         bit     desktop_initialized_flag
     IF NS
-        jsr     ShowCursor
+        bit     autohide_cursor_flag
+      IF NS
+        inc     autohide_cursor_flag ; clear flag
+        jsr     ShowCursorImpl
+      END_IF
     END_IF
 
         bit     preserve_zp_flag
@@ -190,6 +200,9 @@ exit_with_0:
         lda     #0
 
 rts1:   rts
+
+autohide_cursor_flag:
+        .byte   0
 .endproc ; Dispatch
 
 ;;; ============================================================
@@ -231,25 +244,6 @@ rts2:   rts
         bpl     :-
         rts
 .endproc ; ApplyPortToActivePort
-
-;;; ============================================================
-;;; Drawing calls show/hide cursor before/after
-;;; A recursion count is kept to allow re-entrancy.
-
-hide_cursor_count:
-        .byte   0
-
-.proc HideCursor
-        dec     hide_cursor_count
-        jmp     HideCursorImpl
-.endproc ; HideCursor
-
-.proc ShowCursor
-        bit     hide_cursor_count
-        bpl     rts2
-        inc     hide_cursor_count
-        jmp     ShowCursorImpl
-.endproc ; ShowCursor
 
 ;;; ============================================================
 ;;; Jump table for MGTK entry point calls
@@ -372,7 +366,7 @@ jump_table:
         .addr   BitBltImpl          ; $4D BitBlt
         .addr   GetDeskPatImpl      ; $4E GetDeskPat
         .addr   SetDeskPatImpl      ; $4F SetDeskPat
-        .addr   DrawMenuImpl        ; $50 DrawMenuBar
+        .addr   DrawMenuBarImpl     ; $50 DrawMenuBar
         .addr   GetWinFrameRectImpl ; $51 GetWinFrameRect
         .addr   RedrawDeskTopImpl   ; $52 RedrawDeskTop
         .addr   FindControlExImpl   ; $53 FindControlEx
@@ -4169,10 +4163,7 @@ system_cursor_table_hi: .byte   >pointer_cursor, >ibeam_cursor, >watch_cursor
         stx     cursor_count
         inx                     ; X = 0
         stx     cursor_flag
-        lda     #<pointer_cursor
-        sta     params_addr
-        lda     #>pointer_cursor
-        sta     params_addr+1
+        copy16  #pointer_cursor, params_addr
         FALL_THROUGH_TO SetCursorImpl
 .endproc ; SetPointerCursor
 
@@ -4586,15 +4577,19 @@ restore_switch_dey := RestoreCursorBackground::switch_dey
 .proc ShowCursorImpl
         php
         sei
+        ;; If count is already 0, do nothing. (Unbalanced calls!)
         lda     cursor_count
         beq     done
         inc     cursor_count
         bmi     done
         beq     :+
-        dec     cursor_count
-:       bit     cursor_flag
-        bmi     done
+        dec     cursor_count    ; TODO: Is this necessary?
+:
+        bit     cursor_flag
+    IF NC
         jsr     DrawCursor
+    END_IF
+
 done:
         plp
         rts
@@ -4786,12 +4781,12 @@ done:   rts
         bit     mouse_hooked_flag
         bmi     hooked
         pha
-        ldx     mouse_firmware_hi
+        ldx     mouse_firmware_hi ; set `proc_ptr` to $Cn00
         stx     proc_ptr+1
         lda     #$00
         sta     proc_ptr
         lda     (proc_ptr),y
-        sta     proc_ptr
+        sta     proc_ptr        ; set `proc_ptr` to $CnXX
         pla
         ldy     mouse_operand
         jmp     (proc_ptr)
@@ -5671,12 +5666,50 @@ handle_keys     .byte
 
 ;;; Menu drawing metrics
 
-offset_checkmark:   .byte   2
-offset_text:        .byte   9
-offset_shortcut:    .byte   16
-shortcut_x_adj:     .byte   9
-non_shortcut_x_adj: .byte   30
+;;; Minimum sizing for an item with a shortcut:
+;;; |       _   __                               __     |
+;;; |   _  //  /  \  _ __  ___  _ _        _/_  /  \    |
+;;; |   \\//  | () || '_ \/ -_)| ' \      (   (| () |   |
+;;; |    \/    \__/ | .__/\___||_||_|      \__/ \__/    |
+;;; |<---A--->      |_|                                 |
+;;; |   mark  text...................     shortcut...   |
+;;; |pad    p2                       space           pad|
+
+;;; Minimum sizing for an item without a shortcut:
+;;; |          ___       _     _          |
+;;; |         | _ ) ___ | | __| |         |
+;;; |         | _ \/ _ \| |/ _  |         |
+;;; |         |___/\___/|_|\____|         |
+;;; |<---A--->                   <---A--->|
+;;; |         text...............         |
+
+kMenuMetricPad               = 4 ; left edge<->mark, shortcut<->right edge
+kMenuMetricP2                = 2 ; mark<->text
+kMenuMetricSpace             = 14 ; text<->shortcut (minimum)
+
+kSWFont = 7
+kDWFont = 14
+kMenuMetricOffsetCheckmark   = kMenuMetricPad
+kMenuMetricOffsetTextSW      = kMenuMetricPad + kSWFont + kMenuMetricP2
+kMenuMetricOffsetTextDW      = kMenuMetricPad + kDWFont + kMenuMetricP2
+kMenuMetricOffsetShortcutSW  = (kSWFont * 2) + kMenuMetricPad
+kMenuMetricOffsetShortcutDW  = (kDWFont * 2) + kMenuMetricPad
+kMenuMetricShortcutWidthSW   = kMenuMetricOffsetShortcutSW + kMenuMetricSpace
+kMenuMetricShortcutWidthDW   = kMenuMetricOffsetShortcutDW + kMenuMetricSpace
+
+;;; Updated in `InitMenuImpl`; assumes single-width font
+offset_checkmark:   .byte   kMenuMetricOffsetCheckmark   ; delta from left to mark
+offset_text:        .byte   kMenuMetricOffsetTextSW      ; delta from left to text
+offset_shortcut:    .byte   kMenuMetricOffsetShortcutSW  ; delta from right to shortcut
+shortcut_width:     .byte   kMenuMetricShortcutWidthSW   ; extra width needed w/ shortcut
 sysfont_height:     .byte   0
+
+;;; With no mark and no shortcut, the padding between the menu item
+;;; text and the left/right menu edges is kept symmetrical. Since
+;;; marks can be added dynamically the left padding is sized to
+;;; accomodate this, and the right padding is therefore the same.
+no_shortcut_width := offset_text
+
 
 
 active_menu:
@@ -5686,14 +5719,14 @@ active_menu:
         DEFINE_RECT menu_bar_rect, AS_WORD(-1), AS_WORD(-1), kScreenWidth, $C
 
         ;; Modified by `StartDeskTopImpl` and `HiliteMenu`
-        DEFINE_RECT hilite_menu_rect, 0, 0, 0, 11
+        DEFINE_RECT hilite_menu_rect, 0, 0, 0, 0
 
 savebehind_buffer:
         .word   0
 
-        DEFINE_RECT menu_hittest_rect, 0, 12, 0, 0
+        DEFINE_RECT menu_hittest_rect, 0, 0, 0, 0
 
-        DEFINE_RECT menu_fill_rect, 0, 12, 0, 0
+        DEFINE_RECT menu_fill_rect, 0, 0, 0, 0
 
 menu_item_y_table:
         .res    MGTK::max_menu_items+1 ; last entry represents height of menu
@@ -5717,19 +5750,6 @@ shortcut_text:
 mark_text:
         .byte   1              ; length
         .byte   $1D
-
-menu_bar_rect_addr:
-        .addr   menu_bar_rect
-
-menu_hittest_rect_addr:
-        .addr   menu_hittest_rect
-
-mark_text_addr:
-        .addr   mark_text
-
-shortcut_text_addr:
-        .addr   shortcut_text
-
 
         menu_index        := $A7
         menu_count        := $A8
@@ -5941,7 +5961,7 @@ need_savebehind:
 
         copy16  params_addr, active_menu
 
-draw_menu_impl:
+draw_menu:
         lda     #0
         sta     savebehind_usage
         sta     savebehind_usage+1
@@ -5950,8 +5970,7 @@ draw_menu_impl:
         jsr     HideCursorAndSaveParams ; restored by call below
         jsr     SetStandardPort
 
-        ldax    menu_bar_rect_addr
-        jsr     FillAndFrameRect
+        CALL    FillAndFrameRect, AX=#menu_bar_rect
 
         ldax    #12
         ldy     sysfont_height
@@ -5967,6 +5986,7 @@ draw_menu_impl:
         stax    curmenu::x_min
         stax    curmenuinfo::x_min
 
+        ;; Compute width of menu
         ldx     #0
         stx     max_width
         stx     max_width+1
@@ -5983,13 +6003,14 @@ draw_menu_impl:
         lda     curmenuitem::options
         and     #3              ; OA+SA
         ora     curmenuitem::shortcut1
-       IF ZERO
-        lda     shortcut_x_adj
-        bne     has_shortcut
+        .assert MGTK::no_shortcut & $80 = $80, error, "bad constant"
+       IF NS
+        lda     no_shortcut_width
+        bne     got_shortcut_adjust
        END_IF
+        lda     shortcut_width
+got_shortcut_adjust:
 
-        lda     non_shortcut_x_adj
-has_shortcut:
         clc
         adc     temp
         sta     temp
@@ -6073,7 +6094,7 @@ filler: ldx     menu_item_index
 
         rts
 .endproc ; SetMenuImpl
-        DrawMenuImpl := SetMenuImpl::draw_menu_impl
+        DrawMenuBarImpl := SetMenuImpl::draw_menu
 
 .proc GetMenuAndMenuItem
         ldx     menu_index
@@ -6435,8 +6456,7 @@ menu_item  .byte
         bit     kbd_mouse_state
         jpl     in_menu_bar     ; use mouse coords for menu
 
-        lda     #kKeyboardMouseStateInactive
-        sta     kbd_mouse_state
+        copy8   #kKeyboardMouseStateInactive, kbd_mouse_state
         ldx     #0
         jsr     GetMenu         ; X = index
         lda     curmenu::menu_id
@@ -6473,9 +6493,6 @@ event_loop:
         sta     last_menu_index
         lda     cur_hilited_menu_item
         sta     sel_menu_item_index
-
-        ;; BUG: hit 'A' when menu showing, redraws
-        ;; `menu_index` changes
 
         ;; Process the key
         lda     GetAndReturnEvent::event::modifiers
@@ -6514,8 +6531,7 @@ event_loop:
         ;; Did `sel_menu_index` change?
         ldx     sel_menu_index
       IF X <> last_menu_index
-        lda     #0
-        sta     cur_hilited_menu_item
+        copy8   #0, cur_hilited_menu_item
         jsr     GetMenu         ; X = index
         lda     curmenu::menu_id
         jmp     imb_change
@@ -6592,7 +6608,7 @@ imb_change:
         pla
         sta     cur_open_menu_id
 
-        jsr     DrawMenuBar
+        jsr     ShowMenu
         jmp     event_loop
 
         ;; --------------------------------------------------
@@ -6911,15 +6927,16 @@ row:    ldy     savebehind_mapwidth
 :       rts
 .endproc ; SavebehindNextLine
 
-.proc RestoreScreenRectImpl
-        jsr     SetUpRectSavebehind
-        jmp     RestoreSavebehind
-.endproc ; RestoreScreenRectImpl
-
 .proc RestoreMenuSavebehind
         jsr     SetUpMenuSavebehind
-        FALL_THROUGH_TO RestoreSavebehind
+        jsr     RestoreSavebehind
+        jmp     ShowCursorImpl
 .endproc ; RestoreMenuSavebehind
+
+.proc RestoreScreenRectImpl
+        jsr     SetUpRectSavebehind
+        FALL_THROUGH_TO RestoreSavebehind
+.endproc ; RestoreScreenRectImpl
 
 .proc RestoreSavebehind
 loop:   jsr     SavebehindGetVidaddr
@@ -6933,7 +6950,7 @@ loop:   jsr     SavebehindGetVidaddr
         cpx     savebehind_bottom
         bcc     loop            ; TODO: `BLE` ?
         beq     loop
-        jmp     ShowCursorImpl
+        rts
 
 row:    ldy     savebehind_mapwidth
     DO
@@ -6944,16 +6961,13 @@ row:    ldy     savebehind_mapwidth
         bmi     SavebehindNextLine ; always
 .endproc ; RestoreSavebehind
 
-
+.proc HideOrShowMenuImpl
 dmrts:  rts
-
-
-.proc HideOrDrawMenuBarImpl
 
 hide_menu:
         clc
         .byte   OPC_BCS         ; mask next byte
-draw_menu_bar:
+show_menu:
         sec
 
         lda     cur_open_menu_id
@@ -6962,19 +6976,19 @@ draw_menu_bar:
 
         sta     find_menu_id
         jsr     FindMenuById
-        jsr     HideCursorImpl
         jsr     HiliteMenu
+        jsr     HideCursorImpl  ; before save/restore
 
         plp
         bcc     RestoreMenuSavebehind ; calls `ShowCursorImpl`
 
         jsr     SetUpMenuSavebehind
         jsr     DoSavebehind
+        jsr     ShowCursorImpl  ; after save
 
         jsr     SetStandardPort
 
-        ldax    menu_hittest_rect_addr
-        jsr     FillAndFrameRect
+        CALL    FillAndFrameRect, AX=#menu_hittest_rect
         inc16   menu_fill_rect+MGTK::Rect::x1
         dec16   menu_fill_rect+MGTK::Rect::x2
 
@@ -6982,6 +6996,20 @@ draw_menu_bar:
 
         ldx     #0
 loop:   jsr     GetMenuItem
+
+        ;; Make `menu_fill_rect` bound the item. This is used for
+        ;; * Shielding the cursor
+        ;; * Dimming the item (if needed)
+        ;; * Drawing item as a filler (if needed)
+        ldx     menu_item_index
+        ldy     menu_item_y_table,x
+        iny
+        sty     menu_fill_rect+MGTK::Rect::y1
+        lda     menu_item_y_table+1,x
+        sta     menu_fill_rect+MGTK::Rect::y2
+
+        MGTK_CALL MGTK::ShieldCursor, menu_fill_rect
+
         bit     curmenuitem::options
         bvc     :+
 
@@ -7003,9 +7031,8 @@ loop:   jsr     GetMenuItem
         beq     :+
         lda     curmenuitem::mark_char
         sta     mark_text+1
-
-:       ldax    mark_text_addr
-        jsr     DrawText
+:
+        CALL    DrawText, AX=#mark_text
         jsr     GetMenuAndMenuItem
 
 no_mark:
@@ -7027,7 +7054,8 @@ no_mark:
         bne     oa_sa
 
         lda     curmenuitem::shortcut1
-        beq     no_shortcut
+        .assert MGTK::no_shortcut & $80 = $80, error, "bad constant"
+        bmi     no_shortcut
 
         ;; Special case: if both the same, use glyph at that code point
         cmp     curmenuitem::shortcut2
@@ -7053,10 +7081,9 @@ oa_sa:  cmp     #MGTK::MenuOpt::open_apple | MGTK::MenuOpt::solid_apple
 sst:    sta     shortcut_text+2
 
 offset: lda     offset_shortcut
-        jsr     MovetoFromright
+        jsr     MoveToFromRight
 
-        ldax    shortcut_text_addr
-        jsr     DrawText
+        CALL    DrawText, AX=#shortcut_text
         jsr     GetMenuAndMenuItem
 
 no_shortcut:
@@ -7064,16 +7091,18 @@ no_shortcut:
         ora     curmenuitem::options
         bpl     next
 
-        jsr     DimMenuitem
+        jsr     DimMenuItem
 
-next:   ldx     menu_item_index
+next:
+        jsr     UnshieldCursorImpl
+        ldx     menu_item_index
         inx
         cpx     menu_item_count
         jne     loop
-        jmp     ShowCursorImpl
-.endproc ; HideOrDrawMenuBarImpl
-HideMenu := HideOrDrawMenuBarImpl::hide_menu
-DrawMenuBar := HideOrDrawMenuBarImpl::draw_menu_bar
+        rts
+.endproc ; HideOrShowMenuImpl
+HideMenu := HideOrShowMenuImpl::hide_menu
+ShowMenu := HideOrShowMenuImpl::show_menu
 
 .proc MovetoMenuitem
         ldx     menu_item_index
@@ -7084,60 +7113,46 @@ DrawMenuBar := HideOrDrawMenuBarImpl::draw_menu_bar
         jmp     SetPenloc
 .endproc ; MovetoMenuitem
 
-
-.proc DimMenuitem
-        ldx     menu_item_index
-        ldy     menu_item_y_table,x
-        iny
-        sty     menu_item_rect+MGTK::Rect::y1
-        lda     menu_item_y_table+1,x
-        sta     menu_item_rect+MGTK::Rect::y2
-
+.proc DimMenuItem
         MGTK_CALL MGTK::SetPattern, checkerboard_pattern
 
         lda     #MGTK::penOR
 ep2:    jsr     SetFillMode
 
-        add16   curmenuinfo::x_min, #1, menu_item_rect+MGTK::Rect::x1
-        sub16   curmenuinfo::x_max, #1, menu_item_rect+MGTK::Rect::x2
-
-        MGTK_CALL MGTK::PaintRect, menu_item_rect
+        MGTK_CALL MGTK::PaintRect, menu_fill_rect
         MGTK_CALL MGTK::SetPattern, standard_port::pattern
 
         jmp     SetFillModeXOR
-.endproc ; DimMenuitem
+.endproc ; DimMenuItem
 
 .proc DrawFiller
-        ldx     menu_item_index
         ldy     sysfont_height
         iny                     ; /= 2, but round up
         tya
         lsr
         clc
-        adc     menu_item_y_table,x
-        sta     menu_item_rect+MGTK::Rect::y1
-        sta     menu_item_rect+MGTK::Rect::y2
+        adc     menu_fill_rect+MGTK::Rect::y1
+        sta     menu_fill_rect+MGTK::Rect::y1
+        sta     menu_fill_rect+MGTK::Rect::y2
 
         MGTK_CALL MGTK::SetPattern, checkerboard_pattern
 
         lda     #MGTK::pencopy
-        beq     DimMenuitem::ep2 ; always
+        beq     DimMenuItem::ep2 ; always
 .endproc ; DrawFiller
 
-        DEFINE_RECT menu_item_rect, 0, 0, 0, 0
-
         ;; Move to the given distance from the right side of the menu.
-.proc MovetoFromright
+.proc MoveToFromRight
         sta     $82
         ldax    curmenuinfo::x_max
         subax8  $82
         jmp     SetPenloc::set_x
-.endproc ; MovetoFromright
+.endproc ; MoveToFromRight
 
 .proc UnhiliteCurMenuItem
         jsr     HiliteMenuItem
-        lda     #0
-        sta     cur_hilited_menu_item
+        copy8   #0, cur_hilited_menu_item
+        FALL_THROUGH_TO hmrts
 .endproc ; UnhiliteCurMenuItem
 hmrts:  rts
 
@@ -7150,8 +7165,9 @@ hmrts:  rts
         sty     menu_fill_rect+MGTK::Rect::y2
 
         jsr     SetFillModeXOR
+        MGTK_CALL MGTK::ShieldCursor, menu_fill_rect
         MGTK_CALL MGTK::PaintRect, menu_fill_rect
-        rts
+        jmp     UnshieldCursorImpl
 .endproc ; HiliteMenuItem
 
 ;;; ============================================================
@@ -7170,27 +7186,29 @@ control_char    .byte
         COPY_BYTES 4, params, menu_glyphs
 
         copy16  standard_port::textfont, params
-        lda     #2
-        sta     offset_checkmark
-        ldx     #16
-        ldy     #0
+
+        ;; Set C=1 if double width
+        ldy     #MGTK::Font::fonttype
         lda     (params),y
         asl
-        ldy     #30
-        bcs     :+                    ; branch if double-width font
 
-        lda     #9
-        sta     offset_text
-        sta     shortcut_x_adj
-        stx     offset_shortcut
-        sty     non_shortcut_x_adj
-        rts
+        ;; Single width
+        ldx     #kMenuMetricOffsetTextSW
+        ldy     #kMenuMetricOffsetShortcutSW
+        lda     #kMenuMetricShortcutWidthSW
 
-:       stx     offset_text
-        stx     shortcut_x_adj
+    IF CS
+        ;; Double width
+        ldx     #kMenuMetricOffsetTextDW
+        ldy     #kMenuMetricOffsetShortcutDW
+        lda     #kMenuMetricShortcutWidthDW
+    END_IF
+
+        ;; `offset_checkmark` statically assigned `kMenuMetricOffsetCheckmark`
+        stx     offset_text
         sty     offset_shortcut
-        lda     #51
-        sta     non_shortcut_x_adj
+        sta     shortcut_width
+
         rts
 .endproc ; InitMenuImpl
 
@@ -7338,21 +7356,6 @@ resize_box_bitmap:
         PIXELS  "#...................#"
         PIXELS  "#####################"
 
-up_scroll_addr:
-        .addr   up_scroll_params
-
-down_scroll_addr:
-        .addr   down_scroll_params
-
-left_scroll_addr:
-        .addr   left_scroll_params
-
-right_scroll_addr:
-        .addr   right_scroll_params
-
-resize_box_addr:
-        .addr   resize_box_params
-
 current_window:
         .word   0
 
@@ -7367,8 +7370,7 @@ target_window_id:
 
         ;; The root window is not a real window, but a structure whose
         ;; nextwinfo field lines up with current_window.
-root_window_addr:
-        .addr   current_window - MGTK::Winfo::nextwinfo
+root_window := current_window - MGTK::Winfo::nextwinfo
 
 
         which_control        := $8C
@@ -7412,9 +7414,8 @@ y2         .word
         END_PARAM_BLOCK
 
 
-        ;; Start window enumeration at top ???
 .proc TopWindow
-        copy16  root_window_addr, previous_window
+        copy16  #root_window, previous_window
         ldax    current_window
         bne     set_found_window
 end:    rts
@@ -7898,11 +7899,8 @@ no_titlebar:
 no_hscroll:
         styx    down_scroll_params::ycoord
 
-        ldax    down_scroll_addr
-        jsr     DrawIcon
-
-        ldax    up_scroll_addr
-        jsr     DrawIcon
+        CALL    DrawIcon, AX=#down_scroll_params
+        CALL    DrawIcon, AX=#up_scroll_params
 
 no_vscroll:
         bit     current_winfo::hscroll
@@ -7933,11 +7931,8 @@ no_vscroll:
 no_vscroll2:
         styx    right_scroll_params
 
-        ldax    right_scroll_addr
-        jsr     DrawIcon
-
-        ldax    left_scroll_addr
-        jsr     DrawIcon
+        CALL    DrawIcon, AX=#right_scroll_params
+        CALL    DrawIcon, AX=#left_scroll_params
 
 no_hscrollbar:
         lda     #MGTK::pencopy
@@ -7983,8 +7978,7 @@ draw_resize:
 
         lda     #MGTK::notpencopy
         jsr     SetFillMode
-        ldax    resize_box_addr
-        jmp     DrawIcon
+        TAIL_CALL DrawIcon, AX=#resize_box_params
 ret:    rts
 .endproc ; DrawWinframe
 
@@ -8250,8 +8244,7 @@ update_port:
         jsr     SetDesktopPort
         MGTK_CALL MGTK::SetPortBits, set_port_params
         copy16  active_port, previous_port
-        ldax    update_port_addr
-        jsr     assign_and_prepare_port
+        CALL    assign_and_prepare_port, AX=#update_port
         asl     preserve_zp_flag ; since `RestoreParamsAndStack` is not called
         rts
 
@@ -8282,8 +8275,7 @@ win:    jsr     WindowByIdOrExit
 
         jsr     PrepareWinport
         php
-        ldax    update_port_addr
-        jsr     assign_and_prepare_port
+        CALL    assign_and_prepare_port, AX=#update_port
 
         asl     preserve_zp_flag ; since `RestoreParamsAndStack` is not called
         plp
@@ -8300,9 +8292,6 @@ err_obscured:
 ;;; EndUpdate
 
 ;;; 1 byte of params, copied to $82
-
-update_port_addr:
-        .addr   update_port
 
 .proc EndUpdateImpl
         jsr     ShowCursorImpl

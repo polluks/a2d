@@ -713,6 +713,13 @@ check_drag:
         jmp     _CheckRenameClick
     END_IF
 
+        ;; Snapshot modifiers before doing any real work
+        pha
+        lda     BUTN1
+        and     BUTN0
+        sta     double_modifier_flag
+        pla
+
         ;; ----------------------------------------
 
     IF A = #IconTK::kDragResultMove
@@ -749,8 +756,7 @@ check_drag:
         RTS_IF ZERO
 
         ;; Double modifier?
-        lda     BUTN0
-        and     BUTN1
+        bit     double_modifier_flag
       IF NS
         jsr     SetOperationDstPathFromDragDropResult
         RTS_IF CS               ; failure, e.g. path too long
@@ -791,8 +797,7 @@ check_drag:
         RTS_IF CS               ; failure, e.g. path too long
 
         ;; Double modifier?
-        lda     BUTN0
-        and     BUTN1
+        bit     double_modifier_flag
     IF NS
         jsr     GetSingleSelectedIcon
         RTS_IF ZERO
@@ -802,6 +807,9 @@ check_drag:
         ;; Copy/Move
         jsr     DoCopyOrMoveSelection
         jmp     _PerformPostDropUpdates
+
+double_modifier_flag:           ; bit7
+        .byte   0
 .endproc ; _IconClick
 
 ;;; ------------------------------------------------------------
@@ -10239,7 +10247,7 @@ eof:    RETURN  A=#$FF
 ;;;
 ;;; Input: A=`storage_type`
 ;;; Output: C=0 if supported type, C=1 if unsupported but user picks OK.
-;;; Exception: If user selects Cancel, `CloseFilesCancelDialogWithFailedResult` is invoked.
+;;; Exception: If user selects Cancel, `CloseFilesCancelDialogWithAppropriateResult` is invoked.
 ;;; Assert: Type is not `ST_VOLUME_DIRECTORY` or `ST_LINKED_DIRECTORY`
 .proc ValidateStorageType
     IF A >= #ST_TREE_FILE+1     ; only seedling/sapling/tree supported
@@ -10279,7 +10287,7 @@ continue:
         beq     fail
         rts
 
-fail:   jmp     CloseFilesCancelDialogWithFailedResult
+fail:   jmp     CloseFilesCancelDialogWithAppropriateResult
 .endproc ; ShowAlertBasedOnFileCount
 
 ;;; ============================================================
@@ -10293,7 +10301,7 @@ fail:   jmp     CloseFilesCancelDialogWithFailedResult
 retry:  CALL    GetFileInfo, AX=#operation_dst_path
     IF CS
         jsr     ShowErrorAlertDst
-        jmp     retry
+        beq     retry           ; always
     END_IF
 
         ;; Try to read a block off device; if AppleShare will fail.
@@ -10436,7 +10444,7 @@ operation_lifecycle_callbacks_for_copy:
 retry:  jsr     GetSrcFileInfo
     IF CS
         jsr     ShowErrorAlert
-        jmp     retry
+        beq     retry           ; always
     END_IF
         copy8   DEVNUM, src_vol_devnum
 
@@ -10576,7 +10584,7 @@ retry:  MLI_CALL GET_FILE_INFO, dst_file_info_params
 .if ::kCopyInteractive
     IF NOT_ZERO
         jsr     ShowErrorAlertDst
-        jmp     retry
+        beq     retry           ; always
     END_IF
 .else
         .refto retry
@@ -10616,7 +10624,7 @@ retry:  jsr     GetDstFileInfo
     IF CS
       IF A <> #ERR_FILE_NOT_FOUND
         jsr     ShowErrorAlertDst
-        jmp     retry
+        beq     retry           ; always
       END_IF
     END_IF
 
@@ -10668,7 +10676,7 @@ retry:  MLI_CALL DESTROY, destroy_src_params
        END_IF
 
         jsr     ShowErrorAlert
-        jmp     retry
+        beq     retry           ; always
       END_IF
     END_IF
         rts
@@ -10736,7 +10744,7 @@ retry:
     IF CS
       IF A <> #ERR_DUPLICATE_FILENAME
         jsr     ShowErrorAlertDst
-        jmp     retry
+        beq     retry           ; always
       END_IF
 
 .if ::kCopyInteractive
@@ -10744,7 +10752,7 @@ retry:
         jsr     GetDstFileInfo
       IF CS
         jsr     ShowErrorAlertDst
-        jmp     retry
+        beq     retry           ; always
       END_IF
 
         ;; Directory?
@@ -10779,7 +10787,7 @@ retry2: MLI_CALL DESTROY, destroy_dst_params
         beq     retry2
        END_IF
         jsr     ShowErrorAlertDst
-        jmp     retry2
+        beq     retry2          ; always
       END_IF
 .endif
 
@@ -10875,7 +10883,7 @@ Start:  lda     DEVNUM
         CALL    GetFileEntryBlock, AX=#src_path_buf
     IF CS
         CALL    ShowErrorAlert, A=#ERR_PATH_NOT_FOUND
-        jmp     :-
+        beq     :-              ; always
     END_IF
         stax    src_block_params::block_num
         sty     src_entry_num
@@ -10883,7 +10891,7 @@ Start:  lda     DEVNUM
         CALL    GetFileEntryBlock, AX=#dst_path_buf
     IF CS
         CALL    ShowErrorAlert, A=#ERR_PATH_NOT_FOUND
-        jmp     :-
+        beq     :-              ; always
     END_IF
         stax    dst_block_params::block_num
         sty     dst_entry_num
@@ -10954,7 +10962,7 @@ Start:  lda     DEVNUM
 :       MLI_CALL DESTROY, destroy_src_params
     IF CS
         jsr     ShowErrorAlert
-        jmp     :-
+        beq     :-              ; always
     END_IF
         rts
 
@@ -10964,13 +10972,13 @@ Start:  lda     DEVNUM
 :       MLI_CALL READ_BLOCK, src_block_params
     IF CS
         jsr     ShowErrorAlert
-        jmp     :-
+        beq     :-              ; always
     END_IF
 
 :       MLI_CALL READ_BLOCK, dst_block_params
     IF CS
         jsr     ShowErrorAlert
-        jmp     :-
+        beq     :-              ; always
     END_IF
 
         rts
@@ -10982,13 +10990,13 @@ Start:  lda     DEVNUM
 :       MLI_CALL WRITE_BLOCK, src_block_params
     IF CS
         jsr     ShowErrorAlert
-        jmp     :-
+        beq     :-              ; always
     END_IF
 
 :       MLI_CALL WRITE_BLOCK, dst_block_params
     IF CS
         jsr     ShowErrorAlert
-        jmp     :-
+        beq     :-              ; always
     END_IF
 
         rts
@@ -11034,7 +11042,7 @@ retry:  MLI_CALL READ, read_src_params
         beq     close
 .if ::kCopyInteractive
         jsr     ShowErrorAlert
-        jmp     retry
+        beq     retry           ; always
 .else
         .refto retry
 fail:   jmp     OpHandleErrorCode
@@ -11109,7 +11117,7 @@ retry:  MLI_CALL OPEN, open_src_params
 .if ::kCopyInteractive
     IF CS
         jsr     ShowErrorAlert
-        jmp     retry
+        beq     retry           ; always
     END_IF
 .else
         .refto retry
@@ -11144,7 +11152,7 @@ retry:  MLI_CALL OPEN, open_dst_params
         beq     finish
       END_IF
         jsr     ShowErrorAlertDst
-        jmp     retry
+        beq     retry           ; always
     END_IF
 .else
         .refto retry
@@ -11266,7 +11274,7 @@ retry:  MLI_CALL WRITE, write_dst_params
         .refto ret
     IF CS
         jsr     ShowErrorAlertDst
-        jmp     retry
+        beq     retry           ; always
     END_IF
 .else
         .refto retry
@@ -11359,7 +11367,7 @@ operation_lifecycle_callbacks_for_delete:
 retry:  jsr     GetSrcFileInfo
     IF CS
         jsr     ShowErrorAlert
-        jmp     retry
+        beq     retry           ; always
     END_IF
 
         ;; Check if it's a regular file or directory
@@ -11423,7 +11431,7 @@ unlock: jsr     UnlockSrcFile
 done:   rts
 
 error:  jsr     ShowErrorAlert
-        jmp     retry
+        beq     retry           ; always
 .endproc ; DeleteFileCommon
 
 .proc UnlockSrcFile
@@ -11532,7 +11540,7 @@ operation_traversal_callbacks_for_enumeration:
 retry:  jsr     GetSrcFileInfo
     IF CS
         jsr     ShowErrorAlert
-        jmp     retry
+        beq     retry           ; always
     END_IF
 
         ;; Visit the key file
@@ -11682,7 +11690,7 @@ src_path_slash_index:
 .proc CheckRetry
         CALL    ShowAlertOption, X=#AlertButtonOptions::TryAgainCancel
         ASSERT_EQUALS ::kAlertResultTryAgain, 0
-        bne     CloseFilesCancelDialogWithFailedResult
+        bne     CloseFilesCancelDialogWithAppropriateResult
         rts
 .endproc ; CheckRetry
 
@@ -11694,14 +11702,21 @@ src_path_slash_index:
     IF A = #MGTK::EventKind::key_down
         lda     event_params::key
         cmp     #CHAR_ESCAPE
-        beq     cancel
+        beq     CloseFilesCancelDialogWithAppropriateResult
     END_IF
         rts
+.endproc ; CheckCancel
 
-cancel: bit     do_op_flag
+
+;;; ============================================================
+;;; Selects `kOperationCanceled` if during enumeration phase,
+;;; or `kOperationFailed` if the operation is underway.
+
+.proc CloseFilesCancelDialogWithAppropriateResult
+        bit     do_op_flag
         bpl     CloseFilesCancelDialogWithCanceledResult
         FALL_THROUGH_TO CloseFilesCancelDialogWithFailedResult
-.endproc ; CheckCancel
+.endproc ; CloseFilesCancelDialogWithAppropriateResult
 
 ;;; ============================================================
 ;;; Closes dialog, closes all open files, and restores stack.
@@ -11801,7 +11816,7 @@ match:  lda     flag
 retry:  CALL    GetFileInfo, AX=src_ptr
     IF CS
         jsr     ShowErrorAlert
-        jmp     retry
+        beq     retry           ; always
     END_IF
 
         copy8   DEVNUM, vol_key_block_params::unit_num
@@ -11841,7 +11856,7 @@ retry:  CALL    GetFileInfo, AX=src_ptr
         pla
     IF CS
         jsr     ShowErrorAlertDst
-        jmp     :-
+        beq     :-              ; always
     END_IF
         rts
 .endproc ; SetDstFileInfo
@@ -11851,7 +11866,7 @@ retry:  CALL    GetFileInfo, AX=src_ptr
 ;;; A=error. If `ERR_VOL_NOT_FOUND` or `ERR_FILE_NOT_FOUND`, will show
 ;;; "please insert the disk: ..." using `operation_src_path` (or `operation_dst_path` if
 ;;; destination) to supply the disk name.
-
+;;; Output: returns A=0/Z=1, otherwise aborts
 .proc ShowErrorAlertImpl
         ENTRY_POINTS_FOR_BIT7_FLAG dst, src, dst_flag
 
@@ -11859,7 +11874,7 @@ retry:  CALL    GetFileInfo, AX=src_ptr
         jsr     ShowAlert
         ASSERT_EQUALS ::kAlertResultTryAgain, 0
         bne     close           ; not kAlertResultTryAgain = 0
-        rts
+        rts                     ; A=0/Z=1
     END_IF
 
         ;; if err is "not found" prompt specifically for src/dst disk
@@ -11878,9 +11893,10 @@ retry:  CALL    GetFileInfo, AX=src_ptr
 
         ;; Poll drives before trying again
         MLI_CALL ON_LINE, on_line_all_drives_params
-        rts
+        bne     close
+        rts                     ; A=0/Z=1
 
-close:  jmp     CloseFilesCancelDialogWithFailedResult
+close:  jmp     CloseFilesCancelDialogWithAppropriateResult
 
 dst_flag:       .byte   0       ; bit7
 

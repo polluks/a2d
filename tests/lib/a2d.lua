@@ -394,14 +394,14 @@ end
 
 function a2d.FocusDesktop()
   apple2.PressOA()
-  apple2.ControlKey("D")
+  apple2.ControlKey("D") -- OA+D - Focus desktop
   apple2.ReleaseOA()
   a2d.WaitForRepaint()
 end
 
 function a2d.FocusActiveWindow()
   apple2.PressOA()
-  apple2.ControlKey("W")
+  apple2.ControlKey("W") -- OA+W - Focus window
   apple2.ReleaseOA()
   a2d.WaitForRepaint()
 end
@@ -574,6 +574,32 @@ function a2d.AddShortcut(path, options)
   a2d.WaitForRepaint() -- extra, for I/O
 end
 
+function a2d.GetFilePickerCurrentPath()
+  return apple2.GetPascalString(0x1620)
+end
+
+function a2d.NavigateFilePickerTo(path, opt_file, options)
+  apple2.ControlKey("D") -- Drives
+  emu.wait(2)
+  for segment in path:gmatch("([^/]+)") do
+    apple2.PressOA()
+    apple2.Type(segment)
+    apple2.ReleaseOA()
+    apple2.ControlKey("O") -- Open
+    a2d.WaitForRepaint()
+  end
+
+  local current_path = a2d.GetFilePickerCurrentPath()
+  if current_path:lower() ~= path:lower() then
+    error(string.format("Failed to navigate to %q, at %q instead", path, current_path))
+  end
+
+  if opt_file then
+    apple2.Type(opt_file)
+    a2d.WaitForRepaint()
+  end
+end
+
 function a2d.CopySelectionTo(path, is_volume, options)
   options = default_options(options)
 
@@ -585,14 +611,8 @@ function a2d.CopySelectionTo(path, is_volume, options)
   ]]
   a2d.InvokeMenuItem(a2d.FILE_MENU, is_volume and -2 or -3)
 
-  --Automate file picker dialog
-  apple2.ControlKey("D") -- Drives
-  a2d.WaitForRepaint()
-  for segment in path:gmatch("([^/]+)") do
-    apple2.Type(segment)
-    apple2.ControlKey("O") -- Open
-    a2d.WaitForRepaint()
-  end
+  a2d.NavigateFilePickerTo(path)
+
   a2d.DialogOK(options)
 
   if not options.no_wait then
@@ -1108,6 +1128,26 @@ local function ReadIcon(id)
 
   return icon
 end
+
+-- Based on enum in src/desktop/internals.inc
+a2d.IconTypes = {
+  -- volumes
+  trash = 0,
+  floppy140 = 1,
+  ramdisk = 2,
+  profile = 3,
+  floppy800 = 4,
+  fileshare = 5,
+  cdrom = 6,
+
+  -- files
+  generic = 7,
+  text = 8,
+  binary = 9,
+  graphics = 10,
+  -- ...
+  link = 27,
+}
 
 function a2d.GetSelectedIcons()
   local selected_icon_count_addr = DESKTOP_SYMBOLS['selected_icon_count'] | 0x010000
