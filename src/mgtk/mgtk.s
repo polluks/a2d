@@ -6148,7 +6148,7 @@ filler: ldx     menu_item_index
 .proc FindMenuById
         lda     #find_mode_by_id
         FALL_THROUGH_TO FindMenu
-.endproc
+.endproc ; FindMenuById
 
 .proc FindMenu
         sta     find_mode
@@ -6730,7 +6730,7 @@ zero:   lda     #0
 
         inc     sel_menu_index
         ldx     sel_menu_index
-      IF X GE menu_count
+      IF X >= menu_count
         sta     sel_menu_index
       END_IF
 
@@ -9430,17 +9430,15 @@ got_ctl:lda     params::which_ctl
         jsr     GetThumbRect
 
         ;; Stash initial position, to detect no-op
-        initial_pos := $8A
-
         ldx     #0
         bit     which_control
     IF NS
         ldx     #2
     END_IF
         lda     winrect,x
-        sta     initial_pos
+        sta     initial_pos_lo
         lda     winrect+1,x
-        sta     initial_pos+1
+        sta     initial_pos_hi
 
         jsr     SaveParamsAndStack ; restored by call below (in `drag_done`)
         jsr     SetDesktopPort
@@ -9519,18 +9517,23 @@ drag_done:
         ;; Did position change?
         ldx     #0
         bit     which_control
-        bpl     :+
+    IF NS
         ldx     #2
-:       lda     winrect,x
-        cmp     initial_pos
-        bne     :+
+    END_IF
+        lda     winrect,x
+        initial_pos_lo := *+1
+        cmp     #SELF_MODIFIED_BYTE
+    IF EQ
         lda     winrect+1,x
-        cmp     initial_pos+1
-        bne     :+
+        initial_pos_hi := *+1
+        cmp     #SELF_MODIFIED_BYTE
+      IF EQ
         lda     thumb_pos       ; (out) thumbpos = original value
         ldx     #0              ; (out) thumbmoved = 0
         beq     store           ; always
-:
+      END_IF
+    END_IF
+
         jsr     SetUpThumbDivision
 
         jsr     FixedDiv
@@ -10253,7 +10256,7 @@ pos:    jmp     PositionKbdMouse
         lda     kbd_mouse_x+1
         sbc     #>(kScreenWidth-1)
 
-    IF_POS
+    IF POS
         lda     #>(kScreenWidth-1)
         sta     kbd_mouse_x+1
         lda     #<(kScreenWidth-1)
@@ -11090,7 +11093,7 @@ iic_proc:
     END_IF
         rts
 
-.endproc
+.endproc ; WaitVBLImpl
 vbl_proc_addr := WaitVBLImpl::proc_addr
 vbl_iie_proc := WaitVBLImpl::iie_proc
 vbl_iigs_proc := WaitVBLImpl::iigs_proc

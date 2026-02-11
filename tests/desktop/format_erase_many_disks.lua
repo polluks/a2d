@@ -2,44 +2,36 @@
 
 MODELARGS="-sl2 mouse \
   -sl7 scsi \
-  -sl7:scsi:scsibus:2 harddisk              \
-  -sl7:scsi:scsibus:3 harddisk              \
-  -sl7:scsi:scsibus:4 harddisk              \
-  -sl7:scsi:scsibus:5 harddisk              \
   -sl7:scsi:scsibus:6 harddisk              \
+  -sl7:scsi:scsibus:5 harddisk              \
+  -sl7:scsi:scsibus:4 harddisk              \
+  -sl7:scsi:scsibus:3 harddisk              \
+  -sl7:scsi:scsibus:2 harddisk              \
+  -sl7:scsi:scsibus:1 harddisk              \
+  -sl7:scsi:scsibus:0 harddisk              \
   -sl6 scsi \
-  -sl6:scsi:scsibus:2 harddisk              \
-  -sl6:scsi:scsibus:3 harddisk              \
-  -sl6:scsi:scsibus:4 harddisk              \
-  -sl6:scsi:scsibus:5 harddisk              \
   -sl6:scsi:scsibus:6 harddisk              \
-  -sl5 scsi \
-  -sl5:scsi:scsibus:2 harddisk              \
-  -sl5:scsi:scsibus:3 harddisk              \
-  -sl5:scsi:scsibus:4 harddisk              \
-  -sl5:scsi:scsibus:5 harddisk              \
-  -sl5:scsi:scsibus:6 harddisk              \
-  -sl4 scsi \
-  -sl4:scsi:scsibus:2 harddisk              \
-  -sl4:scsi:scsibus:3 harddisk              \
-  -sl4:scsi:scsibus:4 harddisk              \
-  -sl4:scsi:scsibus:5 harddisk              \
-  -sl4:scsi:scsibus:6 harddisk              \
+  -sl6:scsi:scsibus:5 harddisk              \
+  -sl6:scsi:scsibus:4 harddisk              \
+  -sl6:scsi:scsibus:3 harddisk              \
+  -sl6:scsi:scsibus:2 harddisk              \
+  -sl6:scsi:scsibus:1 harddisk              \
   "
 DISKARGS="\
-  -hard20 $HARDIMG  \
-  -hard19 disk_a.2mg  \
-  -hard18 disk_j.2mg  \
-  -hard17 disk_k.2mg  \
-  -hard16 disk_l.2mg  \
-  -hard15 disk_b.2mg  \
-  -hard14 disk_c.2mg  \
-  -hard10 disk_d.2mg  \
-  -hard9  disk_e.2mg  \
-  -hard8  disk_f.2mg  \
-  -hard7  disk_g.2mg  \
-  -hard5  disk_h.2mg  \
-  -hard4  disk_i.2mg  \
+  -hard13 $HARDIMG  \
+  -hard12 disk_a.2mg  \
+  -hard11 disk_j.2mg  \
+  -hard10 disk_k.2mg  \
+  -hard9  disk_l.2mg  \
+  -hard8  disk_b.2mg  \
+  -hard7  disk_c.2mg  \
+  \
+  -hard6  disk_d.2mg  \
+  -hard5  disk_e.2mg  \
+  -hard4  disk_f.2mg  \
+  -hard3  disk_g.2mg  \
+  -hard2  disk_h.2mg  \
+  -hard1  disk_i.2mg  \
   "
 ======================================== ENDCONFIG ]]
 
@@ -71,6 +63,16 @@ end
 -- Arrow Keys
 ------------------------------------------------------------
 
+function coords()
+  local found_x, found_y
+  a2dtest.OCRIterate(function(run, x, y)
+      if run:upper():find("SEAGATE") then
+        found_x, found_y = x, y
+      end
+  end, {invert=true})
+  return found_x, found_y
+end
+
 --[[
   Launch DeskTop. Run the command. Ensure left/right arrows move
   selection correctly.
@@ -79,9 +81,15 @@ FormatEraseTest(
   "Right arrow key",
   function(invoke)
     invoke(false)
-    for i=1,#apple2.GetProDOSDeviceList() do
+
+    local last_x, last_y
+    for i=1, #apple2.GetProDOSDeviceList() do
       apple2.RightArrowKey()
-      test.Snap("verify selection moves right then down")
+      local x, y = coords()
+      if i >= 2 then
+        test.Expect(x > last_x or y > last_y, "selection should move right then down")
+      end
+      last_x, last_y = x, y
     end
     a2d.DialogCancel()
 end)
@@ -94,9 +102,15 @@ FormatEraseTest(
   "Left arrow key",
   function(invoke)
     invoke(false)
+
+    local last_x, last_y
     for i=1,#apple2.GetProDOSDeviceList() do
       apple2.LeftArrowKey()
-      test.Snap("verify selection moves left then up")
+      local x, y = coords()
+      if i >= 2 then
+        test.Expect(x < last_x or y < last_y, "selection should move left then up")
+      end
+      last_x, last_y = x, y
     end
     a2d.DialogCancel()
 end)
@@ -105,9 +119,14 @@ FormatEraseTest(
   "Down arrow key",
   function(invoke)
     invoke(false)
+    local last_x, last_y
     for i=1,#apple2.GetProDOSDeviceList() do
       apple2.DownArrowKey()
-      test.Snap("verify selection moves down then right")
+      local x, y = coords()
+      if i >= 2 then
+        test.Expect(y > last_y or x > last_x, "selection should move down then right")
+      end
+      last_x, last_y = x, y
     end
     a2d.DialogCancel()
 end)
@@ -116,9 +135,14 @@ FormatEraseTest(
   "Up arrow key",
   function(invoke)
     invoke(false)
+    local last_x, last_y
     for i=1,#apple2.GetProDOSDeviceList() do
       apple2.UpArrowKey()
-      test.Snap("verify selection moves up then left")
+      local x, y = coords()
+      if i >= 2 then
+        test.Expect(y < last_y or x < last_x, "selection should move up then left")
+      end
+      last_x, last_y = x, y
     end
     a2d.DialogCancel()
 end)
@@ -135,7 +159,13 @@ FormatEraseTest(
   "All 13 devices show",
   function(invoke)
     invoke(false)
-    test.Snap("verify all 13 devices shown")
+
+    local ocr = a2dtest.OCRScreen()
+    local count = 0
+    for _ in ocr:upper():gmatch("SEAGATE") do
+      count = count + 1
+    end
+    test.ExpectEquals(count, 13, "all 13 devices should be shown")
     a2d.DialogCancel()
 end)
 

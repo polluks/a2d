@@ -40,14 +40,13 @@ Project Page: https://github.com/a2stuff/a2d
 * Reduce cursor flickering while icons are drawn.
 * Eliminate cursor flickering when clicking on the desktop or windows.
 * Time window open/close animations using VBL.
-* Add Apple+Escape as shortcut to clear selection.
+* Add Apple+Escape as shortcut to clear selection and focus window.
+* Add OA+SA+Escape as shortcut to clear selection and focus desktop.
 * Prevent volume icon flicker on startup with empty Disk II drives.
 * Don't show About dialog when Ctrl+Shift+2 is pressed.
 * Fix hang after 60 restarts.
 * Fix error shown after non-empty directory fails to delete.
 * Fix hang after non-menu shortcut if window fails to open.
-* Add Apple+Control+D as shortcut to focus desktop.
-* Add Apple+Control+W as shortcut to focus window.
 * Fix behavior after File > Duplicate failed due to space or storage type.
 * Set empty window maprect so that when restored with new file scrollbars are inactive.
 * Fix volume icon flicker after Check All Drives for removable disks.
@@ -63,6 +62,8 @@ Project Page: https://github.com/a2stuff/a2d
 * Allow Shift+Arrow keys to extend icon selection (IIgs/Platinum IIe)
 * Don't case-adjust SmartPort device names that are already mixed-case.
 * Eliminate unnecessary window refreshes after canceled move/delete.
+* Add option to skip checking 5.25" drives on startup.
+* Adjust order of startup operations to make icons appear faster.
 
 ### Selector
 
@@ -87,6 +88,8 @@ Project Page: https://github.com/a2stuff/a2d
 * DOS 3.3 Import: Fix keyboard shortcut handling.
 * Sounds: Time "Silent" menu bar flash using VBL.
 * Screen Savers: improve animation for Flying Toasters, Hexix, Message and Melt.
+* Calculator & Sci.Calc: fix clicking button edges and button spacing.
+* New Screen Saver: Maze
 
 ### Misc
 

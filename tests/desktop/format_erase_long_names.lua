@@ -7,6 +7,7 @@ MODELARGS="-sl2 mouse \
   -sl7:scsi:scsibus:4 aplcdsc            \
   -sl7:scsi:scsibus:3 aplcdsc            \
   -sl7:scsi:scsibus:2 aplcdsc            \
+  -sl7:scsi:scsibus:1 aplcdsc            \
   -sl7:scsi:scsibus:0 aplcdsc            \
   -sl6 scsi \
   -sl6:scsi:scsibus:6 aplcdsc            \
@@ -23,7 +24,6 @@ DISKARGS="\
 --[[
   * harddisk is: "SEAGATEST225N1" (Seagate ST-225N)
   * aplcdsc is: "SONYCD-ROMCDU-80" (Sony CD-ROM CDU-8002)
-  * cdrom (id 1) is: "SONYCDU-76S1" (Sony CDU-765S)
 ]]
 
 a2d.ConfigureRepaintTime(5)
@@ -64,6 +64,8 @@ FormatEraseTest(
     test.Snap("verify selection rect covers name, doesn't overlap border")
     a2d.DialogOK()
     test.Snap("verify long names erased after device selection")
-    test.Snap("verify location line shows full name without ellipsis")
+
+    test.Expect(a2dtest.OCRScreen():upper():find("SONYCD%-ROMCDU%-80"),
+                "location line should show full name without ellipsis")
     a2d.DialogCancel()
 end)
