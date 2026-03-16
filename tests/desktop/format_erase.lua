@@ -48,7 +48,7 @@ FormatEraseTest(
     a2d.DialogOK()
 
     -- confirmation prompt
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
 
     -- command
@@ -82,9 +82,7 @@ FormatEraseTest(
     a2d.DialogOK()
 
     -- confirmation
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find("Are you sure you want to erase.*%?"),
-                "prompt should confirm overwrite, not a duplicate name")
+    a2dtest.WaitForAlert({match="Are you sure you want to erase.*%?"})
     a2d.DialogCancel()
 end)
 
@@ -105,9 +103,7 @@ FormatEraseTest(
     a2d.DialogOK()
 
     -- confirmation
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find("That name already exists%. Please use another name%."),
-                "prompt should say the name is in use")
+    a2dtest.WaitForAlert({match="That name already exists%. Please use another name%."})
     a2d.DialogCancel()
     a2d.DialogCancel()
 end)
@@ -129,9 +125,7 @@ FormatEraseTest(
     a2d.DialogOK()
 
     -- confirmation
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find("Are you sure you want to erase.*%?"),
-                "prompt should confirm overwrite, not a duplicate name")
+    a2dtest.WaitForAlert({match="Are you sure you want to erase.*%?"})
     a2d.DialogCancel()
 end)
 
@@ -160,7 +154,7 @@ FormatEraseTest(
     a2d.DialogOK()
 
     -- confirmation
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
     emu.wait(5) -- slow
 
@@ -188,11 +182,11 @@ FormatEraseTest(
     a2d.DialogOK()
 
     -- confirmation prompt
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
 
     -- command
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="error"})
     a2d.DialogCancel()
 end)
 
@@ -213,7 +207,7 @@ FormatEraseTest(
     a2d.DialogOK()
 
     -- confirmation prompt
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
 
     -- successful
@@ -245,7 +239,7 @@ FormatEraseTest(
     a2d.WaitForRepaint()
 
     -- confirmation prompt
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
 
     -- successful
@@ -275,7 +269,7 @@ FormatEraseTest(
   "No selection",
   function(invoke)
     invoke(false)
-    test.Expect(a2dtest.OCRScreen():find("Select the location of the disk"),
+    test.ExpectMatch(a2dtest.OCRScreen(), "Select the location of the disk",
                 "should be prompted for device")
     a2d.DialogCancel()
 end)
@@ -289,7 +283,7 @@ FormatEraseTest(
   function(invoke)
     a2d.SelectPath("/A2.DESKTOP/READ.ME")
     invoke(false)
-    test.Expect(a2dtest.OCRScreen():find("Select the location of the disk"),
+    test.ExpectMatch(a2dtest.OCRScreen(), "Select the location of the disk",
                 "should be prompted for device")
     a2d.DialogCancel()
 end)
@@ -303,7 +297,7 @@ FormatEraseTest(
   function(invoke)
     a2d.SelectPath("/Trash")
     invoke(false)
-    test.Expect(a2dtest.OCRScreen():find("Select the location of the disk"),
+    test.ExpectMatch(a2dtest.OCRScreen(), "Select the location of the disk",
                 "should be prompted for device")
     a2d.DialogCancel()
 end)
@@ -317,7 +311,7 @@ FormatEraseTest(
   function(invoke)
     a2d.SelectAll()
     invoke(true)
-    test.Expect(a2dtest.OCRScreen():find("Select the location of the disk"),
+    test.ExpectMatch(a2dtest.OCRScreen(), "Select the location of the disk",
                 "should be prompted for device")
     a2d.DialogCancel()
 end)
@@ -332,7 +326,7 @@ FormatEraseTest(
   function(invoke)
     a2d.SelectPath("/A2.DESKTOP")
     invoke(true)
-    test.Expect(a2dtest.OCRScreen():find("New volume name:"),
+    test.ExpectMatch(a2dtest.OCRScreen(), "New volume name:",
                 "should be prompted for new name")
 
     -- name prompt
@@ -341,9 +335,7 @@ FormatEraseTest(
     a2d.DialogOK()
 
     -- confirmation
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():upper():find("\"A2.DESKTOP\""),
-                "prompt should name selected volume")
+    a2dtest.WaitForAlert({imatch='"A2.DESKTOP"'})
 
     a2d.DialogCancel()
 end)
@@ -372,31 +364,31 @@ FormatEraseTest(
     invoke(false)
 
     -- device selection
-    test.Expect(not a2dtest.OCRScreen():find("OK"), "OK button should be disabled")
+    test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
     local dialog_x, dialog_y = a2dtest.GetFrontWindowContentRect()
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(dialog_x + 20, dialog_y + 40)
         m.Click()
     end)
-    test.Expect(a2dtest.OCRScreen():find("OK"), "OK button should be enabled")
+    test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(dialog_x + 200, dialog_y + 40)
         m.Click()
     end)
-    test.Expect(not a2dtest.OCRScreen():find("OK"), "OK button should be disabled")
+    test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
     apple2.DownArrowKey()
-    test.Expect(a2dtest.OCRScreen():find("OK"), "OK button should be enabled")
+    test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
     a2d.DialogOK()
 
     -- name
-    test.Expect(a2dtest.OCRScreen():find("Location:"), "device location should be shown")
-    test.Expect(not a2dtest.OCRScreen():find("OK"), "OK button should be disabled")
+    test.ExpectMatch(a2dtest.OCRScreen(), "Location:", "device location should be shown")
+    test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
     apple2.Type("NEW.NAME")
-    test.Expect(a2dtest.OCRScreen():find("OK"), "OK button should be enabled")
+    test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
     a2d.ClearTextField()
-    test.Expect(not a2dtest.OCRScreen():find("OK"), "OK button should be disabled")
+    test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
     apple2.Type("ANOTHER.NAME")
-    test.Expect(a2dtest.OCRScreen():find("OK"), "OK button should be enabled")
+    test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
 
     a2d.DialogCancel()
 end)
@@ -415,12 +407,12 @@ FormatEraseTest(
     invoke(true)
 
     -- name
-    test.Expect(a2dtest.OCRScreen():find("Location:"), "device location should be shown")
-    test.Expect(a2dtest.OCRScreen():find("OK"), "OK button should be enabled")
+    test.ExpectMatch(a2dtest.OCRScreen(), "Location:", "device location should be shown")
+    test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
     a2d.ClearTextField()
-    test.Expect(not a2dtest.OCRScreen():find("OK"), "OK button should be disabled")
+    test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
     apple2.Type("NEW.NAME")
-    test.Expect(a2dtest.OCRScreen():find("OK"), "OK button should be enabled")
+    test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
 
     a2d.DialogCancel()
 end)

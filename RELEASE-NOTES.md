@@ -21,6 +21,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Reduce cursor flickering while menus are drawn.
 * Reduce cursor flickering while list view rows are drawn.
 * Improve appearance of menu items with check marks.
+* Fix file picker behavior with more than 127 files.
 
 ### Launcher
 
@@ -64,11 +65,18 @@ Project Page: https://github.com/a2stuff/a2d
 * Eliminate unnecessary window refreshes after canceled move/delete.
 * Add option to skip checking 5.25" drives on startup.
 * Adjust order of startup operations to make icons appear faster.
+* Fix crash after canceling prompt when moving files on ejected disk.
+* Make retries on "volume not found" errors more consistent.
+* Fix buttons shown in alerts for errors after actions like New Folder, Duplicate, and Make Alias.
+* Reduce disk activity needed after showing file dialog.
+* Handle write protected disk when modifying shortcuts.
+* Fix label/border overlaps in Get Info and Format/Erase dialogs in some locales.
 
 ### Selector
 
 * Fix potential hang after 30 restarts.
 * Reduce cursor flickering when copying programs to RAMCard.
+* Center title of copy progress dialog.
 
 ### Disk Copy
 
@@ -78,6 +86,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Erase tip once copy is complete.
 * Reduce cursor flickering during copy.
 * Fix copying all blocks on volumes with unusual sizes.
+* Fix overlapping labels during copy in some locales.
 
 ### Desk Accessories
 
@@ -88,8 +97,16 @@ Project Page: https://github.com/a2stuff/a2d
 * DOS 3.3 Import: Fix keyboard shortcut handling.
 * Sounds: Time "Silent" menu bar flash using VBL.
 * Screen Savers: improve animation for Flying Toasters, Hexix, Message and Melt.
-* Calculator & Sci.Calc: fix clicking button edges and button spacing.
+* Calculator & Sci.Calc
+  * Fix clicking button edges and button spacing.
+  * Support repeating last operation.
+  * Fix button labels in BG builds.
+* Sci.Calc: Fix ASIN/ACOS for 1/-1.
 * New Screen Saver: Maze
+* Text Preview: Show first 64K of larger files correctly.
+* Control Panels: Handle write protected disk when modifying settings.
+* Control Panel: Fix overlapping button labels in some locales.
+* Map: Fix overlapping labels in some locales.
 
 ### Misc
 

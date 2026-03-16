@@ -191,6 +191,7 @@ numerator:      .word   0       ; (in)
 denominator:    .word   0       ; (in)
 result:         .word   0       ; (out)
 remainder:      .word   0       ; (out)
+        REF_MULDIV_MEMBERS
 .endparams
 
 ;;; ============================================================
@@ -209,6 +210,14 @@ remainder:      .word   0       ; (out)
         sta     get_eof_params::ref_num
         sta     close_params::ref_num
         JSR_TO_MAIN GetFileEof
+
+        ;; > 64K? Treat as 64K
+        ;; TODO: Rework load/display logic to be 24-bit friendly
+        kMaxFileSize = $10000 - $200 ; don't wrap adding buffer size
+        ucmp24  get_eof_params::eof, #kMaxFileSize
+    IF GE
+        copy16  #kMaxFileSize, get_eof_params::eof
+    END_IF
 
         ;; create window
         MGTK_CALL MGTK::OpenWindow, winfo
@@ -570,8 +579,7 @@ end:    rts
 
         offset_ptr := $08
 
-        bit     record_offsets_flag
-    IF NS
+    IF bit record_offsets_flag : NS
         ;; Render the whole file (visible and invisible), and record
         ;; offsets for every Nth line as we go.
         copy16  #0, line_offsets
@@ -590,15 +598,13 @@ end:    rts
         ldx     #kLineOffsetShift
     DO
         lsr16   current_line        ; /= `kLineOffsetDelta`
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT ZERO
 
         copy16  current_line, offset_ptr
         ldx     #kLineOffsetShift
     DO
         asl16   current_line        ; *= `kLineOffsetDelta`
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT ZERO
 
         ;; Use previously recorded offset into file.
         asl16   offset_ptr
@@ -682,16 +688,14 @@ end:    rts
         add16_8 ptr, drawtext_params::textlen
 
         ;; Did the run end due to a tab?
-        lda     tab_flag
-    WHILE NOT ZERO              ; yes, keep going
+    WHILE lda tab_flag : NOT ZERO ; yes, keep going
 
         ;; --------------------------------------------------
         ;; End of line
 
         MGTK_CALL MGTK::UnshieldCursor
 
-        bit     record_offsets_flag
-      IF NS
+      IF bit record_offsets_flag : NS
         ;; Doing a full pass. Determine current file offset.
         sub16   ptr, #default_buffer, cur_offset
         add16   cur_offset, buf_mark, cur_offset
@@ -725,8 +729,7 @@ end:    rts
 
 done:   MGTK_CALL MGTK::SetFont, DEFAULT_FONT
 
-        bit     record_offsets_flag
-    IF NS
+    IF bit record_offsets_flag : NS
         sub16   current_line, #kLinesPerPage - 1, max_visible_line
       IF NEG
         copy16  #0, max_visible_line

@@ -39,20 +39,19 @@ test.Variants(
     a2d.DialogOK()
 
     -- insert source
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the source disk"})
     a2d.DialogOK()
 
     -- insert destination
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the destination disk"})
     a2d.DialogOK()
 
     -- confirmation
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
 
     -- complete
-    a2dtest.WaitForAlert({timeout=10800})
-    test.Expect(a2dtest.OCRScreen():find("The copy was successful"), "copy should succeed")
+    a2dtest.WaitForAlert({timeout=10800, match="The copy was successful"})
     local transfer, read, written = a2dtest.DiskCopyGetBlockCounts()
     local total = 16383
     test.ExpectEquals(read, transfer, "blocks read should match transfer count")
@@ -73,6 +72,6 @@ test.Variants(
     -- cleanup
     a2d.OAShortcut("Q") -- File > Quit
     a2d.WaitForDesktopReady()
-    a2dtest.WaitForAlert() -- duplicate volume
+    a2dtest.WaitForAlert({match="2 volumes with the same name"})
     a2d.DialogOK()
 end)

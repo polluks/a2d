@@ -184,7 +184,7 @@ function a2dtest.GetFrontWindowID()
 end
 
 function a2dtest.GetNextWindowID(window_id)
-  local winfo = mgtk.GetWinPtr(window_id) + bank_offset
+  local winfo = mgtk.GetWinPtr(assert(window_id)) + bank_offset
   local next = ram_u16(winfo + 56)
   if next == 0 then
     return 0
@@ -197,7 +197,7 @@ function a2dtest.GetFrontWindowDragCoords()
 end
 
 function a2dtest.GetWindowDragCoords(window_id)
-  local x, y, w, h = a2dtest.GetWindowContentRect(window_id)
+  local x, y, w, h = a2dtest.GetWindowContentRect(assert(window_id))
   return x + w / 2, y - 5
 end
 
@@ -229,7 +229,7 @@ function a2dtest.GetFrontWindowTitle()
   return a2dtest.GetWindowTitle(a2dtest.GetFrontWindowID())
 end
 function a2dtest.GetWindowTitle(window_id)
-  return mgtk.GetWindowName(window_id)
+  return mgtk.GetWindowName(assert(window_id))
 end
 
 -- returns x,y,width,height
@@ -237,7 +237,7 @@ function a2dtest.GetFrontWindowContentRect()
   return a2dtest.GetWindowContentRect(a2dtest.GetFrontWindowID())
 end
 function a2dtest.GetWindowContentRect(window_id)
-  local winfo = bank_offset + mgtk.GetWinPtr(window_id)
+  local winfo = bank_offset + mgtk.GetWinPtr(assert(window_id))
   local port = winfo + 20
   local vx,vy = ram_s16(port + 0), ram_s16(port + 2)
   local x1,y1 = ram_s16(port + 8), ram_s16(port + 10)
@@ -285,7 +285,7 @@ end
 
 -- This scans for the left side of the alert bitmap at expected screen address
 function a2dtest.IsAlertShowing()
-  local bytes = {0x7F,0x7F,0x7F,0x3F,0x00,0x00,0x3F,0x7F,0x0F,0x3F,0x7F,0x0F,0x3F,0x7F,0x0F,0x3F,0x7F,0x0F,0x3F,0x4F,0x0F,0x3F,0x4F,0x0F,0x3F,0x4F,0x0F,0x3F,0x7F,0x0F,0x3F,0x7F,0x0F,0x3F,0x7F,0x0F,0x3F,0x7F,0x0F,0x3F,0x7F,0x0F,0x3F,0x7F,0x0F,0x3F,0x7F,0x0F,0x3F,0x7F,0x0F,0x3F,0x7F,0x0F,0x3F,0x1F,0x00,0x3F,0x7F,0x01,0x3F,0x7F,0x01,0x3F,0x07,0x70,0x3F,0x7F,0x01,0x3F,0x7F,0x01,0x3F,0x00,0x00,0x7F,0x7F,0x7F}
+  local bytes = {0x7F,0x7F,0x7F,0x0F,0x00,0x00,0x6F,0x7F,0x03,0x6F,0x7F,0x03,0x6F,0x7F,0x03,0x6F,0x7F,0x03,0x6F,0x73,0x03,0x6F,0x73,0x03,0x6F,0x73,0x43,0x6F,0x7F,0x43,0x6F,0x7F,0x43,0x6F,0x7F,0x43,0x6F,0x7F,0x43,0x6F,0x7F,0x43,0x6F,0x7F,0x43,0x6F,0x7F,0x43,0x6F,0x7F,0x43,0x6F,0x7F,0x43,0x6F,0x07,0x40,0x6F,0x3F,0x40,0x6F,0x3F,0x60,0x6F,0x01,0x7C,0x6F,0x3F,0x00,0x6F,0x3F,0x00,0x0F,0x00,0x00,0x7F,0x7F,0x7F}
   local index = 1
   for row = 75,100 do
     for col = 12,14 do
@@ -305,6 +305,14 @@ end
 function a2dtest.WaitForAlert(options)
   util.WaitFor("alert", a2dtest.IsAlertShowing, options)
   emu.wait(0.5) -- let the alert finish drawing
+  if options and (options.match or options.imatch) then
+    local ocr = a2dtest.OCRScreen({x1=130, y1=75, x2=470, y2=100})
+    if options.imatch then
+      ocr = ocr:upper()
+      options.match = options.imatch:upper()
+    end
+    test.ExpectMatch(ocr, options.match, "alert should match " .. options.match, {snap=true}, 1)
+  end
 end
 
 --------------------------------------------------
@@ -370,6 +378,9 @@ end
   Call with {invert=true} to look for white-on-black text e.g. a
   selected menu item, list box item, flashing button, etc.
 
+  Callback is invoked with run, x, y. If callback explicitly returns
+  false then the iteration stops.
+
   NOTE: The function is relatively slow, taking 1/4 second on an
   example machine.
 ]]
@@ -386,8 +397,13 @@ function a2dtest.OCRIterate(callback, options)
   local font_width = ocr_table.width
   local mask = (1 << font_height) - 1
 
+  if options.x1 == nil then options.x1 = 0 end
+  if options.y1 == nil then options.y1 = 0 end
+  if options.x2 == nil then options.x2 = apple2.SCREEN_WIDTH-1 end
+  if options.y2 == nil then options.y2 = apple2.SCREEN_HEIGHT-1 end
+
   -- Walk over entire screen
-  for y = 0, apple2.SCREEN_HEIGHT-font_height-1 do
+  for y = options.y1, options.y2-font_height do
     -- Process a stripe `font_height` pixels tall, convert to numbers
     local numbers = {}
     for i = 0, apple2.SCREEN_WIDTH-1 do
@@ -406,11 +422,12 @@ function a2dtest.OCRIterate(callback, options)
     end
 
     -- Iterate over stripe
-    local x, run, run_x = 0, "", 0
-    while x < apple2.SCREEN_WIDTH-1 do
+    local x = options.x1
+    local run, run_x = "", x
+    while x < options.x2 do
       -- Try each character width, longest to shortest
       for w = font_width, 1, -1 do
-        if x + w >= apple2.SCREEN_WIDTH then
+        if x + w > options.x2 then
           goto try_shorter
         end
         -- Compute hash keys (normal and inverted)
@@ -424,7 +441,7 @@ function a2dtest.OCRIterate(callback, options)
         end
         -- Match?
         local char = ocr_table[key1] or ocr_table[key2]
-        if char then
+        if char and (run ~= "" or char ~= " ") then
           run = run .. char
           x = x + w
           goto got_a_hit
@@ -433,8 +450,9 @@ function a2dtest.OCRIterate(callback, options)
       end
 
       -- miss; if end of run, emit
+      run = run:gsub(" +$", "")
       if run ~= "" then
-        callback(run, run_x, y)
+        if callback(run, run_x, y) == false then return end
         run = ""
       end
       x = x + 1
@@ -443,8 +461,9 @@ function a2dtest.OCRIterate(callback, options)
       ::got_a_hit::
     end
 
+    run = run:gsub(" +$", "")
     if run ~= "" then
-      callback(run, run_x, y)
+      if callback(run, run_x, y) == false then return end
     end
   end
 end
@@ -469,6 +488,8 @@ function a2dtest.OCRScreen(options)
   end
 
   a2dtest.OCRIterate(function(run, x, y)
+      --print(string.format("run: %q, %d, %d", run, x, y))
+
       --[[
         NOTE: With current system font, 0 and O are not homoglyphs, so
         this is not necessary.
@@ -483,12 +504,26 @@ function a2dtest.OCRScreen(options)
         last_y = y
       end
 
+      if line ~= "" then
+        line = line .. "  "
+      end
       line = line .. run
   end, options)
   finish_line()
 
-
   return str
+end
+
+function a2dtest.OCRFrontWindowContent(options)
+  if options == nil then options = {} end
+
+  local x, y, w, h = a2dtest.GetFrontWindowContentRect()
+  options.x1 = x
+  options.x2 = x + w
+  options.y1 = y
+  options.y2 = y + h
+
+  return a2dtest.OCRScreen(options)
 end
 
 --------------------------------------------------
@@ -504,6 +539,42 @@ function a2dtest.DiskCopyGetBlockCounts()
   local read = extract("Blocks Read: (%d+[.,]?%d*)")
   local written = extract("Blocks Written: (%d+[.,]?%d*)")
   return transfer, read, written
+end
+
+--------------------------------------------------
+
+function a2dtest.GetFilesRemainingCount()
+  local count = nil
+  local ocr = a2dtest.OCRScreen({x1=280, y1=25, x2=470, y2=45})
+  local _, _, match = ocr:find("Files remaining: ([0-9,]+)")
+  if match then
+    count = tonumber((match:gsub(",", "")))
+  end
+  return count
+end
+
+function a2dtest.VerifyFilesRemainingCountdown(frames, message)
+  local last = nil
+
+  for i = 1, frames/2 do
+    local count = a2dtest.GetFilesRemainingCount()
+    if count then
+      test.Expect(not last or count <= last,
+                  string.format("%s - should only count down, saw %q -> %q", message, last, count),
+                  {}, 1)
+
+      last = count
+    elseif last then
+      -- erased, so done early
+      break
+    end
+
+    emu.wait(2/60)
+  end
+
+  test.ExpectEquals(last, 0,
+              string.format("%s - progress should bottom out at 0", message),
+              {}, 1)
 end
 
 --------------------------------------------------

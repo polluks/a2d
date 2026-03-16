@@ -86,8 +86,7 @@ kScreenHeight   = 192
         lda     LOWSCR
         sta     SET80STORE
 
-        bit     preserve_zp_flag ; save ZP?
-    IF NS
+    IF bit preserve_zp_flag : NS ; save ZP?
         ;; Save $80...$FF, swap in what MGTK needs at $F4...$FF
         COPY_BYTES $80, $80, zp_saved
         COPY_BYTES $C, active_saved, active_port
@@ -132,15 +131,13 @@ kScreenHeight   = 192
 
         ldy     param_lengths+1,x ; Check "hide cursor" flag
     IF NS
-        bit     desktop_initialized_flag
-      IF NS
+      IF bit desktop_initialized_flag : NS
         txa                     ; if high bit was set, stash
         pha                     ; registers and params_addr and then
         tya                     ; hide cursor
         pha
 
-        bit     cursor_shield_count ; unless globally overridden!
-       IF NC
+       IF bit cursor_shield_count : NC; unless globally overridden!
         lda     params_addr
         pha
         lda     params_addr+1
@@ -170,8 +167,7 @@ kScreenHeight   = 192
         lda     (params_addr),y
         store_addr := *+1
         sta     SELF_MODIFIED_BYTE,y
-        dey
-      WHILE POS
+      WHILE dey : POS
     END_IF
 
         jump_addr := *+1
@@ -179,24 +175,21 @@ kScreenHeight   = 192
 
         ;; Exposed for routines to call directly
 cleanup:
-        bit     desktop_initialized_flag
-    IF NS
-        bit     autohide_cursor_flag
-      IF NS
+
+    IF bit desktop_initialized_flag : NS
+      IF bit autohide_cursor_flag : NS
         inc     autohide_cursor_flag ; clear flag
         jsr     ShowCursorImpl
       END_IF
     END_IF
 
-        bit     preserve_zp_flag
-    IF NS
+    IF bit preserve_zp_flag : NS
         jsr     ApplyPortToActivePort
         COPY_BYTES $C, active_port, active_saved
         COPY_BYTES $80, zp_saved, $80
     END_IF
 
         ;; default is to return with A=0
-exit_with_0:
         lda     #0
 
 rts1:   rts
@@ -215,7 +208,7 @@ exit_with_a:
         ldx     stack_ptr_stash
         txs
         ldy     #$FF
-rts2:   rts
+        rts
 
         ;; Macro for exit_with_a
 
@@ -3790,8 +3783,7 @@ poly_maxima_xh_table:
         lda     standard_port,x
         sta     $8A,x
         sta     current_grafport,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         ldax    #saved_port
         jsr     assign_and_prepare_port
@@ -3844,8 +3836,7 @@ table:  .byte   <(TXTCLR / 2), <(MIXCLR / 2), <(LOWSCR / 2), <(LORES / 2)
 ;;; SetPort
 
 .proc SetPortImpl
-        ldax    params_addr
-        FALL_THROUGH_TO assign_and_prepare_port
+        FALL_THROUGH_TO assign_and_prepare_port, AX=params_addr
 .endproc ; SetPortImpl
 
         ;; Call with port address in (X,A)
@@ -3868,8 +3859,7 @@ prepare_port:
 
 .proc GetPortImpl
         jsr     ApplyPortToActivePort
-        ldax    active_port
-        FALL_THROUGH_TO store_xa_at_params
+        FALL_THROUGH_TO store_xa_at_params, AX=active_port
 .endproc ; GetPortImpl
 
         ;; Store result (X,A) at params
@@ -3962,8 +3952,7 @@ unstash:
     DO
         lda     version,y
         sta     (params_addr),y
-        dey
-    WHILE POS
+    WHILE dey : POS
         rts
 
 .params version
@@ -4209,8 +4198,8 @@ system_cursor_table_hi: .byte   >pointer_cursor, >ibeam_cursor, >watch_cursor
 
 finish:
         plp
+        rts
 .endproc ; SetCursorImpl
-srts:   rts
 
 ;;; ============================================================
 
@@ -4338,9 +4327,7 @@ set_divmod:
         active_cursor_mask := * + 1
         lda     SELF_MODIFIED,y
         sta     cursor_mask,x
-        dey
-        dex
-      WHILE POS
+      WHILE dey : dex : POS
         sty     drawbits_index
         lda     #0              ; third byte starts off empty
         sta     cursor_bits+2
@@ -4361,8 +4348,7 @@ set_divmod:
 
         cursor_shift_aux_addr := * + 1
         lda     SELF_MODIFIED,y
-        dex
-       WHILE NOT ZERO
+       WHILE dex : NOT ZERO
         sta     cursor_bits
       END_IF
 
@@ -4393,8 +4379,7 @@ set_divmod:
         jsr     do_byte
 
         ldy     cursor_y2
-        dey
-    WHILE Y <> cursor_y1
+    WHILE dey : Y <> cursor_y1
         sta     LOWSCR
         rts
 
@@ -4446,8 +4431,7 @@ active_cursor_mask   := PreDrawCursor::active_cursor_mask
         lda     cursor_draw_data,x
         sta     cursor_bytes,x  ; for us to use
         sta     cursor_restore_data,x ; for next `RestoreCursorBackground` call
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         ;; SMC `RestoreCursorBackground` to match us
         copy8   switch_sta2, restore_switch_sta2
@@ -4486,8 +4470,7 @@ active_cursor_mask   := PreDrawCursor::active_cursor_mask
         jsr     do_byte
 
         ldy     cursor_y2
-        dey
-    WHILE Y <> cursor_y1
+    WHILE dey : Y <> cursor_y1
         sta     LOWSCR
         rts
 
@@ -4552,8 +4535,7 @@ finish_switch_dey := FinishDrawCursor::switch_dey
         jsr     do_byte
 
         ldy     cursor_y2
-        dey
-    WHILE Y <> cursor_y1
+    WHILE dey : Y <> cursor_y1
         sta     LOWSCR
 ret:    rts
 
@@ -4585,8 +4567,7 @@ restore_switch_dey := RestoreCursorBackground::switch_dey
         beq     :+
         dec     cursor_count    ; TODO: Is this necessary?
 :
-        bit     cursor_flag
-    IF NC
+    IF bit cursor_flag : NC
         jsr     DrawCursor
     END_IF
 
@@ -4906,8 +4887,7 @@ savesize        .word
         bit     ROMIN2          ; Bank ROM
 
         ldax    #vbl_iie_proc   ; default
-        bit     subid
-    IF VC
+    IF bit subid : VC
         ;; Per Technical Note: Apple IIc #1: Mouse Differences on IIe and IIc
         ;; https://web.archive.org/web/2007/http://web.pdx.edu/~heiss/technotes/aiic/tn.aiic.1.htm
         inc     mouse_scale_x
@@ -5077,10 +5057,8 @@ is_pascal:
         ldy     #SERVEMOUSE
         jsr     CallMouse
 
-        bit     use_interrupts
-    IF NS
-        bit     op_sys
-      IF NS
+    IF bit use_interrupts : NS
+      IF bit op_sys : NS
         copy8   alloc_interrupt_params::int_num, dealloc_interrupt_params::int_num
         MLI_CALL DEALLOC_INTERRUPT, dealloc_interrupt_params
       END_IF
@@ -5207,8 +5185,7 @@ stack_ptr_save:
         asl     preserve_zp_flag
         copy16  params_addr_save, params_addr
 
-        ldax    active_port
-        FALL_THROUGH_TO SetAndPreparePort
+        FALL_THROUGH_TO SetAndPreparePort, AX=active_port
 .endproc ; RestoreParamsAndStack
 
 .proc SetAndPreparePort
@@ -5218,8 +5195,7 @@ stack_ptr_save:
         ldy     #.sizeof(MGTK::GrafPort)-1
     DO
         copy8   ($82),y, current_grafport,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         jmp     prepare_port
 .endproc ; SetAndPreparePort
@@ -5278,8 +5254,7 @@ hook         .addr
 mouse_state  .word
         END_PARAM_BLOCK
 
-        bit     desktop_initialized_flag
-    IF NC
+    IF bit desktop_initialized_flag : NC
         copy16  params::hook, mouse_hook
 
         ldax    #mouse_state
@@ -5403,8 +5378,7 @@ error_return:
         .assert MGTK::EventKind::no_event = 0, error, "MGTK::EventKind::no_event is not zero"
         tay
 
-        bit     mouse_status
-    IF NS
+    IF bit mouse_status : NS
         lda     #MGTK::EventKind::drag
     END_IF
 
@@ -5414,8 +5388,7 @@ error_return:
     DO
         lda     cursor_pos-1,y
         sta     (params_addr),y
-        iny
-    WHILE Y <> #MGTK::event_size
+    WHILE iny : Y <> #MGTK::event_size
         rts
 .endproc ; ReturnMoveEvent
 
@@ -5511,9 +5484,7 @@ put_key_event:
         ldy     #0
     DO
         copy8   input,y, eventbuf,x
-        inx
-        iny
-    WHILE Y <> #MGTK::short_event_size
+    WHILE inx : iny : Y <> #MGTK::short_event_size
 
 end:    jmp     CallAfterEventsHook
 .endproc ; CheckEventsImpl
@@ -5819,14 +5790,12 @@ name       .addr
         ldy     #.sizeof(MGTK::MenuBarItem)-1
     DO
         copy8   (menu_ptr),y, curmenu,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ldy     #.sizeof(MGTK::MenuItem)-1
     DO
         copy8   (curmenu::menu_items),y, curmenuinfo-1,y
-        dey
-    WHILE NOT ZERO
+    WHILE dey : NOT ZERO
 
         copy8   (curmenu::menu_items),y, menu_item_count
         rts
@@ -5837,14 +5806,12 @@ name       .addr
         ldy     #.sizeof(MGTK::MenuBarItem)-1
     DO
         copy8   curmenu,y, (menu_ptr),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ldy     #.sizeof(MGTK::MenuItem)-1
     DO
         copy8   curmenuinfo-1,y, (curmenu::menu_items),y
-        dey
-    WHILE NOT ZERO
+    WHILE dey : NOT ZERO
 
         rts
 .endproc ; PutMenu
@@ -5869,8 +5836,7 @@ name       .addr
         ldy     #.sizeof(MGTK::MenuItem)-1
     DO
         copy8   (menu_item_ptr),y, curmenuitem,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         rts
 .endproc ; GetMenuItem
@@ -5879,8 +5845,7 @@ name       .addr
         ldy     #.sizeof(MGTK::MenuItem)-1
     DO
         copy8   curmenuitem,y, (menu_item_ptr),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         rts
 .endproc ; PutMenuItem
@@ -5895,8 +5860,7 @@ set_x:  stax    current_penloc_x
 .endproc ; SetPenloc
 
 .proc SetFillModeXOR
-        lda     #MGTK::penXOR
-        FALL_THROUGH_TO SetFillMode
+        FALL_THROUGH_TO SetFillMode, A=#MGTK::penXOR
 .endproc ; SetFillModeXOR
 
         ;; Set fill mode to A
@@ -6026,8 +5990,7 @@ got_shortcut_adjust:
        END_IF
 
 filler: ldx     menu_item_index
-        inx
-      WHILE X <> menu_item_count
+      WHILE inx : X <> menu_item_count
 
         add16_8 max_width, offset_text
 
@@ -6079,8 +6042,7 @@ filler: ldx     menu_item_index
         jsr     AdjustXPos
 
         ldx     menu_index
-        inx
-    WHILE X <> menu_count
+    WHILE inx : X <> menu_count
 
         jsr     ShowCursorAndRestoreParams
         sec
@@ -6146,8 +6108,7 @@ filler: ldx     menu_item_index
 
 
 .proc FindMenuById
-        lda     #find_mode_by_id
-        FALL_THROUGH_TO FindMenu
+        FALL_THROUGH_TO FindMenu, A=#find_mode_by_id
 .endproc ; FindMenuById
 
 .proc FindMenu
@@ -6186,8 +6147,7 @@ by_shortcut:
         bne     found
 
 next:   ldx     menu_index
-        inx
-    WHILE X <> menu_count
+    WHILE inx : X <> menu_count
         RETURN  A=#0
 .endproc ; FindMenu
 
@@ -6202,14 +6162,12 @@ next:   ldx     menu_index
         bvs     by_shortcut
         bmi     by_coord
 
-        cpx     find_menu_item_id
-        bne     next
+        CONTINUE_IF X <> find_menu_item_id
         rts
 
 by_coord:
         lda     menu_item_y_table,x
-        cmp     cursor_pos::ycoord
-        bcc     next
+        CONTINUE_IF A < cursor_pos::ycoord
         rts
 
 by_shortcut:
@@ -6229,7 +6187,6 @@ by_shortcut:
        END_IF
       END_IF
 
-next:
     WHILE X <>menu_item_count
 
         ldx     #0
@@ -6501,8 +6458,7 @@ event_loop:
         jsr     HandleMenuKey
 
         ;; Done?
-        bit     movement_cancel
-      IF NS
+      IF bit movement_cancel : NS
         ;; Menu selection or cancel
         jsr     close_menu
         jsr     RestoreParamsAndStack
@@ -6558,8 +6514,7 @@ event_loop:
         lda     cursor_pos,x
         cmp     last_cursor_pos,x
         bne     :+
-        dex
-    WHILE POS
+    WHILE dex : POS
         jmp     event_loop      ; no move, ignore
 :
         ;; Moved - mouse pos dominates
@@ -6956,8 +6911,7 @@ row:    ldy     savebehind_mapwidth
     DO
         lda     (savebehind_buf_addr),y
         sta     (savebehind_vid_addr),y
-        dey
-    WHILE POS
+    WHILE dey : POS
         bmi     SavebehindNextLine ; always
 .endproc ; RestoreSavebehind
 
@@ -8582,8 +8536,7 @@ changed:
     DO
         lda     current_winport - MGTK::Winfo::port,y
         sta     (window),y
-        iny
-    WHILE Y <> #MGTK::Winfo::port + .sizeof(MGTK::MapInfo)
+    WHILE iny : Y <> #MGTK::Winfo::port + .sizeof(MGTK::MapInfo)
         jsr     HideCursorImpl
 
         lda     current_winfo::id
@@ -9431,8 +9384,7 @@ got_ctl:lda     params::which_ctl
 
         ;; Stash initial position, to detect no-op
         ldx     #0
-        bit     which_control
-    IF NS
+    IF bit which_control : NS
         ldx     #2
     END_IF
         lda     winrect,x
@@ -9516,8 +9468,7 @@ drag_done:
 
         ;; Did position change?
         ldx     #0
-        bit     which_control
-    IF NS
+    IF bit which_control : NS
         ldx     #2
     END_IF
         lda     winrect,x
@@ -9615,8 +9566,7 @@ ctl_bound1:
 .proc GetThumbVals
         ldy     #MGTK::Winfo::hthumbmax
 
-        bit     which_control
-    IF NS
+    IF bit which_control : NS
         ldy     #MGTK::Winfo::vthumbmax
     END_IF
 
@@ -9639,8 +9589,7 @@ ctl_bound1:
         ldx     #0
         lda     #kXThumbWidth
 
-        bit     which_control
-   IF NS
+   IF bit which_control : NS
         ldx     #2
         lda     #kYThumbHeight
    END_IF
@@ -9700,8 +9649,7 @@ check_win:
     END_IF
 
         ldy     #MGTK::Winfo::hthumbpos
-        bit     which_control
-    IF NS
+    IF bit which_control : NS
         ldy     #MGTK::Winfo::vthumbpos
     END_IF
 
@@ -10070,8 +10018,7 @@ beeploop:
 .endproc ; PlayTone
 
 .proc KbdMouseSyncCursor
-        bit     mouse_status
-    IF NS
+    IF bit mouse_status : NS
         lda     #kKeyboardMouseStateInactive
         sta     kbd_mouse_state
         jmp     SetMousePosFromKbdMouse
@@ -10905,9 +10852,7 @@ finish:
     DO
         add16   left,x, x_offset,x, left,x
         add16   right,x, x_offset,x, right,x
-        dex
-        dex
-    WHILE POS
+    WHILE dex : dex : POS
 
         ;; Keep in sync with algorithms in `PreDrawCursor`
         ;; TODO: Factor out common code.

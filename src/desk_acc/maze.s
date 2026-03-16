@@ -52,7 +52,6 @@ checkerboard_pattern:
 carvepen:       .byte MGTK::penOR
 wallpen:        .byte MGTK::penBIC
 pencopy:        .byte MGTK::pencopy
-notpencopy:     .byte MGTK::notpencopy
 
 ;;; ============================================================
 ;;; DA Init
@@ -186,7 +185,7 @@ step:
       IF A = #0
         inx
         jsr     IsCellFree
-        CONTINUE_IF CS
+        REDO_IF CS
         jsr     VisitCell
         jsr     CarveLeft
         jmp     yield
@@ -196,7 +195,7 @@ step:
       IF A = #1
         iny
         jsr     IsCellFree
-        CONTINUE_IF CS
+        REDO_IF CS
         jsr     VisitCell
         jsr     CarveUp
         jmp     yield
@@ -206,7 +205,7 @@ step:
       IF A = #2
         dex
         jsr     IsCellFree
-        CONTINUE_IF CS
+        REDO_IF CS
         jsr     VisitCell
         jsr     CarveRight
         jmp     yield
@@ -216,7 +215,7 @@ step:
       IF A = #3
         dey
         jsr     IsCellFree
-        CONTINUE_IF CS
+        REDO_IF CS
         jsr     VisitCell
         jsr     CarveDown
         jmp     yield
@@ -233,8 +232,6 @@ yield:
 
 row:    .byte   0
 col:    .byte   0
-
-count:  .byte   0
 .endproc ; DoMaze
 StepMaze := DoMaze::step
 

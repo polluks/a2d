@@ -1,5 +1,27 @@
 a2d.ConfigureRepaintTime(0.25)
 
+-- Does an OCR pass on the calculator display; works for both versions.
+function OCRDisplay()
+  local dw, dh = 124, 20
+  local x, y, w, h = a2dtest.GetFrontWindowContentRect()
+  local ocr = a2dtest.OCRScreen({
+      x1 = x + w - dw, -- Assumes display is top-right
+      x2 = x + w,
+      y1 = y + 0,
+      y2 = y + dh
+  })
+  return ocr:gsub("%s", "")
+end
+
+function ExpectExpression(expr, result)
+  apple2.Type(expr)
+  a2d.WaitForRepaint()
+  local ocr = OCRDisplay()
+  test.ExpectEquals(ocr, result, string.format("result of %q", expr), {}, 1)
+  apple2.EscapeKey()
+end
+
+
 --[[
   Run Apple Menu > Calculator. Move the Calculator window. Verify that
   the mouse cursor is drawn correctly.
@@ -103,7 +125,7 @@ test.Step(
     end)
     emu.wait(5) -- slow repaint
 
-    test.Expect(a2dtest.OCRScreen():find(" 123%.456 "), "result should be 123.456")
+    test.ExpectMatch(OCRDisplay(), "123%.456", "result should be 123.456")
     a2d.CloseWindow()
 end)
 
@@ -127,20 +149,11 @@ test.Variants(
     a2d.OpenPath(path)
     a2d.WaitForRepaint()
 
-    apple2.Type("1-2=")
-    a2d.WaitForRepaint()
-    apple2.EscapeKey()
+    ExpectExpression("1-2=", "-1")
     -- should not hang
 
-    apple2.Type("1/2=")
-    a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find(" 0%.5 "), "display should be 0.5")
-    apple2.EscapeKey()
-
-    apple2.Type("0-.5=")
-    a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find(" %-0%.5 "), "display should be -0.5")
-    apple2.EscapeKey()
+    ExpectExpression("1/2=", "0.5")
+    ExpectExpression("0-.5=", "-0.5")
 
     a2d.CloseWindow()
 end)
@@ -166,9 +179,7 @@ test.Variants(
     a2d.OpenPath(path)
     a2d.WaitForRepaint()
 
-    apple2.Type("12.34")
-    a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find(" 12%.34 "), "display should be 12.34 (period)")
+    ExpectExpression("12.34", "12.34")
     apple2.EscapeKey()
 
     a2d.CloseWindow()
@@ -189,15 +200,8 @@ test.Variants(
     a2d.OpenPath(path)
     a2d.WaitForRepaint()
 
-    apple2.Type("12,34")
-    a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find(" 12,34 "), "display should be 12,34 (comma)")
-    apple2.EscapeKey()
-
-    apple2.Type("12.34")
-    a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find(" 12,34 "), "display should be 12,34 (comma)")
-    apple2.EscapeKey()
+    ExpectExpression("12,34", "12,34")
+    ExpectExpression("12.34", "12,34")
 
     a2d.CloseWindow()
 
@@ -226,12 +230,27 @@ end)
 
   * Enter '8' '9' 'TAN' 'ATAN'. Verify that the result is
     approximately 89.
+
+  * Verify asin(1) = 90
+  * Verify asin(-1) = -90
+  * Verify acos(1) is 0
+  * Verify acos(-1) is 180
+
 ]]
 test.Step(
   "Sci.Calc - Trig functions",
   function()
     a2d.OpenPath("/A2.DESKTOP/EXTRAS/SCI.CALC")
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
+
+    -- Pattern - '.' and '-' do not need escaping
+    function ExpectMatch(pattern)
+      local p2 = "^" .. pattern:gsub("%.", "%%."):gsub("%-", "%%-") .. "$"
+      a2d.WaitForRepaint()
+      local ocr = OCRDisplay()
+      test.ExpectMatch(ocr, p2, "result", {}, 1)
+      apple2.EscapeKey()
+    end
 
     function Click(cx, cy)
       a2d.InMouseKeysMode(function(m)
@@ -248,45 +267,80 @@ test.Step(
     function ATan() Click(65, 40) end
     function Neg() Click(30, 90) end
 
+    -- Trig and infix operators
+
     apple2.Type("1+2") Sin() apple2.Type("=")
-    a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find(" 1%.034%d+"), "result should be 1.034...")
-    apple2.EscapeKey()
+    ExpectMatch("1.034%d+")
 
     apple2.Type("1") Sin() apple2.Type("+2=")
-    a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find(" 2%.017%d+ "), "result should be 2.017...")
-    apple2.EscapeKey()
+    ExpectMatch("2.017%d+")
+
+    -- Trig basics
 
     apple2.Type("45") Sin()
-    a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find(" 0%.707%d+ "), "result should be 0.707...")
-    apple2.EscapeKey()
+    ExpectMatch("0.707%d+")
 
     apple2.Type("45") Neg() Sin()
-    a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find(" %-0%.707%d+ "), "result should be -0.707...")
-    apple2.EscapeKey()
+    ExpectMatch("-0.707%d+")
 
     apple2.Type("180") Cos()
-    a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find(" %-1 "), "result should be -1")
-    apple2.EscapeKey()
+    ExpectMatch("-1")
 
     apple2.Type("45") Sin() ASin()
-    a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find(" 45%.?%d* "), "result should be approximately 45")
-    apple2.EscapeKey()
+    ExpectMatch("45.?%d*")
 
     apple2.Type("45") Cos() ACos()
-    a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find(" 45%.?%d* "), "result should be approximately 45")
-    apple2.EscapeKey()
+    ExpectMatch("45.?%d*")
 
     apple2.Type("89") Tan() ATan()
+    ExpectMatch("89.?%d*")
+
+    -- Discontinuities
+
+    apple2.Type("1") ASin()
+    ExpectMatch("90")
+
+    apple2.Type("1") Neg() ASin()
+    ExpectMatch("-90")
+
+    apple2.Type("1") ACos()
+    ExpectMatch("0")
+
+    apple2.Type("1") Neg() ACos()
+    ExpectMatch("180")
+
+    a2d.CloseWindow()
+end)
+
+--[[
+  Exercise repeated ops, e.g. "1 + 2 = = ="
+]]
+test.Variants(
+  {
+    {"Calculator - repeated operations", "/A2.DESKTOP/APPLE.MENU/CALCULATOR"},
+    {"Sci.Calc - repeated operations", "/A2.DESKTOP/EXTRAS/SCI.CALC"},
+  },
+  function(idx, name, path)
+    a2d.OpenPath(path)
     a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find(" 89%.?%d* "), "result should be approximately 89")
-    apple2.EscapeKey()
+
+    ExpectExpression("2+3=", "5")
+    ExpectExpression("2+3==", "8")
+    ExpectExpression("2+3===", "11")
+
+    ExpectExpression("2*3=", "6")
+    ExpectExpression("2*3==", "18")
+    ExpectExpression("2*3===", "54")
+
+    ExpectExpression("64", "64")
+    ExpectExpression("64/", "64")
+    ExpectExpression("64/2", "2")
+    ExpectExpression("64/2=", "32")
+    ExpectExpression("64/2==", "16")
+    ExpectExpression("64/2==+", "16")
+    ExpectExpression("64/2==+1", "1")
+    ExpectExpression("64/2==+1=", "17")
+    ExpectExpression("64/2==+1==", "18")
 
     a2d.CloseWindow()
 end)

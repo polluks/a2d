@@ -82,7 +82,6 @@ port:           .addr   grafport
 
 grafport:       .tag    MGTK::GrafPort
 
-pencopy:        .byte   MGTK::pencopy
 notpencopy:     .byte   MGTK::notpencopy
 penXOR:         .byte   MGTK::penXOR
 
@@ -180,9 +179,7 @@ object_deltas:
         and     #31
         sta     tmp             ; lo
         sub16   tmp, #16, object_deltas,x
-        dex
-        dex
-    WHILE POS
+    WHILE dex : dex : POS
 
         MGTK_CALL MGTK::OpenWindow, winfo
         jsr     DrawWindow
@@ -258,16 +255,17 @@ object_deltas:
 .proc HandleDrag
         copy8   #kDAWindowId, dragwindow_params::window_id
         MGTK_CALL MGTK::DragWindow, dragwindow_params
-common: lda     dragwindow_params::moved
-        bpl     finish
-
+common:
+    IF lda dragwindow_params::moved : NS
         ;; Draw DeskTop's windows and icons
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
 
         ;; Draw DA's window
         jsr     DrawWindow
+    END_IF
 
-finish: jmp     InputLoop
+finish:
+        jmp     InputLoop
 .endproc ; HandleDrag
 
 ;;; ============================================================
@@ -329,16 +327,14 @@ finish: jmp     InputLoop
         ldy     #.sizeof(MGTK::Point)-1
       DO
         copy8   (pos_ptr),y, object_params::viewloc,y
-        dey
-      WHILE POS
+      WHILE dey : POS
         MGTK_CALL MGTK::PaintBits, object_params
 
         add16_8 pos_ptr, #.sizeof(MGTK::Point)
 
         pla
         tax
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         rts
 .endproc ; XDrawObjects
@@ -371,8 +367,7 @@ finish: jmp     InputLoop
       DO
         lda     (pos_ptr),y
         pha
-        iny
-      WHILE Y <> #4
+      WHILE iny : Y <> #4
 
         ;; --------------------------------------------------
         ;; Update X coordinate and maybe delta
@@ -434,8 +429,7 @@ finish: jmp     InputLoop
         ldy     #.sizeof(MGTK::Point)-1
       DO
         copy8   (pos_ptr),y, object_params::viewloc,y
-        dey
-      WHILE POS
+      WHILE dey : POS
         jsr     _Paint
 
         ;; Old coords
@@ -443,8 +437,7 @@ finish: jmp     InputLoop
       DO
         pla
         sta     object_params::viewloc,y
-        dey
-      WHILE POS
+      WHILE dey : POS
         jsr     _Paint
 
         ;; --------------------------------------------------
@@ -455,8 +448,7 @@ finish: jmp     InputLoop
 
         pla
         tax
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         rts
 

@@ -92,14 +92,53 @@ xcoord  .word
 
 * **Do** use `IF` / `ELSE_IF` / `ELSE` / `END_IF` macros to avoid throw-away local labels.
 
-* **Do** use `DO` / `CONTINUE_IF` / `BREAK_IF` / `WHILE` / `FOREVER` macros to avoid throw-away local labels.
+```asm
+    IF A = #kSomeConst
+        ...
+    ELSE_IF A = #kOtherConst
+        ...
+    ELSE
+        ...
+    END_IF
+
+    IF bit flag : NS
+        ...
+    END_IF
+```
+
+* **Do** use `DO` / `REDO_IF` / `CONTINUE_IF` / `BREAK_IF` / `WHILE` / `FOREVER` / `DONE` macros to avoid throw-away local labels.
+
+```asm
+        ldx      #0
+    DO
+        ...
+        REDO_IF CS
+        ...
+        CONTINUE_IF bit flags : VS
+        ...
+        BREAK_IF A <> #123
+        ...
+    WHILE inx : X < #kCount
+
+    DO
+        ...
+        BREAK_IF NS
+        ...
+        MLI_CALL OPEN, open_params
+      IF CS
+        jsr    ShowRetryCancelPrompt
+        REDO_IF A = #RETRY
+        jmp    fail
+      END_IF
+        ....
+    DONE
+```
 
 * Annotate fall-through. A `;; fall through` comment can be used, but the preferred form is with the `FALL_THROUGH_TO` assertion macro to prevent refactoring mistakes.
 
 ```asm
         ...
-        lda     #alert_num
-        FALL_THROUGH_TO ShowAlert
+        FALL_THROUGH_TO ShowAlert, A=#alert_num
 .endproc
 
 .proc ShowAlert
@@ -230,7 +269,7 @@ The following macros should be used to improve code readability by eliminating r
   * `COPY_xx` for fixed size copy loops
 * flow control:
   * `IF`/`ELSE_IF`/`ELSE`/`END_IF` for conditional branches, to avoid throw-away labels
-  * `DO`/`BREAK_IF`/`CONTINUE_IF`/`WHILE` for loopings, to avoid throw-away labels
+  * `DO`/`REDO_IF`/`CONTINUE_IF`/`BREAK_IF`/`WHILE` for loopings, to avoid throw-away labels
   * `CALL proc, AX=params, Y=#opt` (and `TAIL_CALL`) for more semantic function calls
   * `RETURN C=1, AX=#val` for more semantic return values
 * definitions:

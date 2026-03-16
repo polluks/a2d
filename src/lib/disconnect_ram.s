@@ -18,8 +18,7 @@
         cmp     #$B0            ; ProDOS 2.5 uses $B0
 .endif ; PRODOS_2_5
         beq     remove
-        dex
-    WHILE POS
+    WHILE dex : POS
         rts
 
         ;; Remove it, shuffle everything else down.
@@ -32,8 +31,7 @@ remove: lda     DEVLST,x
 
 shift:  lda     DEVLST+1,x
         sta     DEVLST,x
-        cpx     DEVCNT
-    IF NE
+    IF X <> DEVCNT
         inx
         bne     shift           ; always
     END_IF

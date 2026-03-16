@@ -83,7 +83,7 @@ setzp_params_preserve:          ; convenience over performance
         kRow5Bot = kRow5Top+kCalcButtonHeight
 
         kBorderLeftTop = 1          ; border width pixels (left/top)
-        kBorderBottomRight = 2          ; (bottom/right)
+        kBorderBottomRight = 2      ; (bottom/right)
 
 .macro CALC_BUTTON identifier, labelchar, left, top
 .params identifier
@@ -102,24 +102,24 @@ port:           .word   left, top, left+kCalcButtonWidth, top+kCalcButtonHeight
 .endparams
 .endmacro
 
-        CALC_BUTTON btn_c,   'c', kCol1Left, kRow1Top
-        CALC_BUTTON btn_e,   'e', kCol2Left, kRow1Top
-        CALC_BUTTON btn_eq,  '=', kCol3Left, kRow1Top
-        CALC_BUTTON btn_mul, '*', kCol4Left, kRow1Top
+        CALC_BUTTON btn_c,   res_string_button_c,   kCol1Left, kRow1Top
+        CALC_BUTTON btn_e,   res_string_button_e,   kCol2Left, kRow1Top
+        CALC_BUTTON btn_eq,  res_string_button_eq,  kCol3Left, kRow1Top
+        CALC_BUTTON btn_mul, res_string_button_mul, kCol4Left, kRow1Top
 
-        CALC_BUTTON btn_7,   '7', kCol1Left, kRow2Top
-        CALC_BUTTON btn_8,   '8', kCol2Left, kRow2Top
-        CALC_BUTTON btn_9,   '9', kCol3Left, kRow2Top
-        CALC_BUTTON btn_div, '/', kCol4Left, kRow2Top
+        CALC_BUTTON btn_7,   res_string_button_7,   kCol1Left, kRow2Top
+        CALC_BUTTON btn_8,   res_string_button_8,   kCol2Left, kRow2Top
+        CALC_BUTTON btn_9,   res_string_button_9,   kCol3Left, kRow2Top
+        CALC_BUTTON btn_div, res_string_button_div, kCol4Left, kRow2Top
 
-        CALC_BUTTON btn_4,   '4', kCol1Left, kRow3Top
-        CALC_BUTTON btn_5,   '5', kCol2Left, kRow3Top
-        CALC_BUTTON btn_6,   '6', kCol3Left, kRow3Top
-        CALC_BUTTON btn_sub, '-', kCol4Left, kRow3Top
+        CALC_BUTTON btn_4,   res_string_button_4,   kCol1Left, kRow3Top
+        CALC_BUTTON btn_5,   res_string_button_5,   kCol2Left, kRow3Top
+        CALC_BUTTON btn_6,   res_string_button_6,   kCol3Left, kRow3Top
+        CALC_BUTTON btn_sub, res_string_button_sub, kCol4Left, kRow3Top
 
-        CALC_BUTTON btn_1,   '1', kCol1Left, kRow4Top
-        CALC_BUTTON btn_2,   '2', kCol2Left, kRow4Top
-        CALC_BUTTON btn_3,   '3', kCol3Left, kRow4Top
+        CALC_BUTTON btn_1,   res_string_button_1,   kCol1Left, kRow4Top
+        CALC_BUTTON btn_2,   res_string_button_2,   kCol2Left, kRow4Top
+        CALC_BUTTON btn_3,   res_string_button_3,   kCol3Left, kRow4Top
 
 
 .params btn_0
@@ -130,7 +130,7 @@ reserved:       .byte   0
         DEFINE_RECT maprect, 0, 0, 49, kCalcButtonHeight + kBorderLeftTop + kBorderBottomRight ; 0 is extra wide
         REF_MAPINFO_MEMBERS
 
-label:          .byte   '0'
+label:          .byte   res_string_button_0
 pos:            .word   kCol1Left + 6, kRow5Bot
 port:           .word   kCol1Left,kRow5Top,kCol2Right,kRow5Bot
         .refto label
@@ -194,19 +194,19 @@ button_bitmap:                  ; bitmap for normal buttons
 
         kWideBitmapStride = 8
 wide_button_bitmap:             ; bitmap for '0' button
-        PIXELS  ".................................................#######"
-        PIXELS  ".###############################################..######"
-        PIXELS  ".###############################################..######"
-        PIXELS  ".###############################################..######"
-        PIXELS  ".###############################################..######"
-        PIXELS  ".###############################################..######"
-        PIXELS  ".###############################################..######"
-        PIXELS  ".###############################################..######"
-        PIXELS  ".###############################################..######"
-        PIXELS  ".###############################################..######"
-        PIXELS  ".###############################################..######"
-        PIXELS  "..................................................######"
-        PIXELS  "#.................................................######"
+        PIXELS  ".................................................#"
+        PIXELS  ".###############################################.."
+        PIXELS  ".###############################################.."
+        PIXELS  ".###############################################.."
+        PIXELS  ".###############################################.."
+        PIXELS  ".###############################################.."
+        PIXELS  ".###############################################.."
+        PIXELS  ".###############################################.."
+        PIXELS  ".###############################################.."
+        PIXELS  ".###############################################.."
+        PIXELS  ".###############################################.."
+        PIXELS  ".................................................."
+        PIXELS  "#................................................."
 
 tall_button_bitmap:             ; bitmap for '+' button
         PIXELS  "....................#"
@@ -244,23 +244,19 @@ tall_button_bitmap:             ; bitmap for '+' button
 
 saved_stack:
         .byte   $00             ; restored after error
-calc_p: .byte   $00             ; high bit set if pending op?
+calc_p: .byte   $00             ; input since last clear?
 calc_op:.byte   $00
 calc_d: .byte   $00             ; decimal separator if present, 0 otherwise
-calc_e: .byte   $00             ; exponential?
+calc_e: .byte   $00             ; exponent?
 calc_n: .byte   $00             ; negative?
 calc_g: .byte   $00             ; high bit set if last input digit
 calc_l: .byte   $00             ; input length
+calc_r: .byte   $00             ; result? (i.e. last op was '=')
+
+kMaxEntryLength = 10
 
 ;;; ============================================================
 ;;; Miscellaneous param blocks
-
-.params background_box_params
-left:   .word   1
-top:    .word   0
-right:  .word   129
-bottom: .word   96
-.endparams
 
 background_pattern:
         .byte   $77,$DD,$77,$DD,$77,$DD,$77,$DD
@@ -352,6 +348,7 @@ base:   .word   16
 .endparams
 
 farg:   .byte   $00,$00,$00,$00,$00,$00
+ftmp:   .byte   $00,$00,$00,$00,$00,$00
 
 .params title_bar_bitmap      ; Params for MGTK::PaintBits
         DEFINE_POINT viewloc, 115, AS_WORD -9
@@ -385,8 +382,9 @@ width:          .word   kScreenWidth - 1
 height:         .word   kScreenHeight - kMenuBarHeight - 2
 .endparams
 
-penmode_normal: .byte   MGTK::pencopy
-penmode_xor:    .byte   MGTK::notpenXOR
+pencopy:        .byte   MGTK::pencopy
+notpenBIC:      .byte   MGTK::notpenBIC
+notpenXOR:      .byte   MGTK::notpenXOR
 
         kWindowWidth = 130
         kWindowHeight = 96
@@ -428,7 +426,6 @@ textfont:       .addr   DEFAULT_FONT
 nextwinfo:      .addr   0
         REF_WINFO_MEMBERS
 .endparams
-openwindow_params_top := winfo::top
 
 window_title:
         PASCAL_STRING res_string_window_title
@@ -465,7 +462,7 @@ intl_deci_sep:  .byte   0
         jsr     DrawContent
         jsr     ResetBuffersAndDisplay
 
-        lda     #'='            ; last kOperation
+        lda     #'='            ; last op
         sta     calc_op
 
         lda     #0              ; clear registers
@@ -475,12 +472,12 @@ intl_deci_sep:  .byte   0
         sta     calc_n
         sta     calc_g
         sta     calc_l
+        sta     calc_r
 
         ldx     #sizeof_chrget_routine + 4 ; should be just + 1 ?
     DO
         copy8   chrget_routine-1,x, CHRGET-1,x
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         lda     #0
         sta     ERRFLG          ; Turn off errors
@@ -488,20 +485,9 @@ intl_deci_sep:  .byte   0
 
         copy16  #ErrorHook, COUT_HOOK ; set up FP error handler
 
-        lda     #1
-        ROM_CALL FLOAT
+        ROM_CALL ZERO_FAC       ; FAC = 0
         ldxy    #farg
-        ROM_CALL ROUND
-        lda     #0              ; set FAC to 0
-        ROM_CALL FLOAT
-        ROM_CALL FADD
-        ROM_CALL FOUT
-        lda     #$07
-        ROM_CALL FMULT
-        lda     #$00
-        ROM_CALL FLOAT
-        ldxy    #farg
-        ROM_CALL ROUND
+        ROM_CALL ROUND          ; `farg` = FAC
 
         tsx
         stx     saved_stack
@@ -519,8 +505,7 @@ intl_deci_sep:  .byte   0
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         MGTK_CALL MGTK::GetEvent, event_params
 
-        lda     event_params::kind
-    IF A = #MGTK::EventKind::button_down
+    IF lda event_params::kind : A = #MGTK::EventKind::button_down
         jsr     OnClick
         jmp     InputLoop
     END_IF
@@ -541,8 +526,8 @@ intl_deci_sep:  .byte   0
         cmp     #MGTK::Area::content
         bcc     ignore_click
 
-        lda     findwindow_params::window_id
-    IF A <> #kDAWindowId        ; This window?
+        ;; This window?
+    IF lda findwindow_params::window_id : A <> #kDAWindowId
 ignore_click:
         rts
     END_IF
@@ -571,12 +556,11 @@ exit:   pla                     ; pop OnClick / OnKeyPress
 
         copy8   #kDAWindowId, dragwindow_params::window_id
         MGTK_CALL MGTK::DragWindow, dragwindow_params
-        bit     dragwindow_params::moved
-    IF NS
+    IF bit dragwindow_params::moved : NS
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
         jmp     DrawContent
     END_IF
-ret:    rts
+        rts
 .endproc ; OnClick
 exit := OnClick::exit
 
@@ -629,7 +613,7 @@ rts1:  rts                     ; used by next proc
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         copy8   #MGTK::EventKind::button_down, event_params::kind ; Needed in `DepressButton`
 
-        lda     screentowindow_params::windowx+1        ; ensure high bits of coords are 0
+        lda     screentowindow_params::windowx+1 ; ensure high bits of coords are 0
         ora     screentowindow_params::windowy+1
         bne     rts1
         lda     screentowindow_params::windowy
@@ -637,7 +621,7 @@ rts1:  rts                     ; used by next proc
         FALL_THROUGH_TO FindButtonRow
 
 .proc FindButtonRow
-        cmp     #kRow1Top-kBorderLeftTop            ; row 1?
+        cmp     #kRow1Top-kBorderLeftTop ; row 1?
         bcc     miss
     IF A < #kRow1Bot+kBorderBottomRight
         jsr     FindButtonCol
@@ -645,7 +629,7 @@ rts1:  rts                     ; used by next proc
         RETURN  A=row1_lookup,x
     END_IF
 
-        cmp     #kRow2Top-kBorderLeftTop            ; row 2?
+        cmp     #kRow2Top-kBorderLeftTop ; row 2?
         bcc     miss
     IF A < #kRow2Bot+kBorderBottomRight
         jsr     FindButtonCol
@@ -653,7 +637,7 @@ rts1:  rts                     ; used by next proc
         RETURN  A=row2_lookup,x
     END_IF
 
-        cmp     #kRow3Top-kBorderLeftTop            ; row 3?
+        cmp     #kRow3Top-kBorderLeftTop ; row 3?
         bcc     miss
     IF A < #kRow3Bot+kBorderBottomRight
         jsr     FindButtonCol
@@ -661,7 +645,7 @@ rts1:  rts                     ; used by next proc
         RETURN  A=row3_lookup,x
     END_IF
 
-        cmp     #kRow4Top-kBorderLeftTop            ; row 4?
+        cmp     #kRow4Top-kBorderLeftTop ; row 4?
         bcc     miss
     IF A < #kRow4Bot+kBorderBottomRight
         jsr     FindButtonCol
@@ -673,12 +657,12 @@ rts1:  rts                     ; used by next proc
         lda     screentowindow_params::windowx
         cmp     #kCol4Left-kBorderLeftTop
         bcc     miss
-        cmp     #kCol4Right+kBorderBottomRight-1         ; TODO: is -1 bug in original?
+        cmp     #kCol4Right+kBorderBottomRight-1
         bcs     miss
         RETURN  A=#'+', C=1
     END_IF
 
-        cmp     #kRow5Bot+kBorderBottomRight             ; row 5?
+        cmp     #kRow5Bot+kBorderBottomRight ; row 5?
         bcs     miss
 
         jsr     FindButtonCol
@@ -707,25 +691,25 @@ miss:   RETURN  C=0
         ::decimal_lookup := *-2
 
 .proc FindButtonCol
-        cpx     #kCol1Left-kBorderLeftTop             ; col 1?
+        cpx     #kCol1Left-kBorderLeftTop ; col 1?
         bcc     miss
     IF X < #kCol1Right+kBorderBottomRight
         RETURN  X=#1, C=1
     END_IF
 
-        cpx     #kCol2Left-kBorderLeftTop             ; col 2?
+        cpx     #kCol2Left-kBorderLeftTop ; col 2?
         bcc     miss
     IF X < #kCol2Right+kBorderBottomRight
         RETURN  X=#2, C=1
     END_IF
 
-        cpx     #kCol3Left-kBorderLeftTop             ; col 3?
+        cpx     #kCol3Left-kBorderLeftTop ; col 3?
         bcc     miss
     IF X < #kCol3Right+kBorderBottomRight
         RETURN  X=#3, C=1
     END_IF
 
-        cpx     #kCol4Left-kBorderLeftTop            ; col 4?
+        cpx     #kCol4Left-kBorderLeftTop ; col 4?
         bcc     miss
     IF X < #kCol4Right+kBorderBottomRight
         RETURN  X=#4, C=1
@@ -745,10 +729,9 @@ miss:   RETURN  C=0
 .proc ProcessKey
     IF A = #'C'                 ; Clear?
         CALL    DepressButton, XY=#btn_c::port
-        lda     #0
-        ROM_CALL FLOAT
+        ROM_CALL ZERO_FAC       ; FAC = 0
         ldxy    #farg
-        ROM_CALL ROUND
+        ROM_CALL ROUND          ; `farg` = FAC
         copy8   #'=', calc_op
         lda     #0
         sta     calc_p
@@ -756,24 +739,26 @@ miss:   RETURN  C=0
         sta     calc_d
         sta     calc_e
         sta     calc_n
+        sta     calc_r
         jmp     ResetBuffersAndDisplay
     END_IF
 
-    IF A = #'E'                 ; Exponential?
+    IF A = #'E'                 ; Exponent?
         CALL    DepressButton, XY=#btn_e::port
-        ldy     calc_e
-        bne     rts1
-        ldy     calc_l
+        ldy     calc_e          ; already exponent?
       IF ZERO
+        ldy     calc_l
+       IF ZERO                  ; if no entry, make it "1E"
         inc     calc_l
         lda     #'1'
         sta     text_buffer1 + kTextBufferSize
         sta     text_buffer2 + kTextBufferSize
-      END_IF
+       END_IF
         copy8   #'E', calc_e
-        jmp     update
+        jmp     Insert
+      END_IF
 
-rts1:   rts
+        rts
     END_IF
 
     IF A = #'='                 ; Equals?
@@ -786,23 +771,19 @@ rts1:   rts
         TAIL_CALL DoOpClick, XY=#btn_mul::port
     END_IF
 
-        cmp     intl_deci_sep   ; Decimal?
-        beq     dsep
-
-    IF A = #'.'                 ; allow either
-dsep:
+    IF A = intl_deci_sep OR A = #'.'  ; Decimal?
         CALL    DepressButton, XY=#btn_dec::port
-        lda     calc_d
-        ora     calc_e
-        bne     rts2
-        lda     calc_l
+        lda     calc_d          ; already a decimal?
+        ora     calc_e          ; or exponent?
       IF ZERO
+        lda     calc_l
+       IF ZERO
         inc     calc_l
-      END_IF
+       END_IF
         copy8   intl_deci_sep, calc_d
-        jmp     update
-
-rts2:   rts
+        jmp     Insert
+      END_IF
+        rts
     END_IF
 
     IF A = #'+'                 ; Add?
@@ -820,7 +801,7 @@ rts2:   rts
         SET_BIT7_FLAG calc_n
         pla
         pha
-        jmp     do_digit_click
+        jmp     DoDigitClick
        END_IF
       END_IF
 
@@ -836,52 +817,52 @@ rts2:   rts
 
     IF A = #'0'                 ; Digit 0?
         pha
-        TAIL_CALL do_digit_click, XY=#btn_0::port
+        TAIL_CALL DoDigitClick, XY=#btn_0::port
     END_IF
 
     IF A = #'1'                 ; Digit 1?
         pha
-        TAIL_CALL do_digit_click, XY=#btn_1::port
+        TAIL_CALL DoDigitClick, XY=#btn_1::port
     END_IF
 
     IF A = #'2'                 ; Digit 2?
         pha
-        TAIL_CALL do_digit_click, XY=#btn_2::port
+        TAIL_CALL DoDigitClick, XY=#btn_2::port
     END_IF
 
     IF A = #'3'                 ; Digit 3?
         pha
-        TAIL_CALL do_digit_click, XY=#btn_3::port
+        TAIL_CALL DoDigitClick, XY=#btn_3::port
     END_IF
 
     IF A = #'4'                 ; Digit 4?
         pha
-        TAIL_CALL do_digit_click, XY=#btn_4::port
+        TAIL_CALL DoDigitClick, XY=#btn_4::port
     END_IF
 
     IF A = #'5'                 ; Digit 5?
         pha
-        TAIL_CALL do_digit_click, XY=#btn_5::port
+        TAIL_CALL DoDigitClick, XY=#btn_5::port
     END_IF
 
     IF A = #'6'                 ; Digit 6?
         pha
-        TAIL_CALL do_digit_click, XY=#btn_6::port
+        TAIL_CALL DoDigitClick, XY=#btn_6::port
     END_IF
 
     IF A = #'7'                 ; Digit 7?
         pha
-        TAIL_CALL do_digit_click, XY=#btn_7::port
+        TAIL_CALL DoDigitClick, XY=#btn_7::port
     END_IF
 
     IF A = #'8'                 ; Digit 8?
         pha
-        TAIL_CALL do_digit_click, XY=#btn_8::port
+        TAIL_CALL DoDigitClick, XY=#btn_8::port
     END_IF
 
     IF A = #'9'                 ; Digit 9?
         pha
-        TAIL_CALL do_digit_click, XY=#btn_9::port
+        TAIL_CALL DoDigitClick, XY=#btn_9::port
     END_IF
 
     IF A = #CHAR_DELETE         ; Delete?
@@ -911,9 +892,7 @@ rts2:   rts
         lda     text_buffer1,x
         sta     text_buffer1+1,x
         sta     text_buffer2+1,x
-        dex
-        dey
-      WHILE NOT_ZERO
+      WHILE dex : dey : NOT_ZERO
         lda     #' '
 
         sta     text_buffer1+1,x
@@ -924,15 +903,22 @@ rts2:   rts
 end:    rts
 .endproc ; ProcessKey
 
-do_digit_click:
+;;; ============================================================
+
+.proc DoDigitClick
         jsr     DepressButton
     IF ZERO
         pla
         rts
     END_IF
-
         pla
-update: SET_BIT7_FLAG calc_g
+        FALL_THROUGH_TO Insert
+.endproc ; DoDigitClick
+
+;;; ============================================================
+
+.proc Insert
+        SET_BIT7_FLAG calc_g
         ldy     calc_l
     IF ZERO
         pha
@@ -944,8 +930,7 @@ update: SET_BIT7_FLAG calc_g
     END_IF
 
         SET_BIT7_FLAG calc_p
-        cpy     #10
-        bcs     rts3
+    IF Y < #kMaxEntryLength
         pha
         ldy     calc_l
         beq     empty
@@ -953,21 +938,23 @@ update: SET_BIT7_FLAG calc_g
         sec
         sbc     calc_l
         tax
-    DO
+      DO
         lda     text_buffer1,x
         sta     text_buffer1-1,x
         sta     text_buffer2-1,x
         inx
-        dey
-    WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
 
 empty:  inc     calc_l
         pla
         sta     text_buffer1 + kTextBufferSize
         sta     text_buffer2 + kTextBufferSize
         jmp     DisplayBuffer1
+    END_IF
+        rts
+.endproc ; Insert
 
-rts3:   rts
+;;; ============================================================
 
 .proc DoOpClick
         jsr     DepressButton
@@ -976,83 +963,82 @@ rts3:   rts
         rts
     END_IF
 
-        lda     calc_op
-    IF A = #'='
-        lda     calc_g
-        bne     reparse
-        lda     #0
-        ROM_CALL FLOAT
-        jmp     do_op
-    END_IF
+        ;; ----------------------------------------
+        ;; If there was input, parse it
 
         lda     calc_g
-        bne     reparse
-        pla
-        sta     calc_op
-        jmp     ResetBuffer1AndState
-
-reparse:
+    IF NOT ZERO
         ;; Copy string to `FBUFFR`, mapping decimal char.
         ldx     #kTextBufferSize
-    DO
+      DO
         lda     text_buffer1,x
-      IF A = intl_deci_sep
+       IF A = intl_deci_sep
         lda     #'.'
-      END_IF
+       END_IF
         sta     FBUFFR,x
-        dex
-    WHILE POS
+      WHILE dex : POS
         copy16  #FBUFFR, TXTPTR
         jsr     CHRGET
-        ROM_CALL FIN
+        ROM_CALL FIN            ; FAC = parsed `FBUFFR`
+    END_IF
 
-do_op:  pla
-        ldx     calc_op
-        sta     calc_op
-        lda     #<farg
-        ldy     #>farg
+        ;; ----------------------------------------
+        ;; Do the operation
+
+        ;; Save FAC for repeated ops, e.g. the "2" in "1 + 2 = ="
+        ldxy    #ftmp
+        ROM_CALL ROUND
+
+        ldx     calc_op         ; X = pending op
+        pla                     ; passed op
+    IF A = #'='
+        SET_BIT7_FLAG calc_r
+    ELSE
+        sta     calc_op         ; pending op for next time
+
+        ;; In a sequence like "2 * 3 = = + 1" this prevents the "+"
+        ;; from executing a pending op.
+      IF bit calc_r : NS        ; X = pending op
+        ldx     #'='
+      END_IF
+
+        CLEAR_BIT7_FLAG calc_r
+    END_IF
+
+        lday    #farg
 
     IF X = #'+'
-        ROM_CALL FADD
-        jmp     PostOp
-    END_IF
-
-    IF X = #'-'
-        ROM_CALL FSUB
-        jmp     PostOp
-    END_IF
-
-    IF X = #'*'
-        ROM_CALL FMULT
-        jmp     PostOp
-    END_IF
-
-    IF X = #'/'
-        ROM_CALL FDIV
-        jmp     PostOp
-    END_IF
-
-    IF X = #'='
+        ROM_CALL FADD           ; FAC = `farg` + FAC
+    ELSE_IF X = #'-'
+        ROM_CALL FSUB           ; FAC = `farg` - FAC
+    ELSE_IF X = #'*'
+        ROM_CALL FMULT          ; FAC = `farg` * FAC
+    ELSE_IF X = #'/'
+        ROM_CALL FDIV           ; FAC = `farg` / FAC
+    ELSE_IF X = #'='
         ldy     calc_g
       IF ZERO
         jmp     ResetBuffer1AndState
       END_IF
     END_IF
 
-        FALL_THROUGH_TO PostOp
-.endproc ; DoOpClick
+        ldxy    #farg           ; after the FP op is done
+        ROM_CALL ROUND          ; `farg` = FAC
+        ROM_CALL FOUT           ; output as null-terminated string to `FBUFFR`
+        ;; NOTE: `FOUT` trashes the FAC
 
-.proc PostOp
-        ldxy    #farg           ; after the FP kOperation is done
-        ROM_CALL ROUND
-        ROM_CALL FOUT           ; output as null-terminated string to FBUFFR
+        ;; Restore FAC for repeated op, e.g. "2" in "1 + 2 = ="
+        lday    #ftmp
+        ROM_CALL LOAD_FAC
+
+        ;; ----------------------------------------
+        ;; Update the display with result in `FBUFFR`
 
         ldy     #0              ; count the size
     DO
         lda     FBUFFR,y
         BREAK_IF ZERO
-        iny
-    WHILE NOT_ZERO              ; always
+    WHILE iny : NOT_ZERO        ; always
 
         ldx     #kTextBufferSize ; copy to text buffers
     DO
@@ -1062,9 +1048,7 @@ do_op:  pla
       END_IF
         sta     text_buffer1,x
         sta     text_buffer2,x
-        dex
-        dey
-    WHILE NOT_ZERO
+    WHILE dex : dey : NOT_ZERO
 
         ;; Add leading zero if starting with decimal
     IF A = #'-'
@@ -1080,15 +1064,18 @@ do_op:  pla
     END_IF
 
         cpx     #0              ; pad out with spaces if needed
-        bmi     end
-pad:    lda     #' '
+    IF POS
+      DO
+        lda     #' '
         sta     text_buffer1,x
         sta     text_buffer2,x
-        dex
-        bpl     pad
-end:    jsr     DisplayBuffer1
+      WHILE dex : POS
+    END_IF
+
+        jsr     DisplayBuffer1
+
         FALL_THROUGH_TO ResetBuffer1AndState
-.endproc ; PostOp
+.endproc ; DoOpClick
 
 .proc ResetBuffer1AndState
         jsr     ResetBuffer1
@@ -1123,8 +1110,7 @@ end:    jsr     DisplayBuffer1
         ldy     #.sizeof(MGTK::Rect)-1
     DO
         copy8   (ptr),y, inrect_rect,y
-        dey
-    WHILE POS
+    WHILE dey : POS
         MGTK_CALL MGTK::InflateRect, grow_rect
 
         ;; --------------------------------------------------
@@ -1141,8 +1127,7 @@ end:    jsr     DisplayBuffer1
         MGTK_CALL MGTK::WaitVBL
         pla
         tax
-        dex
-      WHILE NOT ZERO
+      WHILE dex : NOT ZERO
         jsr     invert_rect
         RETURN  A=#1            ; non-zero to continue
     END_IF
@@ -1195,7 +1180,7 @@ invert_rect:
         RTS_IF  A = #MGTK::Error::window_obscured
         MGTK_CALL MGTK::SetPort, grafport
         MGTK_CALL MGTK::SetPattern, black_pattern
-        MGTK_CALL MGTK::SetPenMode, penmode_xor
+        MGTK_CALL MGTK::SetPenMode, notpenXOR
         MGTK_CALL MGTK::PaintRect, SELF_MODIFIED, invert_addr
         rts
 
@@ -1213,8 +1198,7 @@ invert_rect:
         ldy     #kTextBufferSize
     DO
         copy8   #' ', text_buffer1-1,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
         copy8   #'0', text_buffer1 + kTextBufferSize
         rts
 .endproc ; ResetBuffer1
@@ -1223,8 +1207,7 @@ invert_rect:
         ldy     #kTextBufferSize
     DO
         copy8   #' ', text_buffer2-1,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
         copy8   #'0', text_buffer2 + kTextBufferSize
         rts
 .endproc ; ResetBuffer2
@@ -1237,22 +1220,22 @@ invert_rect:
 
 .proc DisplayBuffer1
         MGTK_CALL MGTK::GetWinPort, getwinport_params
-        cmp     #MGTK::Error::window_obscured
-        beq     end
+    IF A <> #MGTK::Error::window_obscured
         MGTK_CALL MGTK::SetPort, grafport
         CALL    PreDisplayBuffer, XY=#text_buffer1
         MGTK_CALL MGTK::DrawText, drawtext_params1
-end:    rts
+    END_IF
+        rts
 .endproc ; DisplayBuffer1
 
 .proc DisplayBuffer2
         MGTK_CALL MGTK::GetWinPort, getwinport_params
-        cmp     #MGTK::Error::window_obscured
-        beq     end
+    IF A <> #MGTK::Error::window_obscured
         MGTK_CALL MGTK::SetPort, grafport
         CALL    PreDisplayBuffer, XY=#text_buffer2
         MGTK_CALL MGTK::DrawText, drawtext_params2
-end:    rts
+    END_IF
+        rts
 .endproc ; DisplayBuffer2
 
 .proc PreDisplayBuffer
@@ -1281,7 +1264,7 @@ end:    rts
         ;; Frame
         MGTK_CALL MGTK::HideCursor
         MGTK_CALL MGTK::SetPattern, background_pattern
-        MGTK_CALL MGTK::PaintRect, background_box_params
+        MGTK_CALL MGTK::PaintRect, winfo::maprect
         MGTK_CALL MGTK::SetPattern, black_pattern
         MGTK_CALL MGTK::FrameRect, frame_display_params
         MGTK_CALL MGTK::SetPattern, white_pattern
@@ -1309,10 +1292,17 @@ end:    rts
         iny
 :       sty     text_addr+1
 
+        add16   ptr, #(btn_c::port - btn_c), rect_addr ; address button face rect
+
         ldy     #(btn_c::label - btn_c) ; label
         copy8   (ptr),y, label
 
+        MGTK_CALL MGTK::SetPenMode, notpenBIC
         MGTK_CALL MGTK::PaintBits, 0, bitmap_addr ; draw shadowed rect
+
+        MGTK_CALL MGTK::SetPenMode, pencopy
+        MGTK_CALL MGTK::PaintRect, SELF_MODIFIED, rect_addr ; draw button face
+
         MGTK_CALL MGTK::MoveTo, 0, text_addr         ; button label pos
         MGTK_CALL MGTK::DrawText, drawtext_params_label  ; button label text
 
@@ -1320,7 +1310,7 @@ end:    rts
         clc
         adc     #.sizeof(btn_c)
         sta     ptr
-        CONTINUE_IF CC
+        REDO_IF CC
         inc     ptr+1
     FOREVER
 .endproc ; DrawContent
@@ -1389,7 +1379,6 @@ END_PROC_AT
         sizeof_chrget_routine = .sizeof(chrget_routine)
 
 ;;; ============================================================
-
 
         .include "../lib/uppercase.s"
         .include "../lib/rom_call.s"

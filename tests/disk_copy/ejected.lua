@@ -26,7 +26,7 @@ test.Step(
 
     a2d.ClearSelection()
     a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_COPY_DISK-2)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="insert the system disk"})
     a2d.DialogCancel()
 
     -- cleanup
@@ -50,14 +50,14 @@ test.Step(
 
     a2d.ClearSelection()
     a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_COPY_DISK-2)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="insert the system disk"})
 
     s6d1:load(image)
     emu.wait(5)
 
     a2d.DialogOK()
     a2d.WaitForDesktopReady()
-    test.Expect(a2dtest.OCRScreen():find("Select source disk"),
+    test.ExpectMatch(a2dtest.OCRScreen(), "Select source disk",
                 "Disk Copy should be started")
 
     -- cleanup
@@ -87,7 +87,7 @@ test.Step(
 
     a2d.CopyDisk()
 
-    test.Expect(a2dtest.OCRScreen():find("5 +2 +Unknown"),
+    test.ExpectMatch(a2dtest.OCRScreen(), "5 +2 +Unknown",
                 "S5D2 should show 'Unknown' in source list")
 
     -- select source
@@ -96,7 +96,7 @@ test.Step(
     apple2.ReturnKey()
     emu.wait(5)
 
-    test.Expect(not a2dtest.OCRScreen():find("5 +2 +Unknown"),
+    test.ExpectNotMatch(a2dtest.OCRScreen(), "5 +2 +Unknown",
                 "S5D2 should not be in destination list")
 
     s5d2:load(image)
@@ -104,7 +104,7 @@ test.Step(
     apple2.Type("R")
     emu.wait(5)
 
-    test.Expect(a2dtest.OCRScreen():find("5 +2 +EMPTY"),
+    test.ExpectMatch(a2dtest.OCRScreen(), "5 +2 +EMPTY",
                 "S5D2 should show a disk in source list")
 
     apple2.UpArrowKey() -- S5D2
@@ -112,7 +112,7 @@ test.Step(
     apple2.ReturnKey()
     emu.wait(5)
 
-    test.Expect(a2dtest.OCRScreen():find("5 +2 +EMPTY"),
+    test.ExpectMatch(a2dtest.OCRScreen(), "5 +2 +EMPTY",
                 "S5D2 should show a disk in destination list")
 
     -- cleanup
@@ -142,15 +142,15 @@ test.Step(
     a2d.DialogOK()
 
     -- insert source
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the source disk"})
     a2d.DialogOK()
 
     -- insert destination
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the destination disk"})
     a2d.DialogOK()
 
     -- confirm overwrite
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
 
     emu.wait(5)
@@ -158,14 +158,14 @@ test.Step(
     s5d2:unload()
 
     emu.wait(5)
-    test.Expect(a2dtest.OCRScreen():find("Error when writing block"),
+    test.ExpectMatch(a2dtest.OCRScreen(), "Error when writing block",
                 "block errors should be seen writing")
 
     -- cleanup
     apple2.EscapeKey() -- abort the copy
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="not completed"})
 
-    test.Expect(not a2dtest.OCRScreen():find("Press Esc to stop copying"),
+    test.ExpectNotMatch(a2dtest.OCRScreen(), "Press Esc to stop copying",
                 "tip should be erased")
     a2d.DialogOK()
     s5d2:load(image)
@@ -199,15 +199,15 @@ test.DISABLED_Step(
     a2d.DialogOK()
 
     -- insert source
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the source disk"})
     a2d.DialogOK()
 
     -- insert destination
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the destination disk"})
     a2d.DialogOK()
 
     -- confirm overwrite
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
 
     emu.wait(5)
@@ -219,7 +219,7 @@ test.DISABLED_Step(
 
     -- cleanup
     apple2.EscapeKey()
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="not completed"})
 
     a2d.DialogOK()
     s5d1:load(image)

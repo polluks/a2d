@@ -107,7 +107,7 @@ delta:  .byte   0
         lsr
         sec
         sbc     #(64 - kNumCols) / 2
-        CONTINUE_IF NEG
+        REDO_IF NEG
     WHILE A >= #kNumCols
         tay                     ; Y = column
 
@@ -151,8 +151,7 @@ delta:  .byte   0
         sta     PAGE2ON
         sta     (dst_ptr),y
 
-        dex
-    WHILE POS
+    WHILE dex : POS
         rts
 
 row:    .byte   0

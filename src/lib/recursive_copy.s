@@ -215,15 +215,13 @@ entry_err_flag:  .byte   0      ; bit7
     DO
         ldy     map,x
         copy8   file_entry,y, src_file_info_params::access,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         ;; Fix `storage_type`
         ldx     #4
     DO
         lsr     src_file_info_params::storage_type
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         rts
 
@@ -483,8 +481,7 @@ eof:    RETURN  A=#$FF
         lda     (path_ptr),y
         cmp     #'/'
         beq     :+
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
         iny
 :
         dey
@@ -731,8 +728,7 @@ fail:   jmp     OpHandleErrorCode
       END_IF
 
 .if ::kCopyInteractive
-        bit     src_dst_exclusive_flag
-      IF NS
+      IF bit src_dst_exclusive_flag : NS
         ;; Swap
         MLI_CALL GET_MARK, mark_src_params
         MLI_CALL CLOSE, close_src_params
@@ -752,7 +748,7 @@ fail:   jmp     OpHandleErrorCode
 
 .if ::kCopyInteractive
         bit     src_dst_exclusive_flag
-        CONTINUE_IF NC
+        REDO_IF NC
 
         ;; Swap
         MLI_CALL CLOSE, close_dst_params
@@ -766,8 +762,7 @@ fail:   jmp     OpHandleErrorCode
 close:
         MLI_CALL CLOSE, close_dst_params
 .if ::kCopyInteractive
-        bit     src_dst_exclusive_flag
-    IF NC
+    IF bit src_dst_exclusive_flag : NC
         MLI_CALL CLOSE, close_src_params
     END_IF
 .else
@@ -913,13 +908,11 @@ _OpenDstOrFail := _OpenDstImpl::fail_ok
         tya
        DO
         ora     (ptr),y
-        iny
-       WHILE NOT_ZERO
+       WHILE iny : NOT_ZERO
         inc     ptr+1           ; second half
        DO
         ora     (ptr),y
-        iny
-       WHILE NOT_ZERO
+       WHILE iny : NOT_ZERO
         tay
        IF ZERO
         ;; Block is all zeros, skip over it

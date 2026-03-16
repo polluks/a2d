@@ -123,8 +123,7 @@
         tay
     DO
         copy8   (entry_ptr),y, filename,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         RETURN  C=1
 
@@ -173,8 +172,7 @@ nope:   RETURN  C=1
         lda     (entry_ptr),y
         cmp     self_filename,y
         bne     nope
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         RETURN  C=0
 
@@ -234,8 +232,7 @@ next_entry:
         add16_8 entry_ptr, #.sizeof(FileEntry)
 
         ;; Header?
-        bit     saw_header_flag
-    IF NC
+    IF bit saw_header_flag : NC
         SET_BIT7_FLAG saw_header_flag
         bmi     next_entry      ; always
     END_IF

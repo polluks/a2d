@@ -184,8 +184,7 @@ end:
         inx                     ; include DEVCNT itself
     DO
         copy8   DEVLST-1,x, main::devlst_backup,x ; DEVCNT is at DEVLST-1
-        dex
-    WHILE POS
+    WHILE dex : POS
         FALL_THROUGH_TO MoveStartupVolumeFirst
 
 .endproc ; PreserveDEVLST
@@ -214,8 +213,7 @@ end:
         target := *+1
         cmp     #SELF_MODIFIED_BYTE
         beq     found
-        inx
-    WHILE X < DEVCNT
+    WHILE inx : X < DEVCNT
         bcs     done            ; last one or not found
 
         ;; Save it
@@ -224,8 +222,7 @@ found:  ldy     DEVLST,x
         ;; Move everything up
     DO
         copy8   DEVLST+1,x, DEVLST,x
-        inx
-    WHILE X <> DEVCNT
+    WHILE inx : X <> DEVCNT
 
         ;; Place it at the end
         tya
@@ -257,8 +254,7 @@ done:
     DO
         jsr     ReadSetting
         sta     tmp_pattern - DeskTopSettings::pattern,x
-        dex
-    WHILE X <> #AS_BYTE(DeskTopSettings::pattern-1)
+    WHILE dex : X <> #AS_BYTE(DeskTopSettings::pattern-1)
 
         MGTK_CALL MGTK::SetZP1, setzp_params_nopreserve
         MGTK_CALL MGTK::SetDeskPat, tmp_pattern
@@ -347,9 +343,7 @@ done:
         ldx     #0
     DO
         copy8   trash_name,x, (ptr),y
-        iny
-        inx
-    WHILE X <> trash_name
+    WHILE iny : inx : X <> trash_name
         copy8   trash_name,x, (ptr),y
 
         ITK_CALL IconTK::DrawIcon, icon_param
@@ -379,7 +373,7 @@ done:
         skip_check_diskii_flag := *+1
         ldx     #SELF_MODIFIED_BYTE
       IF NOT ZERO
-        jsr     main::IsDiskII  ; A = (optionally unmasked) unit number
+        jsr     main::IsDiskII  ; A = (optionally unmasked) unit number, returns Z=1 if yes
         beq     next
       END_IF
 
@@ -398,7 +392,7 @@ done:
         pla                     ; A = unmasked unit number
         pha                     ; A = unmasked unit number
         ;; NOTE: Not masked with `UNIT_NUM_MASK`, `IsDiskII` handles it.
-        jsr     main::IsDiskII
+        jsr     main::IsDiskII  ; returns Z=1 if yes
        IF ZC
         CALL    _RemoveDevice, X=device_index
        END_IF
@@ -409,8 +403,7 @@ done:
 
 next:
         pla
-        dec     device_index
-    WHILE POS
+    WHILE dec device_index : POS
 
         copy8   #0, cached_window_id
         jsr     main::StoreCachedWindowIconList
@@ -424,8 +417,7 @@ next:
         inx
         copy8   DEVLST+1,x, DEVLST,x
         copy8   main::device_to_icon_map+1,x, main::device_to_icon_map,x
-        cpx     DEVCNT
-    WHILE NOT_ZERO
+    WHILE X <> DEVCNT
         dec     DEVCNT
 
         ;; ProDOS requires an ON_LINE call after a device is
@@ -504,13 +496,11 @@ next:
         ldy     text_input_buf
       DO
         copy8   text_input_buf,y, (devname_ptr),y
-        dey
-      WHILE POS
+      WHILE dey : POS
 
         pla                     ; A = index
         tay                     ; Y = index
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         FALL_THROUGH_TO InitializeDisksInDevicesTables
 
@@ -540,19 +530,17 @@ next:
         sta     unit_num
         jsr     main::DeviceDriverAddress
         bvs     append          ; remapped SmartPort, it's usable
-        bne     next            ; if RAM-based driver (not $CnXX), skip
+        CONTINUE_IF NE          ; if RAM-based driver (not $CnXX), skip
         stx     slot_ptr+1      ; just need high byte ($Cn)
         copy8   #0, slot_ptr    ; make $Cn00
         ldy     #$FF            ; Firmware ID byte
         lda     (slot_ptr),y    ; $CnFF: $00=Disk II, $FF=13-sector, else=block
-        beq     next
+        CONTINUE_IF ZERO
         dey
         lda     (slot_ptr),y    ; $CnFE: Status Byte
         bmi     append          ; bit 7 - Medium is removable
-
-next:   inc     index
-        lda     DEVCNT          ; continue while index <= DEVCNT
-    WHILE A >= index
+next:
+    WHILE inc index : lda DEVCNT : A >= index ; continue while index <= DEVCNT
 
         lda     count
         sta     main::removable_device_table
@@ -564,8 +552,7 @@ next:   inc     index
     IF NOT_ZERO
       DO
         copy8   main::disk_in_device_table,x, main::last_disk_in_devices_table,x
-        dex
-      WHILE POS
+      WHILE dex : POS
     END_IF
 
         jmp     end_of_scope
@@ -680,8 +667,7 @@ unit_num:
     END_IF
 
         ;; No separator if it is last
-        lda     selector_menu
-    IF A = #kSelectorMenuFixedItems
+    IF lda selector_menu : A = #kSelectorMenuFixedItems
         dec     selector_menu
     END_IF
         jmp     end_of_scope
@@ -700,8 +686,7 @@ count:  .byte   0
         tay
     DO
         copy8   (ptr1),y, (ptr2),y
-        dey
-    WHILE POS
+    WHILE dey : POS
         rts
 .endproc ; _CopyPtr1ToPtr2
 
@@ -735,11 +720,9 @@ not_found:
         ldy     #0
       DO
         sta     (ptr),y
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
         inc     ptr+1
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
         rts
 .endproc ; _ReadSelectorList
 
@@ -822,7 +805,7 @@ process_block:
         ;; Allow anything else
 
         ;; Compute slot in DA name table
-        CALL    Multiply_16_8_16, Y=desk_acc_num, AX=#kDAMenuItemSize
+        CALL    main::Multiply_16_8_16, Y=desk_acc_num, AX=#kDAMenuItemSize
         addax   #desk_acc_names, da_ptr
 
         ;; Copy name
@@ -833,8 +816,7 @@ process_block:
         tay
     DO
         copy8   (dir_ptr),y, name_buf,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         ;; If a directory, prepend name with folder glyphs
         ldy     #FileEntry::file_type
@@ -843,8 +825,7 @@ process_block:
         ldy     name_buf
       DO
         copy8   name_buf,y, name_buf+3,y
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
 
         copy8   #kGlyphFolderLeft, name_buf+1
         copy8   #kGlyphFolderRight, name_buf+2
@@ -864,8 +845,7 @@ process_block:
         lda     #' '
       END_IF
         sta     (da_ptr),y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         inc     desk_acc_num
         inc     apple_menu      ; number of menu items
@@ -883,8 +863,7 @@ next_entry:
 
         ;; Any more entries in block?
         inc     entry_in_block
-        lda     entry_in_block
-    IF A = entries_per_block
+    IF lda entry_in_block : A = entries_per_block
         MLI_CALL READ, read_params
         copy16  #read_dir_buffer + 4, dir_ptr
 
@@ -946,18 +925,15 @@ end:
 
         ldy     #$01            ; $Cn01 == $20 ?
         lda     (slot_ptr),y
-        cmp     #$20
-        bne     next
+        CONTINUE_IF A <> #$20
 
         ldy     #$03            ; $Cn03 == $00 ?
         lda     (slot_ptr),y
-        cmp     #$00
-        bne     next
+        CONTINUE_IF A <> #$00
 
         ldy     #$05            ; $Cn05 == $03 ?
         lda     (slot_ptr),y
-        cmp     #$03
-        bne     next
+        CONTINUE_IF A <> #$03
 
         ;; It is a ProDOS device - prepare menu item.
         copy8   slot, main::startup_slot_table,x
@@ -977,8 +953,7 @@ end:
         tax
         inx
 
-next:   dec     slot
-    WHILE NOT_ZERO
+    WHILE dec slot : NOT_ZERO
 
         ;; Set number of menu items.
         stx     startup_menu
@@ -1019,7 +994,7 @@ slot_string_table:
         lda     main::pending_alert
     IF NOT_ZERO
         tay
-        jsr     ShowAlert
+        CALL    ShowAlertOption, X=#AlertButtonOptions::OK
     END_IF
 
         ;; And start pumping events
@@ -1054,8 +1029,7 @@ slot_string_table:
         tay
       DO
         copy8   (data_ptr),y, INVOKER_PREFIX,y
-        dey
-      WHILE POS
+      WHILE dey : POS
 
         jsr     PushPointers
 
@@ -1064,8 +1038,7 @@ slot_string_table:
       DO
         lda     INVOKER_PREFIX+1,x
         BREAK_IF A = #'/'       ; look for next '/'
-        inx
-      WHILE X <> INVOKER_PREFIX
+      WHILE inx : X <> INVOKER_PREFIX
 
         dex
         stx     INVOKER_PREFIX+1 ; overwrite leading '/' with length
@@ -1082,18 +1055,14 @@ slot_string_table:
         ldx     #.sizeof(MGTK::Point)-1
       DO
         copy8   (data_ptr),y, new_window_viewloc,x
-        dey
-        dex
-      WHILE POS
+      WHILE dey : dex : POS
 
         ;; Copy bounds to `new_window_maprect`
         ldy     #DeskTopFileItem::maprect+.sizeof(MGTK::Rect)-1
         ldx     #.sizeof(MGTK::Rect)-1
       DO
         copy8   (data_ptr),y, new_window_maprect,x
-        dey
-        dex
-      WHILE POS
+      WHILE dey : dex : POS
 
         lda     #$80
         sta     main::copy_new_window_bounds_flag

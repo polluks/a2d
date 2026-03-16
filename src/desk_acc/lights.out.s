@@ -57,6 +57,7 @@ kDATop          = (kScreenHeight - kMenuBarHeight - kDAHeight)/2 + kMenuBarHeigh
         .repeat kCols, xx
 
         DEFINE_BUTTON .ident(.sprintf("button_%d_%d", xx, yy)), kDAWindowId,,, kHPadding + kLightWidth * xx, kVPadding + kLightHeight * yy
+        .refto .ident(.sprintf("button_%d_%d", xx, yy))
 
         .endrepeat
         .endrepeat
@@ -193,8 +194,7 @@ pensize_frame:  .byte   kBorderDX, kBorderDY
         cmp     #CHAR_ESCAPE
         beq     DoQuit
 
-        bit     scrambled_flag
-    IF NC
+    IF bit scrambled_flag : NC
         jmp     Scramble
     END_IF
 
@@ -217,13 +217,12 @@ pensize_frame:  .byte   kBorderDX, kBorderDY
 .proc DoDrag
         copy8   #kDAWindowId, dragwindow_params::window_id
         MGTK_CALL MGTK::DragWindow, dragwindow_params
-        bit     dragwindow_params::moved
-    IF NS
+    IF bit dragwindow_params::moved : NS
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
         jsr     DrawWindow
     END_IF
 
-ret:    rts
+        rts
 .endproc ; DoDrag
 
 ;;; ============================================================
@@ -239,8 +238,7 @@ ret:    rts
 ;;; ============================================================
 
 .proc DoClick
-        bit     scrambled_flag
-    IF NC
+    IF bit scrambled_flag : NC
         jmp     Scramble
     END_IF
 
@@ -263,8 +261,7 @@ ret:    rts
         add16_8 rect_ptr, #.sizeof(BTK::ButtonRecord)
         pla                     ; A = index
         tax
-        inx
-    WHILE X <> #kLights
+    WHILE inx : X <> #kLights
 
         rts
 .endproc ; DoClick
@@ -325,8 +322,7 @@ ret:    rts
         lda     (rec_ptr),y
         bmi     ret             ; light on, so no
         add16_8 rec_ptr, #.sizeof(BTK::ButtonRecord)
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         ;; Yes, victory!
         ldx     #4
@@ -337,8 +333,7 @@ ret:    rts
         jsr     InvertWindow
         pla
         tax
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         CLEAR_BIT7_FLAG scrambled_flag
 
@@ -403,8 +398,7 @@ ret:    rts
         copy16  #button_0_0 - .sizeof(button_0_0), ptr
     DO
         add16_8 ptr, #.sizeof(button_0_0)
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         pla                     ; A = index
         rts
@@ -436,8 +430,7 @@ ret:    rts
         add16_8 rec_ptr, #.sizeof(button_0_0)
         pla                     ; A = index
         tax
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         MGTK_CALL MGTK::ShowCursor
         rts
@@ -502,8 +495,7 @@ ret:    rts
 
         pla
         tax
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         SET_BIT7_FLAG scrambled_flag
 

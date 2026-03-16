@@ -31,7 +31,7 @@ test.Step(
     local current = s6d1.filename
     s6d1:unload()
     a2d.Drag(src_x, src_y, dst_x, dst_y, {oa_drop=true})
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the disk: WITH%.FILES"})
     s6d1:load(current)
     a2d.DialogCancel()
 
@@ -60,7 +60,7 @@ test.Step(
     local current = s6d1.filename
     s6d1:unload()
     a2d.OADelete()
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the disk: WITH%.FILES"})
     s6d1:load(current)
     a2d.DialogCancel()
 
@@ -138,14 +138,14 @@ test.Variants(
     end)
 
     if what == "delete" and when == "after" then
-      a2dtest.WaitForAlert()
+      a2dtest.WaitForAlert({match="Are you sure"})
       a2d.DialogOK({no_wait=true})
     end
 
     if when == "during" then
       -- abort during enumeration
       emu.wait(0.25)
-      test.Snap("verify enumerating")
+      test.ExpectNotMatch(a2dtest.OCRScreen(), "Files remaining:", "should be enumerating")
       apple2.EscapeKey()
     else
       -- abort after enumeration
@@ -154,7 +154,7 @@ test.Variants(
       else
         emu.wait(2)
       end
-      test.Snap("verify performing action")
+      test.ExpectMatch(a2dtest.OCRScreen(), "Files remaining:", "should be performing action")
       apple2.EscapeKey()
     end
 

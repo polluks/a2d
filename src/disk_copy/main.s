@@ -67,8 +67,7 @@ volume_bitmap_blocks:   .byte   0
         ldy     #3      ; ptr is off by 1
     DO
         copy8   (params_src),y, params-1,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         ;; Bank and call
         sta     ALTZPOFF
@@ -124,17 +123,23 @@ params:  .res    3
 
 ;;; ============================================================
 
+;;; Input: `auxlc::dest_drive_index` is target in `auxlc::drive_unitnum_table`
 .proc FormatDevice
+        sta     ALTZPOFF
+        jsr     format
+        sta     ALTZPON
+        rts
+
+format:
         ldx     auxlc::dest_drive_index
         lda     auxlc::drive_unitnum_table,x
         sta     unit_number
-        jsr     IsDiskII
-    IF NE
+        jsr     IsDiskII        ; returns Z=1 if yes
+    IF ZC
         ;; Get driver address
         CALL    DeviceDriverAddress, A=unit_number
         stax    $06
 
-        ;; TODO: Is this safe with `ALTZPON` ???
         lda     #DRIVER_COMMAND_FORMAT
         sta     DRIVER_COMMAND
         lda     unit_number
@@ -247,11 +252,9 @@ fail:   RETURN  A=#auxlc::kSourceDiskFormatOther
     DO
       DO
         sta     (ptr),y
-        iny
-      WHILE NOT ZERO
+      WHILE iny : NOT ZERO
         inc     ptr+1
-        dex
-    WHILE NOT ZERO
+    WHILE dex : NOT ZERO
 
         ;; Now mark block-pages used in memory bitmap
         page  := $06
@@ -263,8 +266,7 @@ fail:   RETURN  A=#auxlc::kSourceDiskFormatOther
         CALL    MarkUsedInMemoryBitmap, A=page
         inc     page
         inc     page
-        dec     count
-    WHILE NOT ZERO
+    WHILE dec count : NOT ZERO
         rts
 .endscope
 
@@ -291,8 +293,7 @@ fail:   RETURN  A=#auxlc::kSourceDiskFormatOther
 
         inc     block_params::block_num
         add16   block_params::data_buffer, #$200, block_params::data_buffer
-        dec     blocks
-    WHILE NOT ZERO
+    WHILE dec blocks : NOT ZERO
         rts
 .endproc ; QuickCopy
 .endproc ; ReadVolumeBitmap
@@ -385,8 +386,7 @@ fail:   RETURN  A=#auxlc::kSourceDiskFormatOther
         CALL    _ReadOrWriteBlock, AX=auxlc::block_num
 
         ;; Update displayed counts
-        bit     write_flag
-       IF NC
+       IF bit write_flag : NC
         jsr     auxlc::IncAndDrawBlocksRead
        ELSE
         jsr     auxlc::IncAndDrawBlocksWritten
@@ -422,8 +422,7 @@ fail:   RETURN  A=#auxlc::kSourceDiskFormatOther
         ;; read/write block directly to/from main mem buffer
         ;; $00-$0F = 0/$0000 - 0/$FFFF
 
-        bit     write_flag
-    IF NC
+    IF bit write_flag : NC
         jsr     ReadBlockToMain
         bmi     error
         rts
@@ -446,8 +445,7 @@ need_move:
         ;; read/write block to/from aux lcbank1
         ;; $1D-$1F = 1/$D000 - 1/$FFFF
 
-        bit     write_flag
-    IF NC
+    IF bit write_flag : NC
         jsr     ReadBlockToLCBank1
         bmi     error
         rts
@@ -461,8 +459,7 @@ need_move:
         ;; read/write block to/from aux
         ;; $10-$1C = 1/$0000 - 1/$CFFF
 use_auxmem:
-        bit     write_flag      ; 16-28
-    IF NC
+    IF bit write_flag : NC      ; 16-28
         jsr     auxlc::ReadBlockToAuxmem
         bmi     error
         rts
@@ -476,8 +473,7 @@ use_auxmem:
         ;; read/write block to/from aux lcbank2
         ;; $20+ = 1b/$D000 - 1b/$DFFF
 use_lcbank2:
-        bit     write_flag
-    IF NC
+    IF bit write_flag : NC
         jsr     ReadBlockToLCBank2
         bmi     error
         rts
@@ -686,8 +682,7 @@ bit_shift_table:
         CALL    _MarkFreeInMemoryBitmap, A=page
         inc     page
         inc     page
-        dec     count
-    WHILE NOT ZERO
+    WHILE dec count : NOT ZERO
         rts
 
 ;;; Input: A = high byte of first page of memory block (e.g. $40 for block at $4000...$401F)
@@ -825,8 +820,7 @@ done:   rts
         sta     (ptr1),y
         lda     default_block_buffer+$100,y
         sta     (ptr2),y
-        iny
-    WHILE NOT_ZERO
+    WHILE iny : NOT_ZERO
         rts
 .endproc ; CopyFromBlockBuffer
 
@@ -896,8 +890,7 @@ done:   rts
         sta     default_block_buffer,y
         lda     (ptr2),y
         sta     default_block_buffer+$100,y
-        iny
-    WHILE NOT_ZERO
+    WHILE iny : NOT_ZERO
         rts
 .endproc ; CopyToBlockBuffer
 

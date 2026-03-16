@@ -123,16 +123,20 @@ a2d.RemoveClockDriverAndReboot()
   dates in the window are shown with "Today". Open Date and Time.
   Click OK without changing anything. Verify that the entire desktop
   does not repaint
+
+  NOTE: Requires that the last git commit date matches the date the
+  files were actually built.
 ]]
 test.Step(
   "Fresh disk image",
   function()
     a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.CONTROL_PANELS)
     a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
+    test.ExpectNotMatch(a2dtest.OCRFrontWindowContent(), "Today", "dates should not say Today")
     a2d.SelectAndOpen("DATE.AND.TIME")
     test.Snap("verify dialog date matches packaged file dates")
     a2dtest.ExpectFullRepaint(a2d.DialogOK)
-    test.Snap("verify dates now Today")
+    test.ExpectMatch(a2dtest.OCRFrontWindowContent(), "Today", "dates should now say Today")
     a2d.SelectAndOpen("DATE.AND.TIME")
     a2dtest.ExpectMinimalRepaint(a2d.DialogOK)
     a2d.Reboot()
@@ -197,12 +201,12 @@ test.Step(
     apple2.TabKey() -- to hour
     apple2.TabKey() -- to min
     apple2.TabKey() -- to period
-    local ocr = a2dtest.OCRScreen({invert=true})
+    local ocr = a2dtest.OCRFrontWindowContent({invert=true})
     test.Expect(ocr:find("AM") or ocr:find("PM"), "period field should be enabled")
 
     apple2.UpArrowKey()
     emu.wait(1)
-    local ocr2 = a2dtest.OCRScreen({invert=true})
+    local ocr2 = a2dtest.OCRFrontWindowContent({invert=true})
     test.Expect(
       (ocr:find("AM") and ocr2:find("PM")) or
       (ocr:find("PM") and ocr2:find("PM")),
@@ -213,7 +217,7 @@ test.Step(
     for i = 1, 24 do
       apple2.UpArrowKey()
       local expect = ((i - 1) % 12) + 1
-      test.Expect(a2dtest.OCRScreen({invert=true}):find(tonumber(expect)),
+      test.ExpectMatch(a2dtest.OCRFrontWindowContent({invert=true}), tostring(expect),
                   "should be 12 hour cycle")
     end
     a2d.DialogOK()
@@ -240,7 +244,7 @@ test.Step(
     apple2.TabKey() -- to min
     apple2.TabKey() -- to back to day
 
-    local ocr = a2dtest.OCRScreen({invert=true})
+    local ocr = a2dtest.OCRFrontWindowContent({invert=true})
     test.Expect(not ocr:find("AM") and not ocr:find("PM"), "period field should be disabled")
 
     apple2.TabKey() -- to month
@@ -248,7 +252,7 @@ test.Step(
     apple2.TabKey() -- to hour
     for i = 1, 24 do
       apple2.UpArrowKey()
-      test.Expect(a2dtest.OCRScreen({invert=true}):find(string.format("%02d", i % 24)),
+      test.ExpectMatch(a2dtest.OCRFrontWindowContent({invert=true}), string.format("%02d", i % 24),
                   "should be 24 hour cycle")
     end
     a2d.DialogOK()
@@ -333,7 +337,7 @@ local month_x = day_x + 45
 local year_x = month_x + 45
 local hour_x = year_x + 45
 local minute_x = hour_x + 40
-local period_x = minute_x + 30
+local period_x = minute_x + 20
 
 --[[
   Launch DeskTop. Run the Date and Time DA. Click on the up/down
@@ -473,7 +477,7 @@ test.Step(
     a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
     a2d.GrowWindowBy(250, 0)
     a2d.MoveWindowBy(0, 100)
-    test.Snap("verify date is shown in full")
+    test.ExpectMatch(a2dtest.OCRScreen(), "September 13, 1999", "date should be shown in full")
 
     -- Use Date & Time to set date
     a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.CONTROL_PANELS)
@@ -486,5 +490,5 @@ test.Step(
     end)
     apple2.UpArrowKey()
     a2dtest.ExpectFullRepaint(a2d.DialogOK)
-    test.Snap("verify bottom date shows Today")
+    test.ExpectMatch(a2dtest.OCRScreen(), "Today", "bottom date should show Today")
 end)

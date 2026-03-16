@@ -23,10 +23,11 @@
 
 ;;; ============================================================
 
-kDayDX = 35
-kDayDY = 13
 
 kDAWindowId     = $80
+
+kDayDX          = 35
+kDayDY          = 13
 kDAWidth        = kDayDX * 7
 kDAHeight       = kDayDY * 8 - 2
 kDALeft         = (kScreenWidth - kDAWidth)/2
@@ -158,20 +159,25 @@ grid_lines:
 grid_pen:
         .byte   2, 1
 
-        kArrowDX = 16
-        kArrowDY = 10
-        DEFINE_BUTTON left_button, kDAWindowId, kGlyphLeftArrow,, 40, 2, kArrowDX, kArrowDY
-        DEFINE_BUTTON right_button, kDAWindowId, kGlyphRightArrow,, kDAWidth - kArrowDX - 40, 2, kArrowDX, kArrowDY
+        kMarginY = 2
 
-        DEFINE_RECT rect_month_year, kArrowDX+44, 0, kDAWidth-kArrowDX-44, 11
+        kArrowX = 40
+        kArrowY = kMarginY
+        kArrowDX = 17
+        kArrowDY = 11
+        DEFINE_BUTTON left_button, kDAWindowId, kGlyphLeftArrow,, kArrowX, kArrowY, kArrowDX, kArrowDY
+        DEFINE_BUTTON right_button, kDAWindowId, kGlyphRightArrow,, kDAWidth - kArrowX - kArrowDX + 1, kArrowY, kArrowDX, kArrowDY
 
-        DEFINE_POINT pos_month_year, SELF_MODIFIED, 11
+        kGap = 3
+        DEFINE_RECT rect_month_year, kArrowX + kArrowDX + kGap, 0, kDAWidth - kArrowX - kArrowDX - kGap, kSystemFontHeight + kMarginY
+
+        DEFINE_POINT pos_month_year, SELF_MODIFIED, kSystemFontHeight + kMarginY
 str_space:
         PASCAL_STRING " "
 str_year:
         PASCAL_STRING "0000"
 
-        DEFINE_POINT date_base, 12, kGridYPos + 11
+        DEFINE_POINT date_base, 12, kGridYPos + kSystemFontHeight + 2
         DEFINE_POINT date_pos, 0, 0
 
 str_date:
@@ -380,9 +386,8 @@ fin:    jsr     UpdateWindow
 .proc HandleDrag
         copy8   #kDAWindowId, dragwindow_params::window_id
         MGTK_CALL MGTK::DragWindow, dragwindow_params
-common:
-        bit     dragwindow_params::moved
-    IF NS
+
+    IF bit dragwindow_params::moved : NS
         ;; Draw DeskTop's windows and icons.
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
 
@@ -414,8 +419,6 @@ common:
 
 pencopy:        .byte   MGTK::pencopy
 notpencopy:     .byte   MGTK::notpencopy
-notpenXOR:      .byte   MGTK::notpenXOR
-
 
 ;;; ============================================================
 
@@ -462,8 +465,7 @@ notpenXOR:      .byte   MGTK::notpenXOR
         lsr16   pos_month_year::xcoord
 
         ;; Erase background if needed
-        bit     full_flag
-    IF NC
+    IF bit full_flag : NC
         MGTK_CALL MGTK::SetPenMode, notpencopy
         MGTK_CALL MGTK::PaintRect, rect_month_year
     END_IF
@@ -478,8 +480,7 @@ notpenXOR:      .byte   MGTK::notpenXOR
         ;; --------------------------------------------------
         ;; Grid lines
 
-        bit     full_flag
-    IF NS
+    IF bit full_flag : NS
         MGTK_CALL MGTK::SetPenMode, pencopy
         MGTK_CALL MGTK::SetPenSize, grid_pen
 
@@ -509,15 +510,13 @@ notpenXOR:      .byte   MGTK::notpenXOR
         MGTK_CALL MGTK::MoveTo, SELF_MODIFIED, pt_start
         MGTK_CALL MGTK::LineTo, SELF_MODIFIED, pt_end
 
-        dec     index
-      WHILE POS
+      WHILE dec index : POS
     END_IF
 
         ;; --------------------------------------------------
         ;; Day names
 
-        bit full_flag
-    IF NS
+    IF bit full_flag : NS
         copy8   #6, index
       DO
         lda     index
@@ -539,8 +538,7 @@ notpenXOR:      .byte   MGTK::notpenXOR
         copy16  day_str_table,x, @addr
         MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
 
-        dec     index
-      WHILE POS
+      WHILE dec index : POS
     END_IF
 
         ;; --------------------------------------------------
@@ -594,8 +592,7 @@ notpenXOR:      .byte   MGTK::notpenXOR
       DO
         BREAK_IF A < #10
         sbc     #10
-        inx
-      WHILE NOT_ZERO            ; always
+      WHILE inx : NOT_ZERO      ; always
 
         ora     #'0'            ; convert to digit
         sta     str_date+2      ; units place
@@ -613,8 +610,7 @@ draw_date:
 
         ;; Next
         inc     col
-        lda     col
-      IF A = #7
+      IF lda col : A = #7
         copy8   #0, col
         inc     row
         copy16  date_base::xcoord, date_pos
@@ -628,8 +624,7 @@ draw_date:
         ;; --------------------------------------------------
         ;; Left/right arrow buttons
 
-        bit     full_flag
-    IF NS
+    IF bit full_flag : NS
         BTK_CALL BTK::Draw, left_button
         BTK_CALL BTK::Draw, right_button
     END_IF

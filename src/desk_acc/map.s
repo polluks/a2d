@@ -24,8 +24,8 @@
 ;;; ============================================================
 ;;; Resources
 
-kMapLeft = 10
-kMapTop = 5
+kMapLeft = kFrameDX*2 + kControlMarginX
+kMapTop = kFrameDY*2 + kControlMarginY
 kMapWidth = 230
 kMapHeight = 52
 
@@ -35,6 +35,7 @@ numerator:      .word   0          ; (in) populated dynamically
 denominator:    .word   kMapHeight ; (in) constant
 result:         .word   0          ; (out)
 remainder:      .word   0          ; (out)
+        REF_MULDIV_MEMBERS
 .endparams
 
 .params x_to_long
@@ -43,6 +44,7 @@ numerator:      .word   0         ; (in) populated dynamically
 denominator:    .word   kMapWidth ; (in) constant
 result:         .word   0         ; (out)
 remainder:      .word   0         ; (out)
+        REF_MULDIV_MEMBERS
 .endparams
 
 .params lat_to_y
@@ -51,6 +53,7 @@ numerator:      .word   0          ; (in) populated dynamically
 denominator:    .word   180        ; (in) constant
 result:         .word   0          ; (out)
 remainder:      .word   0          ; (out)
+        REF_MULDIV_MEMBERS
 .endparams
 
 .params long_to_x
@@ -59,30 +62,33 @@ numerator:      .word   0         ; (in) populated dynamically
 denominator:    .word   360       ; (in) constant
 result:         .word   0         ; (out)
 remainder:      .word   0         ; (out)
+        REF_MULDIV_MEMBERS
 .endparams
 
+        kFrameDX = 2
+        kFrameDY = 1
 
 pensize_normal: .byte   1, 1
-pensize_frame:  .byte   2, 1
+pensize_frame:  .byte   kFrameDX, kFrameDY
 
-        DEFINE_RECT_SZ frame_rect, kMapLeft - 4, kMapTop - 2, kMapWidth + 6, kMapHeight + 3
+        DEFINE_RECT_SZ frame_rect, kMapLeft - kFrameDX*2, kMapTop - kFrameDY*2, kMapWidth + kFrameDX*3, kMapHeight + kFrameDY*3
         DEFINE_RECT_SZ map_rect, kMapLeft, kMapTop, kMapWidth, kMapHeight
 
-kControlsLeft = 6
-kControlsRight = kDAWidth - kControlsLeft
+kControlsLeft = kControlMarginX
+kControlsRight = (kDAWidth + 1) - kControlsLeft
 
-kRow1 = kMapTop + kMapHeight + 6
+kRow1 = kMapTop + kMapHeight + 7
 kRow2 = kRow1 + kTextBoxHeight + 4
-kRow3 = kRow2 + kSystemFontHeight + 4
+kRow3 = kRow2 + kSystemFontHeight + 3
 
 kTextBoxLeft = kControlsLeft
 kTextBoxTop = kRow1
-kTextBoxWidth = kControlsRight - kButtonWidth - kControlsLeft * 2
-        DEFINE_RECT_SZ input_rect, kTextBoxLeft, kTextBoxTop, kTextBoxWidth, kTextBoxHeight
+kTextBoxWidth = kControlsRight - kButtonWidth - kControlsLeft * 2 - 1
+        DEFINE_RECT_SZ input_rect, kTextBoxLeft, kTextBoxTop, kTextBoxWidth, kTextBoxHeight - 1
         DEFINE_BUTTON find_button, kDAWindowId, res_string_button_find, kGlyphReturn, kControlsRight - kButtonWidth, kTextBoxTop
 
 kLabelLeft = kControlsLeft + kTextBoxTextHOffset
-kValueLeft = 80
+kValueLeft = 90
         DEFINE_LABEL lat, res_string_latitude, kLabelLeft, kRow2 + kSystemFontHeight
         DEFINE_POINT pos_lat, kValueLeft, kRow2 + kSystemFontHeight
         DEFINE_LABEL long, res_string_longitude, kLabelLeft, kRow3 + kSystemFontHeight
@@ -168,8 +174,9 @@ str_from_int:   PASCAL_STRING "000,000" ; filled in by IntToString
 ;;; ============================================================
 
 kDAWindowId     = $80
-kDAWidth        = kMapWidth + 19
-kDAHeight       = kMapHeight + 51
+
+kDAWidth        = kMapWidth + kFrameDX*4 + kControlMarginX*2 - 1
+kDAHeight       = kMapHeight + 54
 kDALeft         = (kScreenWidth - kDAWidth)/2
 kDATop          = (kScreenHeight - kMenuBarHeight - kDAHeight)/2 + kMenuBarHeight
 
@@ -363,8 +370,7 @@ buf_search:     .res    kBufSize, 0 ; search term
 .proc HandleDrag
         copy8   #kDAWindowId, dragwindow_params::window_id
         MGTK_CALL MGTK::DragWindow, dragwindow_params
-        bit     dragwindow_params::moved
-    IF NS
+    IF bit dragwindow_params::moved : NS
         ;; Draw DeskTop's windows and icons.
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
 
@@ -405,8 +411,7 @@ buf_search:     .res    kBufSize, 0 ; search term
         jsr     ToUpperCase
         cmp     (ptr),y
         bne     next
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
 
         ;; Match!
         ldy     #0
@@ -438,9 +443,7 @@ next:   inc     index
 :
     FOREVER
 
-
-
-fail:   JSR_TO_MAIN JUMP_TABLE_BELL
+        JSR_TO_MAIN JUMP_TABLE_BELL
 
 done:   ;; Update display
         jsr     SetPort
@@ -591,8 +594,7 @@ notpencopy:     .byte   MGTK::notpencopy
         ;; Latitude
         copy16  lat, tmp
         CLEAR_BIT7_FLAG sflag
-        bit     tmp+1
-    IF NS
+    IF bit tmp+1 : NS
         SET_BIT7_FLAG sflag
         sub16   #0, tmp, tmp
     END_IF
@@ -601,8 +603,7 @@ notpencopy:     .byte   MGTK::notpencopy
         MGTK_CALL MGTK::MoveTo, pos_lat
         MGTK_CALL MGTK::DrawString, str_from_int
         MGTK_CALL MGTK::DrawString, str_degree_suffix
-        bit     sflag
-    IF NC
+    IF bit sflag : NC
         MGTK_CALL MGTK::DrawString, str_n
     ELSE
         MGTK_CALL MGTK::DrawString, str_s
@@ -612,8 +613,7 @@ notpencopy:     .byte   MGTK::notpencopy
         ;; Longitude
         copy16  long, tmp
         CLEAR_BIT7_FLAG sflag
-        bit     tmp+1
-    IF NS
+    IF bit tmp+1 : NS
         SET_BIT7_FLAG sflag
         sub16   #0, tmp, tmp
     END_IF
@@ -622,8 +622,7 @@ notpencopy:     .byte   MGTK::notpencopy
         MGTK_CALL MGTK::MoveTo, pos_long
         MGTK_CALL MGTK::DrawString, str_from_int
         MGTK_CALL MGTK::DrawString, str_degree_suffix
-        bit     sflag
-    IF NC
+    IF bit sflag : NC
         MGTK_CALL MGTK::DrawString, str_e
     ELSE
         MGTK_CALL MGTK::DrawString, str_w

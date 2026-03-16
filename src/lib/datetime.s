@@ -27,8 +27,7 @@
         lda     hour
 
         ;; 24->12 hour clock?
-        bit     clock_24hours
-    IF NC
+    IF bit clock_24hours : NC
       IF A >= #12
         sec
         sbc     #12             ; 12...23 -> 0...11
@@ -42,8 +41,7 @@
         jsr     _Split
         pha
         txa                     ; tens (if > 0)
-        bit     clock_24hours
-    IF NC
+    IF bit clock_24hours : NC
         cmp     #0              ; if 12-hour clock && 0, skip
         beq     ones
     END_IF
@@ -172,8 +170,7 @@ month_offset_table:
         ldy     #.sizeof(ParsedDateTime)-1
     DO
         sta     (parsed_ptr),y
-        dey
-    WHILE POS
+    WHILE dey : POS
         rts
 
 not_null:

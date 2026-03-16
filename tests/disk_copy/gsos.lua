@@ -17,7 +17,7 @@ test.Step(
   function()
     a2d.CopyDisk()
 
-    test.Expect(a2dtest.OCRScreen():find("GS%.OS%.mixed"),
+    test.ExpectMatch(a2dtest.OCRScreen(), "GS%.OS%.mixed",
                 "GS/OS disk names in list should have assigned case")
 
     -- cleanup
@@ -48,15 +48,15 @@ test.Step(
     a2d.DialogOK()
 
     -- insert source
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the source disk"})
     a2d.DialogOK()
 
     -- insert destination
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the destination disk"})
     local ocr = a2dtest.OCRScreen()
-    test.Expect(ocr:find("ProDOS disk copy"),
+    test.ExpectMatch(ocr, "ProDOS disk copy",
                 "status line should say 'ProDOS disk copy'")
-    test.Expect(ocr:find("Source .* GS%.OS%.mixed"),
+    test.ExpectMatch(ocr, "Source .* GS%.OS%.mixed",
                 "volume name after Source label should have assigned case")
 
     -- cleanup
@@ -87,18 +87,15 @@ test.Step(
     a2d.DialogOK()
 
     -- insert source
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the source disk"})
     a2d.DialogOK()
 
     -- insert destination
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the destination disk"})
     a2d.DialogOK()
 
     -- confirmation
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find(
-                  "Are you sure you want to erase \"GS%.OS%.mixed\"%?"),
-                "prompt should give GS/OS name, quoted with assigned case")
+    a2dtest.WaitForAlert({match="Are you sure you want to erase \"GS%.OS%.mixed\"%?"})
 
     -- cleanup
     a2d.DialogCancel()

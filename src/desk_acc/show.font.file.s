@@ -130,12 +130,6 @@ port:           .addr   grafport
 
 grafport:       .tag    MGTK::GrafPort
 
-.params drawtext_params_char
-        .addr   char_label
-        .byte   1
-.endparams
-char_label:  .byte   0
-
 ;;; ============================================================
 
 .proc Init
@@ -253,8 +247,6 @@ line_addrs:
 
 
 .proc DrawWindow
-        ptr := $06
-
 PARAM_BLOCK params, $06
 data    .addr
 width   .word
@@ -287,8 +279,7 @@ END_PARAM_BLOCK
         MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
 
         inc     index
-        lda     index
-    WHILE A <> #kLineCount
+    WHILE lda index : A <> #kLineCount
 
         MGTK_CALL MGTK::ShowCursor
         rts
@@ -391,8 +382,7 @@ filename:       .res    16
     DO
         lda     INVOKE_PATH,y       ; find last '/'
         BREAK_IF A = #'/'
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT ZERO
 
         ldx     #0
     DO
@@ -432,11 +422,9 @@ expected_size:
         inx                     ; lastchar + 1
     DO
         add16_8 expected_size, font_buffer + MGTK::Font::height
-        dex
-    WHILE NOT_ZERO              ; = (lastchar + 1) * height
+    WHILE dex : NOT_ZERO        ; = (lastchar + 1) * height
 
-        bit     font_buffer + MGTK::Font::fonttype
-    IF NS
+    IF bit font_buffer + MGTK::Font::fonttype : NS
         asl16   expected_size   ; *= 2 if double width
     END_IF
 

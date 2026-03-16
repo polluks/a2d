@@ -78,8 +78,6 @@ prefix_path:    .res    kPathBufferSize, 0
 ;;; ============================================================
 
         ;; Early errors - show alert and return to DeskTop
-fail:   jmp     JUMP_TABLE_SHOW_ALERT
-
 start:
         ;; Get active window's path
         jsr     GetWinPath
@@ -90,8 +88,7 @@ start:
         ;; Find BASIC.SYSTEM
         jsr     CheckBasicSystem
     IF NOT_ZERO
-        lda     #kErrBasicSysNotFound
-        bne     fail
+        TAIL_CALL JUMP_TABLE_SHOW_ALERT, A=#kErrBasicSysNotFound
     END_IF
 
          ;; Restore system state: devices, /RAM, ROM/ZP banks.
@@ -149,8 +146,7 @@ quit:   MLI_CALL QUIT, quit_params
         stx     path_length
     DO
         copy8   prefix_path,x, bs_path,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         inc     bs_path
         ldx     bs_path
@@ -175,8 +171,7 @@ quit:   MLI_CALL QUIT, quit_params
         lda     bs_path,x
         cmp     #'/'
         beq     found_slash
-        dex
-      WHILE NOT_ZERO
+      WHILE dex : NOT_ZERO
 
 no_bs:  RETURN  A=#$FF          ; non-zero is failure
 
@@ -217,8 +212,7 @@ str_basic_system:
         tay
     DO
         copy8   (ptr),y, prefix_path,y
-        dey
-    WHILE POS
+    WHILE dey : POS
         RETURN  A=#0
 
 fail:   RETURN  A=#1

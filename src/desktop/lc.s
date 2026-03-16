@@ -70,8 +70,7 @@ ASSERT_EQUALS *, WriteSettingFromAux, "entry point"
         ldy     #3              ; ptr is off by 1
     DO
         copy8   (params_src),y, params-1,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         ;; Bank and call
         jsr     BankInAux
@@ -146,8 +145,7 @@ params: .res    3
         ldy     #.sizeof(MGTK::GrafPort)-1
     DO
         copy8   (port_ptr),y, desktop_grafport,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; Determine if the update's maprect is already below the header; if
         ;; not, we need to offset the maprect below the header to prevent
@@ -166,28 +164,15 @@ params: .res    3
 .endproc ; AdjustUpdatePortForEntries
 
 ;;; ============================================================
-;;; From MAIN, load AUX (A,X) into A
-;;; Assert: Main is banked in
-
-.proc AuxLoad
-        stax    op+1
-        sta     RAMRDON
-op:     lda     SELF_MODIFIED
-        sta     RAMRDOFF
-        rts
-.endproc ; AuxLoad
-
-;;; ============================================================
 ;;; From MAIN, show alert
 ;;; Assert: Main is banked in
 
 ;;; A=alert number, with default options
 .proc ShowAlert
-        ldx     #$00
-        FALL_THROUGH_TO ShowAlertOption
+        FALL_THROUGH_TO ShowAlertOption, X=#kShowAlertUseDefaultOptionsForId
 .endproc ; ShowAlert
 
-;;; A=alert number, X=custom options
+;;; A=alert number, X=`AlertButtonOptions::*`
 .proc ShowAlertOption
         jsr     BankInAux
         jsr     aux::AlertById
@@ -218,7 +203,7 @@ op:     lda     SELF_MODIFIED
 
 .proc BellFromAux
         jsr     BankInMain
-        jsr     Bell
+        jsr     ::main::Bell
         jmp     BankInAux
 .endproc ; BellFromAux
 
@@ -228,7 +213,7 @@ op:     lda     SELF_MODIFIED
 
 .proc SystemTaskFromAux
         jsr     BankInMain
-        jsr     SystemTask
+        jsr     ::main::SystemTask
         jmp     BankInAux
 .endproc ; SystemTaskFromAux
 
@@ -267,8 +252,7 @@ op:     lda     SELF_MODIFIED
     DO
         lda     $06 + 4,x
         pha
-        inx
-    WHILE NOT_ZERO
+    WHILE inx : NOT_ZERO
 
         ;; Restore return address
         hi := *+1
@@ -306,8 +290,7 @@ op:     lda     SELF_MODIFIED
     DO
         pla
         sta     $06,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         ;; Restore return address to stack
         hi := *+1
@@ -463,18 +446,18 @@ op:     lda     SELF_MODIFIED
 
         ;; Now Y = type, A,X = argument
        IF Y = #'d'              ; decimal - decimal integer
-        jsr     IntToString
+        jsr     ::main::IntToString
         TAIL_CALL _AppendString, AX=#str_from_int
        END_IF
 
        IF Y = #'n'              ; number - decimal integer with separators
-        jsr     IntToStringWithSeparators
+        jsr     ::main::IntToStringWithSeparators
         TAIL_CALL _AppendString, AX=#str_from_int
        END_IF
 
        IF Y = #'k'              ; size - in K from blocks
         jsr     PushPointers
-        jsr     ComposeSizeString
+        jsr     ::main::ComposeSizeString
         jsr     PopPointers
         TAIL_CALL _AppendString, AX=#text_buffer2
        END_IF
@@ -550,8 +533,7 @@ read_byte:
         jsr     _WriteByte      ; preserves X
         pla
         tay                     ; Y = index
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
         beq     resume          ; always
 .endproc ; _AppendString
 

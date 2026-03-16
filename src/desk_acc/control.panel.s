@@ -155,7 +155,7 @@ kFatBitHeightShift      = 2
         ;; For hit testing
         DEFINE_RECT_SZ fatbits_rect, kPatternEditX+1, kPatternEditY+1,  8 * kFatBitWidth - 1, 8 * kFatBitHeight - 1
 
-        DEFINE_BUTTON pattern_button, kDAWindowId, res_string_label_pattern, "^D", kPatternEditX-10, kPatternEditY + 36, 180
+        DEFINE_BUTTON pattern_button, kDAWindowId, res_string_label_pattern, "^D", kPatternEditX-9, kPatternEditY + 36, 181
 
 kPreviewLeft    = kPatternEditX + 79
 kPreviewTop     = kPatternEditY
@@ -390,8 +390,8 @@ caret_blink_selection:
 
         DEFINE_LABEL caret_blink1, res_string_label_ipblink1, kCaretBlinkDisplayX-4, kCaretBlinkDisplayY + 11
         DEFINE_LABEL caret_blink2, res_string_label_ipblink2, kCaretBlinkDisplayX-4, kCaretBlinkDisplayY + 21
-        DEFINE_LABEL caret_blink_slow, res_string_label_slow, kCaretBlinkDisplayX + 100, kCaretBlinkDisplayY + 34
-        DEFINE_LABEL caret_blink_fast, res_string_label_fast, kCaretBlinkDisplayX + 189, kCaretBlinkDisplayY + 34
+        DEFINE_LABEL caret_blink_slow, res_string_label_slow, kCaretBlinkDisplayX + 95, kCaretBlinkDisplayY + 34
+        DEFINE_LABEL caret_blink_fast, res_string_label_fast, kCaretBlinkDisplayX + 194, kCaretBlinkDisplayY + 34
 
         DEFINE_LABEL caret_blink_button1_shortcut, .sprintf("(%c7)", ::kGlyphOpenApple), kCaretBlinkDisplayX + 100, kCaretBlinkDisplayY + 45
         DEFINE_LABEL caret_blink_button2_shortcut, .sprintf("(%c8)", ::kGlyphOpenApple), kCaretBlinkDisplayX + 144, kCaretBlinkDisplayY + 45
@@ -583,8 +583,7 @@ shortcut_table_addr_hi:
 .proc HandleDrag
         copy8   #kDAWindowId, dragwindow_params::window_id
         MGTK_CALL MGTK::DragWindow, dragwindow_params
-        bit     dragwindow_params::moved
-    IF NS
+    IF bit dragwindow_params::moved : NS
         ;; Draw DeskTop's windows and icons.
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
 
@@ -708,8 +707,7 @@ shortcut_table_addr_hi:
         ldy     #7
     DO
         copy8   (ptr),y, pattern,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         MGTK_CALL MGTK::GetWinPort, getwinport_params
     IF ZERO                     ; not obscured
@@ -744,21 +742,20 @@ shortcut_table_addr_hi:
         lda     #0
         SKIP_NEXT_2_BYTE_INSTRUCTION
 :       lda     #$FF
-@store: sta     flag
+        sta     flag
 
         ;; Toggle pattern bit
     REPEAT
         ldx     screentowindow_params::windowx
         ldy     screentowindow_params::windowy
         lda     pattern,y
-        bit     flag
-      IF NS
+      IF bit flag : NS
         ora     mask1,x         ; set bit
       ELSE
         and     mask2,x         ; clear bit
       END_IF
-        cmp     pattern,y       ; did it change?
-      IF NE
+
+      IF A <> pattern,y         ; did it change?
         sta     pattern,y
 
         CALL    DrawBit, X=screentowindow_params::windowx, Y=screentowindow_params::windowy, A=flag
@@ -778,7 +775,7 @@ shortcut_table_addr_hi:
 
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
         MGTK_CALL MGTK::InRect, fatbits_rect
-        CONTINUE_IF ZERO
+        REDO_IF ZERO
 
         jsr     MapCoords
         ldx     screentowindow_params::windowx
@@ -786,7 +783,7 @@ shortcut_table_addr_hi:
         BREAK_IF X <> lastx
       WHILE Y = lasty
 
-moved:  stx     lastx
+        stx     lastx
         sty     lasty
     FOREVER
 
@@ -807,14 +804,12 @@ lasty:  .byte   0
         ldy     #kFatBitWidthShift
     DO
         lsr16   screentowindow_params::windowx
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         ldy     #kFatBitHeightShift
     DO
         lsr16   screentowindow_params::windowy
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         rts
 .endproc ; MapCoords
@@ -894,8 +889,7 @@ dblclick_speed: .word   0
         lda     ZIDBYTE
         bit     LCBANK1
         bit     LCBANK1
-        cmp     #0              ; ZIDBYTE=0 for IIc / IIc+
-    IF EQ
+    IF A = #0                   ; ZIDBYTE=0 for IIc / IIc+
         inc     scalemouse_params::x_exponent
         inc     scalemouse_params::y_exponent
     END_IF
@@ -926,8 +920,7 @@ dblclick_speed: .word   0
         ldy     #.sizeof(MGTK::Pattern)-1
     DO
         copy8   (ptr),y, pattern,y
-        dey
-    WHILE POS
+    WHILE dey : POS
         rts
 .endproc ; InitPattern
 
@@ -937,8 +930,7 @@ dblclick_speed: .word   0
         ldx     #DeskTopSettings::pattern + .sizeof(MGTK::Pattern)-1
     DO
         CALL    WriteSetting, A=pattern - DeskTopSettings::pattern,x
-        dex
-    WHILE X <> #AS_BYTE(DeskTopSettings::pattern-1)
+    WHILE dex : X <> #AS_BYTE(DeskTopSettings::pattern-1)
 
         jsr     MarkDirty
 
@@ -1020,14 +1012,12 @@ notpencopy:     .byte   MGTK::notpencopy
         addr := *+1
         lda     SELF_MODIFIED,y
         sta     darrow_params::viewloc,y
-        dey
-      WHILE POS
+      WHILE dey : POS
 
         MGTK_CALL MGTK::PaintBits, darrow_params
         add16_8 addr, #.sizeof(MGTK::Point)
         inc     arrow_num
-        lda     arrow_num
-    WHILE A <> #kNumArrows
+    WHILE lda arrow_num : A <> #kNumArrows
 .endscope
 
         BTK_CALL BTK::RadioDraw, dblclick_button1
@@ -1096,7 +1086,7 @@ notpencopy:     .byte   MGTK::notpencopy
     END_IF
 
 
-done:   MGTK_CALL MGTK::ShowCursor
+        MGTK_CALL MGTK::ShowCursor
         rts
 
 arrow_num:
@@ -1201,10 +1191,8 @@ arrow_num:
         lda     rotated_pattern,x
         cmp     #$80
         rol     rotated_pattern,x
-        dex
-      WHILE POS
-        dey
-    WHILE POS
+      WHILE dex : POS
+    WHILE dey : POS
 
         ;; Draw it
 
@@ -1247,7 +1235,6 @@ xloop:  ror     row
         SKIP_NEXT_2_BYTE_INSTRUCTION
         .assert MGTK::notpencopy <> $C0, error, "Bad BIT skip"
 zero:   lda     #MGTK::notpencopy
-store:
     IF A <> mode
         sta     mode
         MGTK_CALL MGTK::SetPenMode, mode
@@ -1257,8 +1244,7 @@ store:
 
         ;; next x
         inc     xpos
-        lda     xpos
-    IF A <> #8
+    IF lda xpos : A <> #8
         add16_8 bitrect::x1, #kFatBitWidth
         add16_8 bitrect::x2, #kFatBitWidth
         jmp     xloop
@@ -1266,8 +1252,7 @@ store:
 
         ;; next y
         inc     ypos
-        lda     ypos
-    IF A <> #8
+    IF lda ypos : A <> #8
         add16_8 bitrect::y1, #kFatBitHeight
         add16_8 bitrect::y2, #kFatBitHeight
         jmp     yloop
@@ -1298,14 +1283,12 @@ mode:   .byte   0
         ldx     #kFatBitWidthShift
     DO
         asl16   bitrect::x1
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         ldx     #kFatBitHeightShift
     DO
         asl16   bitrect::y1
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         add16   bitrect::x1, fatbits_rect::x1, bitrect::x1
         add16_8 bitrect::x1, #kFatBitWidth-1, bitrect::x2
@@ -1313,8 +1296,7 @@ mode:   .byte   0
         add16_8 bitrect::y1, #kFatBitHeight-1, bitrect::y2
 
         lda     #MGTK::pencopy
-        bit     mode
-    IF NC
+    IF bit mode : NC
         lda     #MGTK::notpencopy
     END_IF
         sta     mode
@@ -1661,13 +1643,15 @@ done:   rts
         params := $06
         str := params
         width := params+2
+        dx := params
+        dy := params+2
 
         stax    str
         stax    @addr
         MGTK_CALL MGTK::StringWidth, params
-        lsr16   width
-        sub16   #0, width, params+MGTK::Point::xcoord
-        copy16  #0, params+MGTK::Point::ycoord
+        lsr16   width           ; /= 2
+        sub16   #0, width, dx
+        copy16  #0, dy
         MGTK_CALL MGTK::Move, params
         MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts

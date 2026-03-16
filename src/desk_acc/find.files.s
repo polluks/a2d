@@ -61,16 +61,16 @@
 
 kDAWindowId     = $80
 kDAWidth        = 465
-kDAHeight       = kResultsHeight + 40
+kDAHeight       = kModalDialogInsetY + (kResultsHeight+2) + kControlMarginY + kTextBoxHeight + kModalDialogInsetY
 kDALeft         = (kScreenWidth - kDAWidth)/2
 kDATop          = (kScreenHeight - kMenuBarHeight - kDAHeight)/2 + kMenuBarHeight
 
 kResultsWindowId        = kDAWindowId+1
-kResultsWidth           = kDAWidth - 60
-kResultsWidthSB         = kResultsWidth + 20
+kScrollBarWidth         = 20
+kResultsWidth           = kDAWidth - (kScrollBarWidth + 2) - kModalDialogInsetX*2
 kResultsHeight          = kResultsRows * kListItemHeight - 1
-kResultsLeft            = kDALeft + (kDAWidth - kResultsWidthSB) / 2
-kResultsTop             = kDATop + 30
+kResultsLeft            = kDALeft + kModalDialogInsetX + 1
+kResultsTop             = kDATop + kModalDialogInsetY + kTextBoxHeight + kControlMarginY + 1
 
 kResultsRows    = 11                ; line height is 10
 
@@ -128,8 +128,8 @@ grafport_win:   .tag    MGTK::GrafPort
 
         DEFINE_RECT_FRAME frame_rect, kDAWidth, kDAHeight
 
-        kControlsTop = 10
-        kFindLeft = 20
+        kControlsTop = 9
+        kFindLeft = kModalDialogInsetX
         DEFINE_LABEL find, res_string_label_find, kFindLeft, 20
 
 .params measure_find_label_params
@@ -137,15 +137,16 @@ str:    .addr   find_label_str
 width:  .word   0
 .endparams
 
+        kControlsGap = kControlMarginX + 1
+        kMarginX = kModalDialogInsetX
+
         ;; Left edges are adjusted dynamically based on label width
-        DEFINE_RECT input_rect, kFindLeft + kLabelHOffset, kControlsTop, kDAWidth-250, kControlsTop + kTextBoxHeight
+        DEFINE_RECT input_rect, kFindLeft + kLabelHOffset, kControlsTop, kDAWidth - kMarginX - kButtonWidth*2 - kControlsGap*2 + 2, kControlsTop + kTextBoxHeight - 1
 
-        DEFINE_BUTTON search_button, kDAWindowId, res_string_button_search, kGlyphReturn, kDAWidth-235, kControlsTop
+        DEFINE_BUTTON search_button, kDAWindowId, res_string_button_search, kGlyphReturn, kDAWidth - kMarginX - kButtonWidth*2 - kControlsGap + 2, kControlsTop
 
-        DEFINE_BUTTON cancel_button, kDAWindowId, res_string_button_cancel, res_string_button_cancel_shortcut, kDAWidth-120, kControlsTop
+        DEFINE_BUTTON cancel_button, kDAWindowId, res_string_button_cancel, res_string_button_cancel_shortcut, kDAWidth - kMarginX - kButtonWidth + 1, kControlsTop
 
-penXOR:         .byte   MGTK::penXOR
-pencopy:        .byte   MGTK::pencopy
 pensize_normal: .byte   1, 1
 pensize_frame:  .byte   kBorderDX, kBorderDY
 
@@ -368,8 +369,7 @@ path_length:
         LBTK_CALL LBTK::Init, lb_params
         jsr     PrepDrawIncrementalResults
 
-        lda     path_length
-    IF A = #1
+    IF lda path_length : A = #1
         JSR_TO_MAIN ::main::InitVolumes
         JSR_TO_MAIN ::main::NextVolume
         bcs     finish
@@ -381,14 +381,12 @@ search:
         ;; and copy to main
         ldy     buf_search
         copy8   #0, pattern,y   ; null-terminate
-        cpy     #0
-    IF NE
+    IF Y <> #0
       DO
         lda     buf_search,y    ; copy characters
         jsr     ToUpperCase
         sta     pattern-1,y
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
     END_IF
 
         copy16  #pattern, STARTLO
@@ -517,7 +515,7 @@ done:   jmp     InputLoop
         BTK_CALL BTK::Draw, cancel_button
 
         MGTK_CALL MGTK::ShowCursor
-done:   rts
+        rts
 .endproc ; DrawWindow
 
 ;;; ============================================================
@@ -586,8 +584,7 @@ NoOp:   rts
         ldx     #6              ; offset = num * 64
     DO
         asl16   offset
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         add16_8 offset, num ; offset += num, so * 65
         add16   offset, #::main::entries_buffer, offset
@@ -642,8 +639,7 @@ entry:
         tay
     DO
         copy8   (ptr),y, searchPath,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; Append '/' needed by algorithm
         ldy     searchPath
@@ -679,8 +675,7 @@ continue:
         tay
       DO
         copy8   ($06),y, INVOKER_PREFIX,y
-        dey
-      WHILE POS
+      WHILE dey : POS
 
         ;; Inject JT call to stack
         pla
@@ -712,8 +707,7 @@ continue:
         ldx     #6              ; offset = num * 64
     DO
         asl16   offset
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
         add16_8 offset, num ; offset += num, so * 65
         add16   offset, #entries_buffer, offset
 
@@ -821,8 +815,7 @@ num_entries:
         ldy     searchPath      ; prime the search path
     DO
         copy8   searchPath,y, nameBuffer,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         lda     #0              ; reset recursion/results state
         sta     Depth
@@ -1008,8 +1001,7 @@ OpenDone:
         tay
     DO
         copy8   (dirName),y, (ptr),y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         lda     (dirName),y     ; Y is 0...
         tax
@@ -1285,15 +1277,13 @@ string:         .res    16      ; 15 + null terminator
         and     #NAME_LENGTH_MASK
         tay
         copy8   #0, string,y    ; null-terminate
-        cpy     #0
-    IF NE
+    IF Y <> #0
       DO
         lda     (entPtr),y      ; copy characters
         jsr     ToUpperCase
 
         sta     string-1,y
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
     END_IF
 .endscope
 
@@ -1427,8 +1417,7 @@ repeat: ldx     devidx
         ldx     #0
     DO
         copy8   on_line_buffer+1,x, searchPath+2,x
-        inx
-    WHILE X <> on_line_buffer
+    WHILE inx : X <> on_line_buffer
 
         copy8   #'/', searchPath+2,x ; add trailing '/'
         inx

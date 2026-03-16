@@ -67,7 +67,7 @@ dialog_result:
 
 kDAWindowId     = $80
 kDAWidth        = 375
-kDAHeight       = 100
+kDAHeight       = kButtonTop*2 + kNumButtons * kButtonSpacing - 3
 kDALeft         = (kScreenWidth - kDAWidth)/2
 kDATop          = (kScreenHeight - kMenuBarHeight - kDAHeight)/2 + kMenuBarHeight
 
@@ -161,7 +161,7 @@ grafport:       .tag    MGTK::GrafPort
 
 kNumButtons     = 6
 kButtonLeft     = 10
-kButtonTop      = 10
+kButtonTop      = 5
 kButtonSpacing  = kSystemFontHeight + 2
 
         DEFINE_BUTTON ramcard_button, kDAWindowId, res_string_label_ramcard, res_string_shortcut_apple_1, kButtonLeft, kButtonTop + kButtonSpacing * 0
@@ -174,7 +174,7 @@ kButtonSpacing  = kSystemFontHeight + 2
 
         DEFINE_BUTTON invisible_button, kDAWindowId, res_string_label_invisible, res_string_shortcut_apple_5, kButtonLeft, kButtonTop + kButtonSpacing * 4
 
-        DEFINE_BUTTON check525_button, kDAWindowId, "Check 5.25\" drives on startup", res_string_shortcut_apple_6, kButtonLeft, kButtonTop + kButtonSpacing * 5
+        DEFINE_BUTTON check525_button, kDAWindowId, res_string_label_check525, res_string_shortcut_apple_6, kButtonLeft, kButtonTop + kButtonSpacing * 5
 
 button_button_table:
         .addr   ramcard_button, selector_button, shortcuts_button, casebits_button, invisible_button, check525_button
@@ -282,9 +282,8 @@ button_eor_table:
         copy16  event_params::xcoord, dragwindow_params::dragx
         copy16  event_params::ycoord, dragwindow_params::dragy
         MGTK_CALL MGTK::DragWindow, dragwindow_params
-common:
-        bit     dragwindow_params::moved
-    IF NS
+
+    IF bit dragwindow_params::moved : NS
         ;; Draw DeskTop's windows and icons.
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
 
@@ -321,8 +320,7 @@ common:
         TAIL_CALL ToggleButton, A=index
       END_IF
 
-        dec     index
-    WHILE POS
+    WHILE dec index : POS
 
         ;; ----------------------------------------
 
@@ -361,8 +359,7 @@ common:
 
         BTK_CALL BTK::CheckboxDraw, SELF_MODIFIED, params_addr
 
-        dec     index
-    WHILE POS
+    WHILE dec index : POS
 
         ;; --------------------------------------------------
 

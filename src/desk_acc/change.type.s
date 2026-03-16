@@ -76,11 +76,11 @@ pensize_frame:  .byte   kBorderDX, kBorderDY
 ;;; ============================================================
 ;;; Buttons
 
-        kControlMarginX = 16
+        kMarginX = kModalDialogInsetX
 
-        kOKButtonLeft = kDialogWidth - kButtonWidth - kControlMarginX
-        kCancelButtonLeft = kControlMarginX
-        kButtonTop = kDialogHeight - kButtonHeight - 7
+        kOKButtonLeft = (kDialogWidth + 1) - kButtonWidth - kMarginX
+        kCancelButtonLeft = kMarginX
+        kButtonTop = (kDialogHeight + 1) - kModalDialogInsetY - kButtonHeight
 
         DEFINE_BUTTON ok_button, kDAWindowId, res_string_button_ok, kGlyphReturn, kOKButtonLeft, kButtonTop
         DEFINE_BUTTON cancel_button, kDAWindowId, res_string_button_cancel, res_string_button_cancel_shortcut, kCancelButtonLeft, kButtonTop
@@ -98,16 +98,16 @@ str_auxtype:
 
         kTextBoxLeft = 145
         kTextBoxWidth = 40
-        kTypeY = 18
-        kAuxtypeY = 35
+        kTypeY = 15
+        kAuxtypeY = 32
 
         DEFINE_LINE_EDIT type_line_edit_rec, kDAWindowId, str_type, kTextBoxLeft, kTypeY, kTextBoxWidth, 2
         DEFINE_LINE_EDIT_PARAMS type_le_params, type_line_edit_rec
-        DEFINE_RECT_SZ type_rect, kTextBoxLeft, kTypeY, kTextBoxWidth, kTextBoxHeight
+        DEFINE_RECT_SZ type_rect, kTextBoxLeft, kTypeY, kTextBoxWidth, kTextBoxHeight-1
 
         DEFINE_LINE_EDIT auxtype_line_edit_rec, kDAWindowId, str_auxtype, kTextBoxLeft, kAuxtypeY, kTextBoxWidth, 4
         DEFINE_LINE_EDIT_PARAMS auxtype_le_params, auxtype_line_edit_rec
-        DEFINE_RECT_SZ auxtype_rect, kTextBoxLeft, kAuxtypeY, kTextBoxWidth, kTextBoxHeight
+        DEFINE_RECT_SZ auxtype_rect, kTextBoxLeft, kAuxtypeY, kTextBoxWidth, kTextBoxHeight-1
 
         DEFINE_LABEL type, res_string_label_type, kTextBoxLeft-2, kTypeY+kSystemFontHeight+1
         DEFINE_LABEL auxtype, res_string_label_auxtype, kTextBoxLeft-2, kAuxtypeY+kSystemFontHeight+1
@@ -149,8 +149,8 @@ auxtype:        .word   SELF_MODIFIED
 ;;; ============================================================
 
 .proc RunDA
-        bit     data::type_valid
-    IF NC
+
+    IF bit data::type_valid : NC
         copy8   #0, str_type
     ELSE
         copy8   #2, str_type
@@ -159,8 +159,8 @@ auxtype:        .word   SELF_MODIFIED
         stx     str_type+2
     END_IF
 
-        bit     data::auxtype_valid
-    IF NC
+
+    IF bit data::auxtype_valid : NC
         copy8   #0, str_auxtype
     ELSE
         copy8   #4, str_auxtype
@@ -191,8 +191,8 @@ auxtype:        .word   SELF_MODIFIED
 ;;; Input loop
 
 .proc InputLoop
-        bit     auxtype_focused_flag
-    IF NC
+
+    IF bit auxtype_focused_flag : NC
         LETK_CALL LETK::Idle, type_le_params
     ELSE
         LETK_CALL LETK::Idle, auxtype_le_params
@@ -306,8 +306,8 @@ auxtype:        .word   SELF_MODIFIED
     END_IF
 
     IF A = #CHAR_TAB
-        bit     auxtype_focused_flag
-      IF NC
+
+      IF bit auxtype_focused_flag : NC
         jsr     FocusAuxtype
       ELSE
         jsr     FocusType
@@ -323,8 +323,8 @@ auxtype:        .word   SELF_MODIFIED
       END_IF
     END_IF
 
-        bit     auxtype_focused_flag
-    IF NC
+
+    IF bit auxtype_focused_flag : NC
         sta     type_le_params::key
         copy8   event_params::modifiers, type_le_params::modifiers
         LETK_CALL LETK::Key, type_le_params
@@ -373,8 +373,7 @@ yes:    RETURN  C=0
 
 ;;; No-op if type already focused
 .proc FocusType
-        bit     auxtype_focused_flag
-    IF NS
+    IF bit auxtype_focused_flag : NS
         LETK_CALL LETK::Deactivate, auxtype_le_params
         LETK_CALL LETK::Activate, type_le_params
         CLEAR_BIT7_FLAG auxtype_focused_flag
@@ -384,8 +383,7 @@ yes:    RETURN  C=0
 
 ;;; No-op if auxtype already focused
 .proc FocusAuxtype
-        bit     auxtype_focused_flag
-    IF NC
+    IF bit auxtype_focused_flag : NC
         LETK_CALL LETK::Deactivate, type_le_params
         LETK_CALL LETK::Activate, auxtype_le_params
         SET_BIT7_FLAG auxtype_focused_flag
@@ -427,8 +425,7 @@ yes:    RETURN  C=0
 .endproc ; ExitOK
 
 .proc ExitCancel
-        lda     #0
-        FALL_THROUGH_TO Exit
+        FALL_THROUGH_TO Exit, A=#0
 .endproc ; ExitCancel
 
 .proc Exit
@@ -688,21 +685,16 @@ callback:
         jsr     GetFileInfo
         RTS_IF NOT_ZERO
 
-        bit     data::type_valid
-    IF NS
+    IF bit data::type_valid : NS
         ;; Disallow changing type to/from directory
-        lda     data::type
-        cmp     gfi_params::file_type
-      IF NE
+      IF lda data::type : A <> gfi_params::file_type
         ;; type change - either one dir?
-        lda     data::type
-       IF A = #FT_DIRECTORY
+       IF lda data::type : A = #FT_DIRECTORY
         jsr     ShowDirError
         jmp     skip
        END_IF
 
-        lda     gfi_params::file_type
-       IF A = #FT_DIRECTORY
+       IF lda gfi_params::file_type : A = #FT_DIRECTORY
         jsr     ShowDirError
         jmp     skip
        END_IF
@@ -712,8 +704,7 @@ callback:
     END_IF
 skip:
 
-        bit     data::auxtype_valid
-    IF NS
+    IF bit data::auxtype_valid : NS
         copy16  data::auxtype, gfi_params::aux_type
     END_IF
 
@@ -736,8 +727,7 @@ IterationCallback:
         tay
     DO
         copy8   (ptr),y, path,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
     DO
         lda     path
@@ -798,8 +788,7 @@ index:  .byte   0
 ;;; ============================================================
 
 .proc ShowDirError
-        bit     flag
-    IF NC
+    IF bit flag : NC
         CALL    JUMP_TABLE_SHOW_ALERT_PARAMS, AX=#aux::AlertDirectoriesNotOK
         SET_BIT7_FLAG flag
     END_IF

@@ -60,12 +60,12 @@ Exec:
         CALL    main::OpenPromptDialog, A=#kPromptButtonsOKCancel
         jsr     main::SetPortForPromptDialog
 
+        MGTK_CALL MGTK::MoveTo, prompt_dialog_title_pos
         ldax    #aux::label_format_disk
-        bit     erase_flag
-    IF NS
+    IF bit erase_flag : NS
         ldax    #aux::label_erase_disk
     END_IF
-        jsr     main::DrawDialogTitle
+        jsr     main::DrawStringCentered
 
         ;; --------------------------------------------------
         ;; Prompt for device
@@ -73,18 +73,14 @@ Exec:
         lda     unit_num
     IF ZERO
         MGTK_CALL MGTK::MoveTo, vol_picker_select_pos
-        bit     erase_flag
-      IF NS
+      IF bit erase_flag : NS
         MGTK_CALL MGTK::DrawString, aux::str_select_erase
       ELSE
         MGTK_CALL MGTK::DrawString, aux::str_select_format
       END_IF
 
         jsr     main::SetPenModeNotCopy
-        MGTK_CALL MGTK::MoveTo, vol_picker_line1_start
-        MGTK_CALL MGTK::LineTo, vol_picker_line1_end
-        MGTK_CALL MGTK::MoveTo, vol_picker_line2_start
-        MGTK_CALL MGTK::LineTo, vol_picker_line2_end
+        MGTK_CALL MGTK::FrameRect, vol_picker_rect
 
         copy8   #$FF, vol_picker_record::selected_index
         copy16  #HandleClick, main::PromptDialogClickHandlerHook
@@ -158,8 +154,7 @@ loop2:
 
         CLEAR_BIT7_FLAG has_input_field_flag
         jsr     SetPortAndClear
-        MGTK_CALL MGTK::PaintRect, ok_button::rect
-        MGTK_CALL MGTK::PaintRect, cancel_button::rect
+        MGTK_CALL MGTK::PaintRect, aux::clear_dialog_buttons_rect
 
         CALL    GetVolName, A=unit_num ; populates `ovl_string_buf`
 
@@ -214,7 +209,7 @@ l12:    pha
         pla
     IF A = #ERR_WRITE_PROTECTED
 
-        jsr     ShowAlert
+        jsr     ShowAlert       ; `ERR_WRITE_PROTECTED`
         ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
         bne     finish          ; `kAlertResultCancel` = 1
         beq     retry           ; `kAlertResultTryAgain` = 0
@@ -265,7 +260,7 @@ retry:
 
     IF A = #ERR_WRITE_PROTECTED
 
-        jsr     ShowAlert
+        jsr     ShowAlert       ; `ERR_WRITE_PROTECTED`
         ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
         bne     finish          ; `kAlertResultCancel` = 1
         beq     retry           ; `kAlertResultTryAgain` = 0
@@ -432,8 +427,7 @@ END_PARAM_BLOCK
         tay
     DO
         copy8   (ptr),y, path+1,y
-        dey
-    WHILE POS
+    WHILE dey : POS
         clc
         adc     #1
         sta     path
@@ -497,8 +491,8 @@ path:
 .proc FormatUnit
         sta     unit_num
 
-        jsr     main::IsDiskII
-    IF EQ
+        jsr     main::IsDiskII  ; returns Z=1 if yes
+    IF ZS
         ;; Format as Disk II
         TAIL_CALL FormatDiskII, A=unit_num
     END_IF
@@ -530,15 +524,14 @@ path:
 .proc CheckSupportsFormat
         sta     unit_num
 
-        jsr     main::IsDiskII
-    IF NE
+        jsr     main::IsDiskII  ; returns Z=1 if yes
+    IF ZC
         ;; Check if the driver is firmware ($CnXX).
         CALL    GetDriverAddress, A=unit_num
         stx     addr+1          ; self-modify address below
         txa                     ; high byte
         and     #$F0            ; look at high nibble
-        cmp     #$C0            ; firmware? ($Cn)
-      IF EQ                     ; TODO: Should we guess yes or no here???
+      IF A = #$C0               ; firmware? ($Cn) TODO: Should we guess yes or no here???
         ;; Check the firmware status byte
         addr := *+1
         lda     $C0FE           ; $CnFE, high byte is self-modified above
@@ -584,8 +577,8 @@ unit_num:
         ;; Get the block count for the device
 
         ;; Check if it's a Disk II
-        CALL    main::IsDiskII, A=unit_num
-    IF NE
+        CALL    main::IsDiskII, A=unit_num ; returns Z=1 if yes
+    IF ZC
         ;; Not Disk II - use the driver.
         CALL    GetDriverAddress, A=unit_num
         stax    @driver
@@ -636,21 +629,18 @@ got_blocks:
         sta     block_buffer + VolumeDirectoryHeader::storage_type_name_length
     DO
         copy8   vol_name_buf,y, block_buffer + VolumeDirectoryHeader::file_name - 1,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         ldy     #kNumKeyBlockHeaderBytes-1 ; other header bytes
     DO
         copy8   key_block_header_bytes,y, block_buffer+kKeyBlockHeaderOffset,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         MLI_CALL GET_TIME       ; Apply timestamp
         ldy     #3
     DO
         copy8   DATELO,y, block_buffer + VolumeDirectoryHeader::creation_date,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         copy16  case_bits, block_buffer + VolumeDirectoryHeader::case_bits
 
@@ -735,8 +725,7 @@ got_blocks:
         ;; Call the write/increment/zero routine, and loop back if we're not done
 gowrite:
         jsr     WriteBlockAndZero
-        lda     lastblock
-    WHILE A >= write_block_params::block_num
+    WHILE lda lastblock : A >= write_block_params::block_num
 
         ;; Success
         lda     #$00
@@ -775,8 +764,7 @@ lastblock:
     DO
         sta     block_buffer,y  ; Fill this entire block
         sta     block_buffer+$100,y ; with $FF bytes
-        iny
-    WHILE NOT_ZERO
+    WHILE iny : NOT_ZERO
 
         lda     write_block_params::block_num
         cmp     lastblock       ; Is this the last block?
@@ -839,8 +827,7 @@ zero_buffers:
     DO
         sta     block_buffer,y
         sta     block_buffer+$100,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
         rts
 .endproc ; WriteBlockAndZero
 
@@ -986,8 +973,7 @@ pascal_disk:
         tax
     DO
         copy8   read_buffer + 6,x, ovl_string_buf,x
-        dex
-    WHILE POS
+    WHILE dex : POS
         inc     ovl_string_buf
         ldx     ovl_string_buf
         copy8   #':', ovl_string_buf,x
@@ -1012,8 +998,7 @@ pascal_disk:
         ldx     on_line_buffer
     DO
         copy8   on_line_buffer,x, ovl_string_buf,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         jmp     EnquoteStringBuf
 

@@ -337,8 +337,7 @@ found:  ldx     num_file_names
         stax    ptr
 
         ;; Any selection?
-        bit     selected_index
-    IF NC
+    IF bit selected_index : NC
         ;; Append filename temporarily
         jsr     _AppendSelectedFilename
     END_IF
@@ -348,11 +347,9 @@ found:  ldx     num_file_names
         lda     path_buf,y
         ptr := *+1
         sta     SELF_MODIFIED,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
-        bit     selected_index
-    IF NC
+    IF bit selected_index : NC
         jsr     _StripPathBufSegment
     END_IF
 
@@ -431,8 +428,7 @@ found:  ldx     num_file_names
         .assert kSelectionRequiredNoDirs     & $80 = $80, error, "enum mismatch"
         .assert kSelectionRequiredDirsOK     & $80 = $80, error, "enum mismatch"
 
-        bit     selection_requirement_flags
-    IF NS
+    IF bit selection_requirement_flags : NS
         ;; Selection required
         bit     selected_index
         bmi     _ReturnNotAllowed ; no selection
@@ -468,11 +464,6 @@ found:  ldx     num_file_names
     IF CC
         ;; Remove last segment
         jsr     _StripPathBufSegment
-
-        lda     path_buf
-      IF ZERO
-        jsr     _SetRootPath
-      END_IF
 
         jsr     UpdateListFromPath
     END_IF
@@ -628,8 +619,7 @@ cloop:  iny
         bcc     cloop
 
 next:   inc     index
-        lda     index
-    WHILE A <> num_file_names
+    WHILE lda index : A <> num_file_names
         dec     index
 found:  RETURN  A=index
 
@@ -841,8 +831,9 @@ found:  RETURN  A=index
 .proc InitPathWithDefaultDevice
         copy8   DEVCNT, device_num
 
+    DO
         device_num := *+1
-retry:  ldx     #SELF_MODIFIED_BYTE
+        ldx     #SELF_MODIFIED_BYTE
         lda     DEVLST,x
 
         and     #UNIT_NUM_MASK
@@ -850,14 +841,14 @@ retry:  ldx     #SELF_MODIFIED_BYTE
         MLI_CALL ON_LINE, on_line_params
         lda     on_line_buffer
         and     #NAME_LENGTH_MASK
-        bne     found
+        BREAK_IF NOT ZERO
 
         dec     device_num
-        bpl     retry
+        REDO_IF POS
         copy8   DEVCNT, device_num
-        jmp     retry
+    FOREVER
 
-found:  CALL    AdjustOnLineEntryCase, AX=#on_line_buffer
+        CALL    AdjustOnLineEntryCase, AX=#on_line_buffer
         jsr     _SetRootPath
         TAIL_CALL _AppendToPathBuf, AX=#on_line_buffer
 .endproc ; InitPathWithDefaultDevice
@@ -901,8 +892,7 @@ found:  CALL    AdjustOnLineEntryCase, AX=#on_line_buffer
         adc     path_buf
 
         ;; Enough room?
-        cmp     #kPathBufferSize
-    IF GE
+    IF A >= #kPathBufferSize
         dec     path_buf
         rts                     ; C=1 failure
     END_IF
@@ -931,6 +921,12 @@ found:  CALL    AdjustOnLineEntryCase, AX=#on_line_buffer
         dec     path_buf
         lda     path_buf,x
     WHILE A <> #'/'
+
+        lda     path_buf
+    IF ZERO
+        jsr     _SetRootPath
+    END_IF
+
         rts
 .endproc ; _StripPathBufSegment
 
@@ -959,10 +955,19 @@ err:    jsr     _SetRootPath
         sta     entry_in_block
         copy8   dir_read_buf+SubdirectoryHeader::entry_length, entry_length
         copy8   dir_read_buf+SubdirectoryHeader::entries_per_block, entries_per_block
+
+        kMaxEntries = 127
+        lda     dir_read_buf+SubdirectoryHeader::file_count+1
+    IF NOT ZERO
+        lda     #kMaxEntries
+    ELSE
         lda     dir_read_buf+SubdirectoryHeader::file_count
-        and     #$7F            ; TODO: max of 128 entries, but this is still weird
-        sta     num_file_names
         beq     close
+      IF A >= #kMaxEntries+1
+        lda     #kMaxEntries
+      END_IF
+    END_IF
+        sta     num_file_names
 
         ptr := $06
         copy16  #dir_read_buf+.sizeof(SubdirectoryHeader), ptr
@@ -1114,8 +1119,7 @@ next:   add16_8 ptr, #16        ; advance to next
     DO
         lda     (src_ptr),y
         sta     (dst_ptr),y
-        dey
-    WHILE POS
+    WHILE dey :  POS
 
         rts
 .endproc ; _CopyIntoNthFilename
@@ -1252,11 +1256,9 @@ next:   add16_8 ptr, #16        ; advance to next
        END_IF
 
         inc     inner
-        lda     inner
-      WHILE A <> outer
+      WHILE lda inner : A <> outer
 
-        dec     outer
-    WHILE NOT_ZERO
+    WHILE dec outer : NOT_ZERO
         rts
 
 .endproc ; _SortFileNames
@@ -1293,11 +1295,11 @@ next:   add16_8 ptr, #16        ; advance to next
         ;; End of string 2?
         len2 := *+1
         cpy     #SELF_MODIFIED_BYTE
-        beq     gt              ; 1>2
+        BREAK_IF EQ             ; 1>2
         iny
     WHILE NOT_ZERO              ; always
 
-gt:     lda     #$FF            ; Z=0
+        lda     #$FF            ; Z=0
         sec
 ret:    rts
 .endproc ; _CompareStrings
@@ -1322,8 +1324,7 @@ OnListSelectionChange := _UpdateDynamicButtons
     DO
         lda     (pt_ptr),y
         sta     file_dialog_res::item_pos,y
-        dey
-    WHILE POS
+    WHILE dey : POS
         pla
 
         tax
@@ -1338,8 +1339,7 @@ OnListSelectionChange := _UpdateDynamicButtons
         ptr := *+1
         lda     SELF_MODIFIED,x
         sta     file_dialog_res::filename_buf,x
-        dex
-    WHILE POS
+    WHILE dex : POS
         copy16  #kListViewNameX, file_dialog_res::item_pos+MGTK::Point::xcoord
         MGTK_CALL MGTK::MoveTo, file_dialog_res::item_pos
         MGTK_CALL MGTK::DrawString, file_dialog_res::filename_buf

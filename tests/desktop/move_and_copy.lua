@@ -288,9 +288,9 @@ test.Variants(
     emu.wait(0.25)
 
     if action == "move" then
-      test.Expect(a2dtest.OCRScreen():find("Moving: 2 files"), "correct count should be shown")
+      test.ExpectMatch(a2dtest.OCRScreen(), "Moving: 2 files", "correct count should be shown")
     else
-      test.Expect(a2dtest.OCRScreen():find("Copying: 4 files"), "correct count should be shown")
+      test.ExpectMatch(a2dtest.OCRScreen(), "Copying: 4 files", "correct count should be shown")
     end
 
     emu.wait(2)
@@ -322,7 +322,7 @@ test.Step(
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
     emu.wait(0.25)
-    test.Expect(a2dtest.OCRScreen():find("Copying: 3 files"), "correct count should be shown")
+    test.ExpectMatch(a2dtest.OCRScreen(), "Copying: 3 files", "correct count should be shown")
     emu.wait(5)
 
     a2d.SelectPath("/RAM1/READ.ME")
@@ -358,7 +358,7 @@ test.Step(
 
     a2d.Drag(src_x, src_y, dst_x, dst_y, {sa_drop=true})
     emu.wait(0.25)
-    test.Expect(a2dtest.OCRScreen():find("Copying: 4 files"), "correct count should be shown")
+    test.ExpectMatch(a2dtest.OCRScreen(), "Copying: 4 files", "correct count should be shown")
     -- vol becomes folder, makes it +1
     emu.wait(5)
 
@@ -394,7 +394,7 @@ test.Step(
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    a2dtest.MultiSnap(60, "verify copy count ends at 0")
+    a2dtest.VerifyFilesRemainingCountdown(60, "copy")
 
     -- cleanup
     a2d.EraseVolume("/RAM1")
@@ -418,7 +418,7 @@ test.Step(
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y,dst_x, dst_y, {sa_drop=true})
-    a2dtest.MultiSnap(60, "verify move count ends at 0")
+    a2dtest.VerifyFilesRemainingCountdown(60, "move")
 
     -- cleanup
     a2d.EraseVolume("/RAM1")
@@ -451,21 +451,21 @@ test.Step(
 
     -- Now copy again
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match='already exists.*replace it%?'})
     apple2.Type("Y")
     a2d.WaitForRepaint()
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match='already exists.*replace it%?'})
     apple2.Type("N")
     a2d.WaitForRepaint()
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match='already exists.*replace it%?'})
     apple2.Type("Y")
     a2d.WaitForRepaint()
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match='already exists.*replace it%?'})
     apple2.Type("N")
     a2d.WaitForRepaint()
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match='already exists.*replace it%?'})
     apple2.Type("Y")
-    a2dtest.MultiSnap(60, "verify count ends at 0")
+    a2dtest.VerifyFilesRemainingCountdown(60, "copy")
 
     -- cleanup
     a2d.EraseVolume("/RAM1")
@@ -481,7 +481,7 @@ test.Step(
   function()
     a2d.CreateFolder("/RAM1/F")
     a2d.CopyPath("/RAM1/F", "/RAM1/F")
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="into itself"})
     a2d.DialogOK()
 
     -- cleanup
@@ -507,7 +507,7 @@ test.Step(
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="into itself"})
     a2d.DialogOK()
 
     -- cleanup
@@ -538,7 +538,7 @@ test.Step(
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
 
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="into itself"})
     a2d.DialogOK()
 
     a2d.SelectPath("/RAM1/F")
@@ -569,7 +569,7 @@ test.Step(
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y, {sa_drop=true})
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="into itself"})
     a2d.DialogOK()
 
     -- cleanup
@@ -590,7 +590,7 @@ test.Step(
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="by itself"})
     a2d.DialogOK()
 end)
 
@@ -606,7 +606,7 @@ test.Step(
     a2d.CreateFolder("/RAM1/F")
     a2d.CreateFolder("/RAM1/F/F")
     a2d.CopyPath("/RAM1/F/F", "/RAM1")
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="by itself"})
     a2d.DialogOK()
 
     -- cleanup
@@ -632,7 +632,7 @@ test.Step(
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="by itself"})
     a2d.DialogOK()
 
     -- cleanup
@@ -661,7 +661,7 @@ test.Step(
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="by itself"})
     a2d.DialogOK()
 
     a2d.SelectPath("/RAM1/F/F")
@@ -693,7 +693,7 @@ test.Step(
     a2d.SelectPath("/RAM5", {keep_windows=true})
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    a2dtest.WaitForAlert() -- overwrite?
+    a2dtest.WaitForAlert({match="already exists"})
     apple2.Type("Y")
     emu.wait(5)
 
@@ -726,7 +726,7 @@ test.Step(
     a2d.SelectPath("/RAM5", {keep_windows=true})
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    a2dtest.WaitForAlert() -- overwrite?
+    a2dtest.WaitForAlert({match="already exists"})
     apple2.Type("Y")
     emu.wait(5)
 
@@ -755,7 +755,7 @@ test.Step(
     a2d.SelectPath("/A2.DESKTOP/READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="folder cannot be replaced"})
     a2d.DialogOK()
 
     -- cleanup
@@ -810,7 +810,7 @@ end)
 
 function GetNumbers(ocr, index)
   for items, used, free in ocr:gmatch(
-    " (%d+,?%d*) Items? +(%d+[.,]?%d*)K in disk +(%d+[.,]?%d*)K") do
+    "(%d+,?%d*) Items? +(%d+[.,]?%d*)K in disk +(%d+[.,]?%d*)K") do
     if index == 1 then
       return assert(items), assert(used), assert(free)
     end
@@ -1014,7 +1014,7 @@ test.Variants(
     if drag then
       local src_x, src_y = a2dtest.GetSelectedIconCoords()
       a2d.Drag(src_x, src_y, dst_x, dst_y)
-      a2dtest.WaitForAlert()
+      a2dtest.WaitForAlert({match="Are you sure"})
       a2d.DialogOK()
     else
       a2d.DeleteSelection()
@@ -1087,7 +1087,7 @@ test.Variants(
     if drag then
       local src_x, src_y = a2dtest.GetSelectedIconCoords()
       a2d.Drag(src_x, src_y, dst_x, dst_y)
-      a2dtest.WaitForAlert()
+      a2dtest.WaitForAlert({match="Are you sure"})
       a2d.DialogOK()
     else
       a2d.DeleteSelection()
@@ -1520,7 +1520,7 @@ test.Step(
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="already exists"})
     apple2.Type("Y")
     a2d.DialogOK()
     emu.wait(1)

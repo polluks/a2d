@@ -254,11 +254,17 @@ kDialogLabelRow6        = kDialogLabelBaseY + kDialogLabelHeight * 6
 
         DEFINE_RECT_FRAME prompt_dialog_frame_rect, kPromptDialogWidth, kPromptDialogHeight
 
-        kPromptDialogInsetLeft   = 8
-        kPromptDialogInsetTop    = 20
-        kPromptDialogInsetRight  = 8
-        kPromptDialogInsetBottom = 20
-        DEFINE_RECT clear_dialog_labels_rect, kPromptDialogInsetLeft, kPromptDialogInsetTop, kPromptDialogWidth-kPromptDialogInsetRight, kPromptDialogHeight-kPromptDialogInsetBottom
+        kPromptDialogInsetLeft   = kBorderDX*2
+        kPromptDialogInsetTop    = kDialogTitleY + 3
+        kPromptDialogInsetRight  = kBorderDX*2
+        kPromptDialogInsetBottom = kBorderDY*2
+        kPromptDialogButtonsTop  = kPromptDialogHeight - (kBorderDY*2 + kButtonHeight + kControlMarginY*2)
+
+        ;; Clear the dialog except for the title and buttons
+        DEFINE_RECT clear_dialog_labels_rect, kPromptDialogInsetLeft, kPromptDialogInsetTop, kPromptDialogWidth-kPromptDialogInsetRight, kPromptDialogButtonsTop
+
+        ;; Clear the dialog buttons
+        DEFINE_RECT clear_dialog_buttons_rect, kPromptDialogInsetLeft, kPromptDialogButtonsTop, kPromptDialogWidth-kPromptDialogInsetRight, kPromptDialogHeight-kPromptDialogInsetBottom
 
 ;;; ============================================================
 ;;; Progress dialog resources
@@ -445,16 +451,6 @@ str_alert_unreadable_format:
 
 ;;; ============================================================
 ;;; Show Alert Dialog
-;;; Call show_alert_dialog with prompt number A, options in X
-;;; Options:
-;;;    0 = use defaults for alert number; otherwise, look at top 2 bits
-;;;  %0....... e.g. $01 = OK
-;;;  %10...... e.g. $80 = Try Again, Cancel
-;;;  %11...... e.g. $C0 = OK, Cancel
-;;; Return value:
-;;;   0 = Try Again
-;;;   1 = Cancel
-;;;   2 = OK
 
 .proc AlertByIdImpl
 
@@ -532,13 +528,20 @@ message_table_high:
         ASSERT_TABLE_SIZE message_table_high, kNumAlerts
 
 alert_options_table:
+        ;; NOTE: Options for ProDOS errors *must* be limited to OK
+        ;; (there was no choice) or Try Again / Cancel (i.e. maybe
+        ;; retry). If the options were OK / Cancel, then returning OK
+        ;; to the caller changes its meaning depending on the error,
+        ;; and the goal of this approach is to allow the caller to
+        ;; delegate the knowledge of which codes are retryable.
+
         .byte   AlertButtonOptions::OK             ; kErrUnknown
         .byte   AlertButtonOptions::OK             ; ERR_IO_ERROR
         .byte   AlertButtonOptions::OK             ; ERR_DEVICE_NOT_CONNECTED
         .byte   AlertButtonOptions::TryAgainCancel ; ERR_WRITE_PROTECTED
         .byte   AlertButtonOptions::OK             ; ERR_INVALID_PATHNAME
-        .byte   AlertButtonOptions::TryAgainCancel ; ERR_PATH_NOT_FOUND
-        .byte   AlertButtonOptions::OK             ; ERR_VOL_NOT_FOUND
+        .byte   AlertButtonOptions::OK             ; ERR_PATH_NOT_FOUND
+        .byte   AlertButtonOptions::TryAgainCancel ; ERR_VOL_NOT_FOUND
         .byte   AlertButtonOptions::OK             ; ERR_FILE_NOT_FOUND
         .byte   AlertButtonOptions::OK             ; ERR_DUPLICATE_FILENAME
         .byte   AlertButtonOptions::OK             ; ERR_OVERRUN_ERROR
@@ -547,7 +550,7 @@ alert_options_table:
         .byte   AlertButtonOptions::OK             ; ERR_NOT_PRODOS_VOLUME
         .byte   AlertButtonOptions::OK             ; ERR_DUPLICATE_VOLUME
 
-        .byte   AlertButtonOptions::OKCancel       ; kErrInsertSystemDisk
+        .byte   AlertButtonOptions::TryAgainCancel ; kErrInsertSystemDisk
         .byte   AlertButtonOptions::OKCancel       ; kErrSaveChanges
         .byte   AlertButtonOptions::OK             ; kErrDuplicateVolName
         .byte   AlertButtonOptions::OK             ; kErrBasicSysNotFound
@@ -564,33 +567,23 @@ start:
     DO
         cmp     alert_table,y
         beq     :+
-        dey
-    WHILE POS
+    WHILE dey : POS
         iny                     ; default
 :
 
         ;; Look up message
         copylohi message_table_low,y, message_table_high,y, alert_params+AlertParams::text
 
-        ;; If options is 0, use table value; otherwise,
-        ;; mask off low bit and it's the action (N and V bits)
-
-        ;; %00000000 = Use default options
-        ;; %0....... e.g. $01 = OK
-        ;; %10...... e.g. $80 = Try Again, Cancel
-        ;; %11...... e.g. $C0 = OK, Cancel
-
-    IF X <> #0
-        txa
-        and     #$FE            ; ignore low bit, e.g. treat $01 as $00
-        sta     alert_params+AlertParams::buttons
-    ELSE
-        copy8   alert_options_table,y, alert_params+AlertParams::buttons
+        ;; If options is `kShowAlertUseDefaultOptionsForId`, use table
+        ;; value
+    IF X = #kShowAlertUseDefaultOptionsForId
+        ldx     alert_options_table,y
     END_IF
+        stx     alert_params+AlertParams::buttons
+
         copy8   #AlertOptions::Beep|AlertOptions::SaveBack, alert_params+AlertParams::options
 
-        ldax    #alert_params
-        FALL_THROUGH_TO Alert
+        FALL_THROUGH_TO Alert, AX=#alert_params
 .endproc ; AlertByIdImpl
 AlertById := AlertByIdImpl::start
 
@@ -618,9 +611,7 @@ AlertById := AlertByIdImpl::start
     DO
         swap8   mgtk::hires_table_lo,x, mgtk::hires_table_lo,y
         swap8   mgtk::hires_table_hi,x, mgtk::hires_table_hi,y
-        dex
-        iny
-    WHILE Y <> #kScreenHeight/2
+    WHILE dex : iny : Y <> #kScreenHeight/2
 
         rts
 .endproc ; FlipMGTKHiresTable

@@ -25,15 +25,15 @@
 
 kDAWindowId     = $80
 kDAWidth        = 400
-kDAHeight       = 70
+kDAHeight       = 72
 kDALeft         = (kScreenWidth - kDAWidth)/2
 kDATop          = (kScreenHeight - kMenuBarHeight - kDAHeight)/2 + kMenuBarHeight
 
-kButtonInsetX   = 25
+kButtonInsetX   = 7
 
-        DEFINE_BUTTON ok_button, kDAWindowId, res_string_button_ok, kGlyphReturn, kDAWidth - kButtonWidth - kButtonInsetX, 52
+        DEFINE_BUTTON ok_button, kDAWindowId, res_string_button_ok, kGlyphReturn, (kDAWidth + 1) - kButtonWidth - kModalDialogInsetX - kButtonInsetX, (kDAHeight + 1) - kModalDialogInsetY - kButtonHeight
 
-        DEFINE_LABEL title, res_string_window_title, 0, 18
+        DEFINE_LABEL title, res_string_window_title, kDAWidth/2, kModalDialogInsetY + kSystemFontHeight - 1
 
 ;;; ============================================================
 
@@ -45,7 +45,6 @@ kButtonInsetX   = 25
 window_id:     .byte   kDAWindowId
 .endparams
 
-penXOR:         .byte   MGTK::penXOR
 pencopy:        .byte   MGTK::pencopy
 notpencopy:     .byte   MGTK::notpencopy
 
@@ -104,7 +103,6 @@ grafport_win:       .tag MGTK::GrafPort
 
 
 str_from_int:   PASCAL_STRING "000,000"    ; Filled in by IntToString
-str_spaces:     PASCAL_STRING "    "
 
 counter:        .word   0       ; set by `ProbeSpeed`
 
@@ -126,6 +124,7 @@ numerator:      .word   0           ; (in) populated dynamically
 denominator:    .word   kSpeedMax   ; (in) constant
 result:         .word   0           ; (out)
 remainder:      .word   0           ; (out)
+        REF_MULDIV_MEMBERS
 .endparams
 
 .params progress_muldiv_params
@@ -134,6 +133,7 @@ numerator:      .word   0           ; (in) populated dynamically
 denominator:    .word   0           ; (in) populated dynamically
 result:         .word   0           ; (out)
 remainder:      .word   0           ; (out)
+        REF_MULDIV_MEMBERS
 .endparams
 
 pattern_left:
@@ -182,7 +182,8 @@ pattern_plaid:
         MGTK_CALL MGTK::FrameRect, frame_rect
         MGTK_CALL MGTK::SetPenSize, pensize_normal
 
-        CALL    DrawTitleString, AX=#title_label_str
+        MGTK_CALL MGTK::MoveTo, title_label_pos
+        CALL    DrawStringCentered, AX=#title_label_str
 
         MGTK_CALL MGTK::FrameRect, meter_frame
 
@@ -312,33 +313,29 @@ hit:    lda     winfo::window_id
 ;;; ============================================================
 
 .proc OnClick60Hz
-        bit     radio_60hz_button::state
-        bmi     done
-
+    IF bit radio_60hz_button::state : NC
         lda     #BTK::kButtonStateChecked
         sta     radio_60hz_button::state
         lda     #BTK::kButtonStateNormal
         sta     radio_50hz_button::state
         BTK_CALL BTK::RadioUpdate, radio_60hz_button
         BTK_CALL BTK::RadioUpdate, radio_50hz_button
-
-done:   jmp     InputLoop
+    END_IF
+        jmp     InputLoop
 .endproc ; OnClick60Hz
 
 ;;; ============================================================
 
 .proc OnClick50Hz
-        bit     radio_50hz_button::state
-        bmi     done
-
+    IF bit radio_50hz_button::state : NC
         lda     #BTK::kButtonStateNormal
         sta     radio_60hz_button::state
         lda     #BTK::kButtonStateChecked
         sta     radio_50hz_button::state
         BTK_CALL BTK::RadioUpdate, radio_60hz_button
         BTK_CALL BTK::RadioUpdate, radio_50hz_button
-
-done:   jmp     InputLoop
+    END_IF
+        jmp     InputLoop
 .endproc ; OnClick50Hz
 
 ;;; ============================================================
@@ -365,8 +362,7 @@ done:   jmp     InputLoop
         jsr     ProbeSpeed
 
         copy16  counter, progress_muldiv_params::numerator
-        bit     radio_60hz_button::state
-    IF NS
+    IF bit radio_60hz_button::state : NS
         copy16  #kSpeedMax * kSpeedDefault60Hz, progress_muldiv_params::denominator
     ELSE
         copy16  #kSpeedMax * kSpeedDefault50Hz, progress_muldiv_params::denominator
@@ -393,25 +389,6 @@ done:   jmp     InputLoop
 
         rts
 .endproc ; UpdateMeter
-
-;;; ============================================================
-;;; Draw Title String (centered at top of port)
-;;; Input: A,X = string address
-
-.proc DrawTitleString
-        params := $6
-        str := $6
-        width := $8
-
-        stax    str
-        stax    @addr
-        MGTK_CALL MGTK::StringWidth, params
-        sub16   #kDAWidth, width, title_label_pos::xcoord
-        lsr16   title_label_pos::xcoord ; /= 2
-        MGTK_CALL MGTK::MoveTo, title_label_pos
-        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
-        rts
-.endproc ; DrawTitleString
 
 ;;; ============================================================
 
@@ -505,13 +482,15 @@ done:   jmp     InputLoop
         params := $06
         str := params
         width := params+2
+        dx := params
+        dy := params+2
 
         stax    str
         stax    @addr
         MGTK_CALL MGTK::StringWidth, params
-        lsr16   width
-        sub16   #0, width, params+MGTK::Point::xcoord
-        copy16  #0, params+MGTK::Point::ycoord
+        lsr16   width           ; /= 2
+        sub16   #0, width, dx
+        copy16  #0, dy
         MGTK_CALL MGTK::Move, params
         MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts

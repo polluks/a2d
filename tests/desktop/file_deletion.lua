@@ -80,7 +80,7 @@ test.Step(
     a2d.WaitForRepaint()
 
     a2d.Drag(a_x, a_y, trash_x, trash_y)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
     a2dtest.ExpectAlertNotShowing()
 
@@ -120,10 +120,9 @@ test.Step(
     a2d.Drag(b_x, b_y, a_x, a_y)
 
     a2d.Drag(a_x, a_y, trash_x, trash_y)
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find("delete 2 files?"), "count should be 2 files")
+    a2dtest.WaitForAlert({match="delete 2 files%?"})
     a2d.DialogOK({no_wait=true})
-    a2dtest.MultiSnap(30, "count stops at 0")
+    a2dtest.VerifyFilesRemainingCountdown(30, "deletion")
 
     a2d.EraseVolume("RAM1")
 end)
@@ -149,7 +148,7 @@ test.Step(
 
     local x, y = a2dtest.GetSelectedIconCoords()
     a2d.Drag(x, y, trash_x, trash_y)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
     emu.wait(5)
 
@@ -175,7 +174,7 @@ test.Step(
     a2d.CycleWindows()
 
     a2d.OADelete()
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
     emu.wait(5)
 
@@ -193,26 +192,26 @@ test.Step(
   function()
     a2d.SelectPath("/TESTS/DELETION/X")
     a2d.OADelete()
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
 
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find("File: .*/DELETION/X/Y/Z/B"), "prompt should be for B")
+    a2dtest.WaitForAlert({match="file is locked"})
+    test.ExpectMatch(a2dtest.OCRScreen(), "File: .*/DELETION/X/Y/Z/B", "prompt should be for B")
     apple2.Type("Y")
     a2d.WaitForRepaint()
 
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find("File: .*/DELETION/X/Y/Z"), "prompt should be for Z")
+    a2dtest.WaitForAlert({match="file is locked"})
+    test.ExpectMatch(a2dtest.OCRScreen(), "File: .*/DELETION/X/Y/Z", "prompt should be for Z")
     apple2.Type("Y")
     a2d.WaitForRepaint()
 
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find("File: .*/DELETION/X/Y"), "prompt should be for Y")
+    a2dtest.WaitForAlert({match="file is locked"})
+    test.ExpectMatch(a2dtest.OCRScreen(), "File: .*/DELETION/X/Y", "prompt should be for Y")
     apple2.Type("Y")
     a2d.WaitForRepaint()
 
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find("File: .*/DELETION/X"), "prompt should be for X")
+    a2dtest.WaitForAlert({match="file is locked"})
+    test.ExpectMatch(a2dtest.OCRScreen(), "File: .*/DELETION/X", "prompt should be for X")
     apple2.Type("Y")
     a2d.WaitForRepaint()
 
@@ -243,7 +242,7 @@ test.Step(
 
     -- Drag to trash
     a2d.Drag(icon_x, icon_y, trash_x, trash_y)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the disk"})
     a2d.DialogCancel() -- insert disk
     a2d.WaitForRepaint()
 
@@ -271,7 +270,7 @@ test.Step(
 
     -- Drag to trash
     a2d.Drag(icon_x, icon_y, trash_x, trash_y)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Are you sure"})
 
     -- Eject disk
     local current = s6d1.filename
@@ -280,12 +279,12 @@ test.Step(
     a2d.DialogOK() -- confirm
     a2d.WaitForRepaint()
 
-    a2dtest.WaitForAlert()
-    a2d.DialogCancel() -- insert disk
+    a2dtest.WaitForAlert({match="Insert the disk"})
+    a2d.DialogCancel()
     a2d.WaitForRepaint()
 
-    a2dtest.WaitForAlert()
-    a2d.DialogOK() -- failure
+    a2dtest.WaitForAlert({match="volume cannot be found"})
+    a2d.DialogOK() -- OK
     emu.wait(5) -- slow I/O
 
     test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "one icon should be selected")

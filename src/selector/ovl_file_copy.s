@@ -16,14 +16,13 @@
 
         jsr     PrepSrcAndDstPaths
         jsr     EnumerateFiles
-        bne     skip
-
+    IF ZS
         jsr     PrepWindowForCopy
 
         jsr     PrepSrcAndDstPaths
         jsr     CopyFiles
+    END_IF
 
-skip:
         pha
         jsr     CloseWindow
         pla
@@ -115,9 +114,6 @@ dst_path:       .res    64, 0
 src_path:       .res    64, 0
 filename:       .res    16, 0
 
-src_path_slash_index:           ; TODO: Written but never read?
-        .byte   0
-
 saved_stack:
         .byte   0
 
@@ -130,8 +126,7 @@ saved_stack:
         ldy     #kOpJTSize-1
     DO
         copy8   copy_jt,y, op_jt_addrs,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         tsx
         stx     saved_stack
@@ -192,8 +187,7 @@ block_count:                    ; totaled during enumeration
         ldy     #kOpJTSize-1
     DO
         copy8   enum_jt,y, op_jt_addrs,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         tsx
         stx     saved_stack
@@ -252,30 +246,19 @@ retry:  MLI_CALL GET_FILE_INFO, src_file_info_params
 
 ;;; ============================================================
 ;;; Copy `src_path` to `pathname_src` and `dst_path` to `pathname_dst`
-;;; and note last '/' in src.
 
 .proc CopyPathsFromBufsToSrcAndDst
-        ldy     #0
-        sta     src_path_slash_index
-        dey
-
         ;; Copy `src_path` to `pathname_src`
-        ;; ... but record index of last '/'
+        ldy     src_path
     DO
-        iny
-        lda     src_path,y
-      IF A = #'/'
-        sty     src_path_slash_index
-      END_IF
-        sta     pathname_src,y
-    WHILE Y <> src_path
+        copy8    src_path,y, pathname_src,y
+    WHILE dey : POS
 
         ;; Copy `dst_path` to `pathname_dst`
         ldy     dst_path
     DO
         copy8   dst_path,y, pathname_dst,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         rts
 .endproc ; CopyPathsFromBufsToSrcAndDst
@@ -290,16 +273,14 @@ retry:  MLI_CALL GET_FILE_INFO, src_file_info_params
     DO
         lda     src_path,y
         BREAK_IF A = #'/'
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
         dey
         sty     src_path
 
     DO
         lda     src_path,y
         BREAK_IF A = #'/'
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ldx     #0
     DO
@@ -321,7 +302,7 @@ retry:  MLI_CALL GET_FILE_INFO, src_file_info_params
 .params winfo
         kWindowId = $0B
         kWidth = 350
-        kHeight = 70
+        kHeight = 69
 window_id:      .byte   kWindowId
 options:        .byte   MGTK::Option::dialog_box
 title:          .addr   0
@@ -357,9 +338,9 @@ nextwinfo:      .addr   0
 
         DEFINE_RECT_FRAME rect_frame, winfo::kWidth, winfo::kHeight
 
-        DEFINE_LABEL download, res_string_label_download, 116, 16
+        DEFINE_LABEL download, res_string_label_download, winfo::kWidth / 2, 17
 
-        kProgressDialogDefaultX = 20
+        kProgressDialogDefaultX = 18
         kProgressDialogPathLeft = 100
         kProgressDialogPathWidth = winfo::kWidth - kProgressDialogPathLeft - kProgressDialogDefaultX
 
@@ -382,12 +363,11 @@ str_spaces:
 str_from_int:
         PASCAL_STRING "000,000"
 
-        kProgressBarTop = 51
-        kProgressBarInset = 20
+        kProgressBarTop = 52
+        kProgressBarInset = kModalDialogInsetX + 1
         kProgressBarWidth = winfo::kWidth - kProgressBarInset*2
-        kProgressBarHeight = 7
-        DEFINE_RECT_SZ progress_frame, kProgressBarInset-1, kProgressBarTop-1, kProgressBarWidth+2, kProgressBarHeight+2
-        DEFINE_RECT_SZ progress_meter, kProgressBarInset, kProgressBarTop,  kProgressBarWidth,kProgressBarHeight
+        DEFINE_RECT_SZ progress_frame, kProgressBarInset-1, kProgressBarTop-1, kProgressBarWidth+2, kProgressBarHeight-1
+        DEFINE_RECT_SZ progress_meter, kProgressBarInset, kProgressBarTop,  kProgressBarWidth, kProgressBarHeight-3
 
 progress_pattern:
         .byte   %01000100
@@ -413,8 +393,7 @@ progress_pattern:
         MGTK_CALL MGTK::SetPenSize, app::pensize_normal
 
         MGTK_CALL MGTK::MoveTo, download_label_pos
-        MGTK_CALL MGTK::DrawString, download_label_str
-        rts
+        TAIL_CALL app::DrawStringCentered, AX=#download_label_str
 .endproc ; OpenWindow
 
 ;;; ============================================================
@@ -425,6 +404,7 @@ numerator:      .word   0                 ; (in) populated dynamically
 denominator:    .word   0                 ; (in) populated dynamically
 result:         .word   0                 ; (out)
 remainder:      .word   0                 ; (out)
+        REF_MULDIV_MEMBERS
 .endparams
 
 .proc PrepWindowForCopy

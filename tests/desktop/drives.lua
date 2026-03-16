@@ -139,7 +139,7 @@ test.Step(
     s6d1:load(pascal_image)
 
     a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_CHECK_DRIVE)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="disk could not be read"})
     a2d.DialogCancel()
     a2d.SelectAll()
     a2dtest.ExpectNotHanging()
@@ -179,13 +179,15 @@ test.Step(
     a2d.Reboot()
     a2d.WaitForDesktopReady()
 
+    test.ExpectIMatch(a2dtest.OCRScreen(), "FLOPPY1", "floppy icon should be present")
+
     a2d.SelectPath("/FLOPPY1")
     s6d1:unload()
     a2d.OpenSelection()
-    a2dtest.WaitForAlert()
-    a2d.DialogOK()
+    a2dtest.WaitForAlert({match="volume cannot be found"})
+    a2d.DialogOK() -- OK
     emu.wait(5)
-    test.Snap("verify floppy icon is gone")
+    test.ExpectNotIMatch(a2dtest.OCRScreen(), "FLOPPY1", "floppy icon should be gone")
 end)
 
 --[[
@@ -275,7 +277,24 @@ test.Step(
     a2d.Reboot()
     a2d.WaitForDesktopReady()
 
-    test.Snap("verify disks appear in order A/B/C/D")
+    a2d.RenamePath("/A", "DISK.A")
+    a2d.RenamePath("/B", "DISK.B")
+    a2d.RenamePath("/C", "DISK.C")
+    a2d.RenamePath("/D", "DISK.D")
+
+    function GetDiskOrder()
+      a2d.ClearSelection()
+      local order = ""
+      a2dtest.OCRIterate(function(run, x, y)
+          local _, _, d = run:upper():find("DISK%.([ABCD])")
+          if d then
+            order = order .. d
+          end
+      end)
+      return order
+    end
+
+    test.ExpectEquals(GetDiskOrder(), "ABCD", "disks should appear in order A/B/C/D")
     s5d1:unload()
     s5d2:unload()
     s4d1:unload()
@@ -287,7 +306,7 @@ test.Step(
     s4d1:load(disk_c)
     s4d2:load(disk_d)
     emu.wait(30) -- TODO: Fix need for this
-    test.Snap("verify disks appear in order A/B/C/D")
+    test.Expect(GetDiskOrder(), "ABCD", "disks should appear in order A/B/C/D")
 
     s5d1:unload()
     s5d2:unload()
@@ -300,9 +319,13 @@ test.Step(
     s5d2:load(disk_c)
     s5d1:load(disk_d)
     emu.wait(30) -- TODO: Fix need for this
-    test.Snap("verify disks appear in order D/C/B/A")
+    test.Expect(GetDiskOrder(), "DCBA", "disks should appear in order D/C/B/A")
 
     -- cleanup
+    a2d.RenamePath("/DISK.A", "A")
+    a2d.RenamePath("/DISK.B", "B")
+    a2d.RenamePath("/DISK.C", "C")
+    a2d.RenamePath("/DISK.D", "D")
     s5d1:unload()
     s5d2:unload()
     s4d1:unload()
@@ -322,10 +345,10 @@ test.Step(
   "inserting unformatted disk",
   function()
     s5d1:load(emu.subst_env("$UNFORMATTED_IMG"))
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="disk could not be read"})
     a2d.DialogOK()
     emu.wait(5)
-    test.Snap("verify S5,D1 specified")
+    test.ExpectMatch(a2dtest.OCRScreen(), "S5,D1", "S5,D1 should be specified")
     a2d.DialogCancel()
     s5d1:unload()
 end)

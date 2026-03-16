@@ -36,8 +36,8 @@ test.Step(
     a2d.CopyDisk()
 
     local ocr = a2dtest.OCRScreen()
-    test.Expect(ocr:find("1PASCAL:"), "Pascal disk names in list should be in uppercase")
-    test.Expect(ocr:find("TK:"), "Pascal disk names in list should be in uppercase")
+    test.ExpectMatch(ocr, "1PASCAL:", "Pascal disk names in list should be in uppercase")
+    test.ExpectMatch(ocr, "TK:", "Pascal disk names in list should be in uppercase")
 
     -- cleanup
     a2d.OAShortcut("Q") -- File > Quit
@@ -72,14 +72,14 @@ test.Variants(
     a2d.DialogOK()
 
     -- insert source
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the source disk"})
     a2d.DialogOK()
 
     -- insert destination
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the destination disk"})
     local ocr = a2dtest.OCRScreen()
-    test.Expect(ocr:find("Pascal disk copy"), "status line should say 'Pascal disk copy'")
-    test.Expect(ocr:find("Source .* " .. disk_name), "volume name after Source label should be uppercase")
+    test.ExpectMatch(ocr, "Pascal disk copy", "status line should say 'Pascal disk copy'")
+    test.ExpectMatch(ocr, "Source .* " .. disk_name, "volume name after Source label should be uppercase")
 
     -- cleanup
     a2d.DialogCancel()
@@ -115,18 +115,15 @@ test.Variants(
     a2d.DialogOK()
 
     -- insert source
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the source disk"})
     a2d.DialogOK()
 
     -- insert destination
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the destination disk"})
     a2d.DialogOK()
 
     -- confirmation
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find(
-                  "Are you sure you want to erase \""..disk_name.. "\"%?"),
-                "prompt should give Pascal disk name, quoted and uppercase")
+    a2dtest.WaitForAlert({match="Are you sure you want to erase \""..disk_name.. "\"%?"})
 
     -- cleanup
     a2d.DialogCancel()

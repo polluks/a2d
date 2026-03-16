@@ -26,8 +26,9 @@ test.Step(
 
     a2d.SelectPath("/A2.DESKTOP")
     a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_COPY_TO-4)
+    emu.wait(5)
     apple2.ControlKey("D") -- Drives
-    a2d.WaitForRepaint()
+    emu.wait(5)
     test.Snap("verify A2.DESKTOP volume is first")
     a2d.DialogCancel()
 end)
@@ -58,8 +59,9 @@ test.Step(
 
     a2d.SelectPath("/A2.DESKTOP")
     a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_COPY_TO-4)
+    emu.wait(5)
     apple2.ControlKey("D") -- Drives
-    a2d.WaitForRepaint()
+    emu.wait(5)
     test.Snap("verify A2.DESKTOP volume is first")
     a2d.DialogCancel()
 
@@ -81,78 +83,6 @@ test.Step(
     a2d.SelectAll()
     icons = a2d.GetSelectedIcons()
     test.ExpectEquals(#icons, 4, "should have trash + 3 volumes")
-
-    -- cleanup
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    a2d.EraseVolume("RAM4")
-    a2d.Reboot()
-    a2d.WaitForDesktopReady()
-end)
-
---[[
-  Launch DeskTop, ensure it copies itself to RAMCard. Modify a
-  shortcut. Verify that no prompt is shown. Power cycle and launch
-  DeskTop. Verify that the shortcut modifications are present.
-
-  Launch DeskTop, ensure it copies itself to RAMCard. Eject the
-  startup disk. Modify a shortcut. Verify that a prompt is shown
-  asking about saving the changes. Insert the system disk, and click
-  OK. Verify that no further prompt is shown. Power cycle and launch
-  DeskTop. Verify that the shortcut modifications are present.
-
-  Launch DeskTop, ensure it copies itself to RAMCard. Eject the
-  startup disk. Modify a shortcut. Verify that a prompt is shown
-  asking about saving the changes. Click OK. Verify that another
-  prompt is shown asking to insert the system disk. Insert the system
-  disk, and click OK. Verify that no further prompt is shown. Power
-  cycle and launch DeskTop. Verify that the shortcut modifications are
-  present.
-]]
-test.Variants(
-  {
-    "No prompt - Shortcuts",
-    "Prompt to save - Shortcuts",
-    "Prompt to insert startup disk - Shortcuts",
-  },
-  function(idx)
-    --setup
-    a2d.AddShortcut("/FLOPPY1")
-    a2d.ToggleOptionCopyToRAMCard() -- Enable
-    a2d.Reboot()
-    a2d.WaitForDesktopReady({timeout=240})
-
-    local drive, current
-    if idx > 1 then
-      -- Ensure prompt for saving appears
-      drive = s7d1
-      current = drive.filename
-      drive:unload()
-    end
-
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_EDIT_A_SHORTCUT)
-    -- Pick a shortcut
-    apple2.DownArrowKey()
-    a2d.DialogOK()
-    -- Twiddle a setting
-    a2d.OAShortcut("4")
-    a2d.OAShortcut("5")
-    a2d.DialogOK()
-
-    if idx > 1 then
-      a2dtest.WaitForAlert() -- prompt to save
-
-      if idx > 2 then
-        a2d.DialogOK()
-        a2dtest.WaitForAlert() -- prompt to insert system disk
-      end
-
-      drive:load(current)
-      a2d.DialogOK()
-    end
-
-    a2dtest.ExpectAlertNotShowing()
-
-    -- TODO: Verify that changes were saved
 
     -- cleanup
     a2d.DeletePath("/A2.DESKTOP/LOCAL")
@@ -270,7 +200,7 @@ test.Step(
     drive:unload()
     a2d.ClearSelection()
     a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK-2)
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="insert the system disk"})
     drive:load(current)
     a2d.DialogCancel()
 

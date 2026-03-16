@@ -312,8 +312,7 @@ reserved:       .byte   0
         plp
         ror     tmp+1
         ror     tmp
-        dex
-      WHILE NOT_ZERO
+      WHILE dex : NOT_ZERO
 
         rol     tmp
         rol     tmp+1
@@ -324,8 +323,7 @@ reserved:       .byte   0
         dec16   dst
         copy8   tmp, (dst),y
 
-        dec     count
-    WHILE NOT_ZERO
+    WHILE dec count : NOT_ZERO
         rts
 .endproc ; FrameDouble
 
@@ -621,8 +619,7 @@ skip:   .word   0
         ldx     #0
         lda     x_delta
     IF A >= #kMove/2
-        bit     x_neg
-      IF NEG
+      IF bit x_neg: NEG
         inx
       END_IF
         inx
@@ -634,8 +631,7 @@ skip:   .word   0
 
         lda     y_delta
     IF A >= #kMove/2
-        bit     y_neg
-      IF NEG
+      IF bit y_neg : NEG
         inx
       END_IF
         inx
@@ -661,11 +657,9 @@ new_state:
         pla
 
         ;; ------------------------------
-        cmp     #NekoState::rest
+    IF A = #NekoState::rest
         ;; ------------------------------
-    IF EQ
-        lda     dir
-      IF NOT_ZERO
+      IF lda dir : NOT_ZERO
         TAIL_CALL set_state_and_frame, X=#NekoState::chase, A=#NekoFrame::surprise
       END_IF
 
@@ -685,11 +679,9 @@ new_state:
     END_IF
 
         ;; ------------------------------
-        cmp     #NekoState::chase
+    IF A = #NekoState::chase
         ;; ------------------------------
-    IF EQ
-        lda     dir
-      IF ZERO
+      IF lda dir : ZERO
         TAIL_CALL set_state_and_frame, X=#NekoState::rest, A=#NekoFrame::sitting
       END_IF
 
@@ -710,9 +702,8 @@ new_state:
     END_IF
 
         ;; ------------------------------
-        cmp     #NekoState::scratch
+    IF A = #NekoState::scratch
         ;; ------------------------------
-    IF EQ
         lda     dir
       IF A <> scratch_dir
         TAIL_CALL set_state_and_frame, X=#NekoState::chase, A=#NekoFrame::surprise
@@ -726,9 +717,8 @@ new_state:
     END_IF
 
         ;; ------------------------------
-        cmp     #NekoState::itch
+    IF A = #NekoState::itch
         ;; ------------------------------
-    IF EQ
       IF Y < #$20               ; Y = random
         ldx     #NekoState::rest
         lda     #NekoFrame::sitting
@@ -741,9 +731,8 @@ new_state:
     END_IF
 
         ;; ------------------------------
-        cmp     #NekoState::yawn
+    IF A = #NekoState::yawn
         ;; ------------------------------
-    IF EQ
       IF Y < #$20               ; Y = random
         ldx     #NekoState::sleep
         lda     #NekoFrame::sleep1
@@ -755,9 +744,8 @@ new_state:
     END_IF
 
         ;; ------------------------------
-        ;; cmp     #NekoState::sleep
+        ;; IF A = #NekoState::sleep
         ;; ------------------------------
-        ;; IF EQ
         lda     dir
       IF NOT_ZERO
         ldx     #NekoState::chase
@@ -783,16 +771,14 @@ set_frame:
 .proc MoveAndClamp
         ;; Move
         asl     x_delta
-        bit     x_neg
-    IF POS
+    IF bit x_neg : POS
         add16_8 x_pos, x_delta
     ELSE
         sub16_8 x_pos, x_delta
     END_IF
         lsr     x_delta
 
-        bit     y_neg
-    IF POS
+    IF bit y_neg : POS
         add16_8 y_pos, y_delta
     ELSE
         sub16_8 y_pos, y_delta
@@ -937,8 +923,7 @@ cur_frame:                      ; NekoFrame::XXX
         jsr     GetSetPort
     IF ZERO
         ;; Erase if needed
-        bit     moved_flag
-      IF NS
+      IF bit moved_flag : NS
         JSR_TO_AUX aux::EraseFrame
       END_IF
 

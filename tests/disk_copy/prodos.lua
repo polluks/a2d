@@ -16,7 +16,7 @@ test.Step(
   function()
     a2d.CopyDisk()
 
-    test.Expect(a2dtest.OCRScreen():find("Floppy1"),
+    test.ExpectMatch(a2dtest.OCRScreen(), "Floppy1",
                 "ProDOS disk names in list should have adjusted case")
 
     -- cleanup
@@ -47,15 +47,15 @@ test.Step(
     a2d.DialogOK()
 
     -- insert source
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the source disk"})
     a2d.DialogOK()
 
     -- insert destination
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the destination disk"})
     local ocr = a2dtest.OCRScreen()
-    test.Expect(ocr:find("ProDOS disk copy"),
+    test.ExpectMatch(ocr, "ProDOS disk copy",
                 "status line should say 'ProDOS disk copy'")
-    test.Expect(ocr:find("Source .* Floppy1"),
+    test.ExpectMatch(ocr, "Source .* Floppy1",
                 "volume name after Source label should be case-adjusted")
 
     -- cleanup
@@ -86,18 +86,15 @@ test.Step(
     a2d.DialogOK()
 
     -- insert source
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the source disk"})
     a2d.DialogOK()
 
     -- insert destination
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the destination disk"})
     a2d.DialogOK()
 
     -- confirmation
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find(
-                  "Are you sure you want to erase \"Floppy1\"%?"),
-                "prompt should give ProDOS volume name, quoted with adjusted case")
+    a2dtest.WaitForAlert({match="Are you sure you want to erase \"Floppy1\"%?"})
 
     -- cleanup
     a2d.DialogCancel()

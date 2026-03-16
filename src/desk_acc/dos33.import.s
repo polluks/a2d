@@ -108,23 +108,24 @@ str_alert_no_windows_open:
 .scope DevicePicker
 
 kDAWindowId     = $80
+
+kLabelGap       = 2
 kDAWidth        = 270
-kDAHeight       = kPickerHeight + 45
+kDAHeight       = kModalDialogInsetY + kSystemFontHeight + kLabelGap + (kPickerHeight + 2) + kControlMarginY + kButtonHeight + kModalDialogInsetY - 1
 kDALeft         = (kScreenWidth - kDAWidth)/2
 kDATop          = (kScreenHeight - kMenuBarHeight - kDAHeight)/2 + kMenuBarHeight
 
-kButtonsTop  = kDAHeight - 20
-kButtonsRight = kDAWidth - 19
-kButtonsGap  = 10
+kButtonsTop   = (kDAHeight + 1) - kModalDialogInsetY - kButtonHeight
+kButtonsRight = (kDAWidth + 1) - kModalDialogInsetX
+kButtonsGap   = kControlMarginX
 
 kPickerRows            = 6
 kPickerWindowId        = kDAWindowId+1
-kPickerWidth           = kDAWidth - 60
-kPickerWidthSB         = kPickerWidth + 20
+kScrollBarWidth        = 20
+kPickerWidth           = kDAWidth - (kScrollBarWidth + 2) - kModalDialogInsetX*2
 kPickerHeight          = kPickerRows * kListItemHeight - 1
-kPickerLeft            = kDALeft + (kDAWidth - kPickerWidthSB) / 2
-kPickerTop             = kDATop + 20
-
+kPickerLeft            = kDALeft + kModalDialogInsetX + 1
+kPickerTop             = kDATop + kModalDialogInsetY + kSystemFontHeight + kLabelGap
 
 .params winfo_picker
 window_id:      .byte   kDAWindowId
@@ -317,7 +318,7 @@ done:   jmp     InputLoop
 
 ;;; ============================================================
 
-        DEFINE_LABEL prompt, res_string_select_disk, 20, 16
+        DEFINE_LABEL prompt, res_string_select_disk, 20, 17
 
 .proc DrawWindow
         MGTK_CALL MGTK::GetWinPort, getwinport_params
@@ -338,7 +339,7 @@ done:   jmp     InputLoop
 
 
         MGTK_CALL MGTK::ShowCursor
-done:   rts
+        rts
 .endproc ; DrawWindow
 
 
@@ -389,26 +390,25 @@ str_template:
 
 kDAWindowId     = $80
 kDAWidth        = 355
-kDAHeight       = kCatalogHeight + 46
+kDAHeight       = kModalDialogInsetY + kButtonHeight + kControlMarginY + kProgressBarHeight + kControlMarginY + (kCatalogHeight + 2) + kModalDialogInsetY
 kDALeft         = (kScreenWidth - kDAWidth)/2
 kDATop          = (kScreenHeight - kMenuBarHeight - kDAHeight)/2 + kMenuBarHeight
 
-kButtonsTop  = 8
-kButtonsRight = kDAWidth - 19
-kButtonsGap  = 10
+kButtonsTop  = kModalDialogInsetY
+kButtonsRight = kDAWidth - kModalDialogInsetX
+kButtonsGap  = kControlMarginX
 
-kProgressBarTop = 23
-kProgressBarInset = 20
+kProgressBarTop = kModalDialogInsetY + kButtonHeight + kControlMarginY + 1
+kProgressBarInset = kModalDialogInsetX + 1
 kProgressBarWidth = kDAWidth - kProgressBarInset*2
-kProgressBarHeight = 7
 
-kCatalogRows            = 11
+kCatalogRows            = 10
 kCatalogWindowId        = kDAWindowId+1
-kCatalogWidth           = kDAWidth - 60
-kCatalogWidthSB         = kCatalogWidth + 20
+kScrollBarWidth         = 20
+kCatalogWidth           = kDAWidth - (kScrollBarWidth + 2) - kModalDialogInsetX*2
 kCatalogHeight          = kCatalogRows * kListItemHeight - 1
-kCatalogLeft            = kDALeft + (kDAWidth - kCatalogWidthSB) / 2
-kCatalogTop             = kDATop + 36
+kCatalogLeft            = kDALeft + kModalDialogInsetX + 1
+kCatalogTop             = kDATop + kModalDialogInsetY + kButtonHeight + kControlMarginY + kProgressBarHeight + kControlMarginY + 1
 
 .params winfo_catalog
 window_id:      .byte   kDAWindowId
@@ -446,11 +446,11 @@ nextwinfo:      .addr   0
 
         DEFINE_RECT_FRAME frame_rect, kDAWidth, kDAHeight
 
-        DEFINE_BUTTON import_button, kDAWindowId, res_string_button_import, kGlyphReturn, kButtonsRight - kButtonWidth*2 - kButtonsGap, kButtonsTop
-        DEFINE_BUTTON close_button, kDAWindowId, res_string_button_close, res_string_button_cancel_shortcut, kButtonsRight - kButtonWidth, kButtonsTop
+        DEFINE_BUTTON import_button, kDAWindowId, res_string_button_import, kGlyphReturn, kButtonsRight - kButtonWidth*2 - kButtonsGap + 1, kButtonsTop
+        DEFINE_BUTTON close_button, kDAWindowId, res_string_button_close, res_string_button_cancel_shortcut, kButtonsRight - kButtonWidth + 1, kButtonsTop
 
-        DEFINE_RECT_SZ progress_frame, kProgressBarInset-1, kProgressBarTop-1, kProgressBarWidth+2, kProgressBarHeight+2
-        DEFINE_RECT_SZ progress_meter, kProgressBarInset, kProgressBarTop, kProgressBarWidth, kProgressBarHeight
+        DEFINE_RECT_SZ progress_frame, kProgressBarInset-1, kProgressBarTop-1, kProgressBarWidth+2, kProgressBarHeight-1
+        DEFINE_RECT_SZ progress_meter, kProgressBarInset, kProgressBarTop, kProgressBarWidth, kProgressBarHeight-3
 
 pencopy:        .byte   MGTK::pencopy
 
@@ -481,7 +481,7 @@ window_id:      .byte   kDAWindowId
 port:           .addr   grafport_win
 .endparams
 
-        DEFINE_LABEL disk_vol, res_string_disk_volume_prefix, 20, 18
+        DEFINE_LABEL disk_vol, res_string_disk_volume_prefix, 20, 19
 
 .params entry_muldiv_params
 number:         .word   0                     ; (in) populated dynamically
@@ -489,6 +489,7 @@ numerator:      .word   .sizeof(CatalogEntry) ; (in) constant
 denominator:    .word   1                     ; (in) constant
 result:         .word   0                     ; (out)
 remainder:      .word   0                     ; (out)
+        REF_MULDIV_MEMBERS
 .endparams
 
 .params progress_muldiv_params
@@ -497,6 +498,7 @@ numerator:      .word   0                 ; (in) populated dynamically
 denominator:    .word   0                 ; (in) populated dynamically
 result:         .word   0                 ; (out)
 remainder:      .word   0                 ; (out)
+        REF_MULDIV_MEMBERS
 .endparams
 
 ;;; ============================================================
@@ -672,7 +674,7 @@ done:   jmp     InputLoop
         BTK_CALL BTK::Draw, close_button
 
         MGTK_CALL MGTK::ShowCursor
-done:   rts
+        rts
 .endproc ; DrawWindow
 
         DEFINE_POINT pt, 0, 0
@@ -685,8 +687,7 @@ done:   rts
         ldy     #.sizeof(MGTK::Point)-1
     DO
         copy8   (pt_ptr),y, pt,y
-        dey
-    WHILE POS
+    WHILE dey : POS
         pla
 
         ;; Calculate address of `CatalogEntry`
@@ -753,8 +754,7 @@ type_table:
     DO
         lsr     a
         BREAK_IF CS
-        inx
-    WHILE X <> #8
+    WHILE inx : X <> #8
         rts
 .endproc ; clz
 
@@ -852,7 +852,6 @@ str_from_int:   PASCAL_STRING "000000" ; filled in by IntToString
 
 ;;; ============================================================
 
-start:
         ;; Get active window's path
         jsr     GetWinPath
     IF NOT_ZERO
@@ -881,9 +880,9 @@ start:
         jsr     FetchControlBlock
         pla                     ; A = error code (0 = success)
     IF NOT_ZERO
-        jsr     JUMP_TABLE_SHOW_ALERT
+        ;; A = arbitrary ProDOS error but we don't support retries so...
+        CALL    JUMP_TABLE_SHOW_ALERT, A=#ERR_IO_ERROR
     END_IF
-
 
         bit     dirty_flag
         RTS_IF NC               ; no change
@@ -903,12 +902,12 @@ start:
         ldx     index
         lda     DEVLST,x
         and     #UNIT_NUM_MASK
-        jsr     IsDiskII
+        jsr     IsDiskII        ; returns Z=1 if yes
       IF ZS
         ldx     index
         lda     DEVLST,x
         and     #UNIT_NUM_MASK
-        jsr     IsDOS33
+        jsr     IsDOS33         ; returns Z=1 if yes
        IF ZS
         ;; It is DOS 3.3 - append it to the list
         ldx     index
@@ -920,8 +919,7 @@ start:
         inc     control_block+ControlBlock::dev_count
        END_IF
       END_IF
-        dec     index
-    WHILE POS
+    WHILE dec index : POS
 
         rts
 
@@ -981,8 +979,7 @@ index:  .byte   0
         and     #$7F            ; strip high bit
         sta     entry_buf+aux::CatalogEntry::Name+1,x
         iny
-        inx
-       WHILE X <> #dos33::MaxFilenameLen
+       WHILE inx : X <> #dos33::MaxFilenameLen
 
        DO
         dex
@@ -1134,8 +1131,7 @@ start:
        END_IF
       END_IF
 
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         ;; Can't start with non-alpha, replace with 'X'
         lda     str_name+1
@@ -1250,8 +1246,10 @@ translate_type:
 
 write_sector:
         JUMP_TABLE_MLI_CALL WRITE, write_params
-        ;; TODO: CLOSE on error
-        RTS_IF CS
+    IF CS
+        JUMP_TABLE_MLI_CALL CLOSE, close_params
+        rts
+    END_IF
 
 read_sector:
         ;; Read next sector
@@ -1294,8 +1292,7 @@ finish:
         jsr     SendControlBlock
         JSR_TO_AUX aux::Catalog::UpdateProgressMeter
 
-        bit     set_eof_flag
-    IF NS
+    IF bit set_eof_flag : NS
         JUMP_TABLE_MLI_CALL SET_EOF, set_eof_params
     END_IF
         JUMP_TABLE_MLI_CALL CLOSE, close_params
@@ -1333,8 +1330,7 @@ no:     RETURN  C=1
     DO
         lsr     a
         BREAK_IF CS
-        inx
-    WHILE X <> #8
+    WHILE inx : X <> #8
         rts
 .endproc ; clz
 
@@ -1388,8 +1384,7 @@ prefix_path:    .res    ::kPathBufferSize, 0
         tay
     DO
         copy8   (ptr),y, prefix_path,y
-        dey
-    WHILE POS
+    WHILE dey : POS
         RETURN  A=#0
 
 fail:   RETURN  A=#1
@@ -1456,8 +1451,7 @@ DEFINE_READWRITE_BLOCK_PARAMS block_params, block_buf, 0
         ldy     #0
     DO
         copy8   (src_ptr),y, (dst_ptr),y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         RETURN  C=0
 .endproc ; Read
@@ -1485,8 +1479,7 @@ DEFINE_READWRITE_BLOCK_PARAMS block_params, block_buf, 0
         ldy     #0
     DO
         copy8   (src_ptr),y, (dst_ptr),y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         ;; Write the updated block back out
         JUMP_TABLE_MLI_CALL WRITE_BLOCK, block_params

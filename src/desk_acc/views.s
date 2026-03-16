@@ -65,7 +65,7 @@ dialog_result:
 
 kDAWindowId     = $80
 kDAWidth        = 200
-kDAHeight       = 90
+kDAHeight       = (kNumButtons + 1) * kButtonSpacing + kControlMarginY * 2 - 3
 kDALeft         = (kScreenWidth - kDAWidth)/2
 kDATop          = (kScreenHeight - kMenuBarHeight - kDAHeight)/2 + kMenuBarHeight
 
@@ -162,7 +162,7 @@ kButtonLeft     = 20
 kButtonTop      = 5
 kButtonSpacing  = kSystemFontHeight + 2
 
-        DEFINE_LABEL view_style, res_string_initial_view, kButtonLeft - 3, kButtonTop + kSystemFontHeight
+        DEFINE_LABEL view_style, res_string_initial_view, kControlMarginX, kButtonTop + kSystemFontHeight - 1
 
         DEFINE_BUTTON as_icons_radiobutton, kDAWindowId, res_string_radio_button_by_icon, res_string_shortcut_apple_1, kButtonLeft, kButtonTop + kButtonSpacing * 1
         DEFINE_BUTTON as_smallicons_radiobutton, kDAWindowId, res_string_radio_button_by_small_icon, res_string_shortcut_apple_2, kButtonLeft, kButtonTop + kButtonSpacing * 2
@@ -290,7 +290,7 @@ view_by_table:
         copy16  event_params::xcoord, dragwindow_params::dragx
         copy16  event_params::ycoord, dragwindow_params::dragy
         MGTK_CALL MGTK::DragWindow, dragwindow_params
-common: bit     dragwindow_params::moved
+        bit     dragwindow_params::moved
     IF NS
         ;; Draw DeskTop's windows and icons.
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
@@ -329,8 +329,7 @@ common: bit     dragwindow_params::moved
 
         TAIL_CALL ToggleButton, A=index
       END_IF
-        dec     index
-    WHILE POS
+    WHILE dec index : POS
 
         ;; ----------------------------------------
 
@@ -362,8 +361,7 @@ common: bit     dragwindow_params::moved
         copy16  button_button_table,x, params_addr
 
         lda     #BTK::kButtonStateNormal
-        ldx     current_view_index
-      IF X = index
+      IF ldx current_view_index : X = index
         lda     #BTK::kButtonStateChecked
       END_IF
 
@@ -373,8 +371,7 @@ common: bit     dragwindow_params::moved
 
         BTK_CALL BTK::RadioDraw, SELF_MODIFIED, params_addr
 
-        dec     index
-    WHILE POS
+    WHILE dec index : POS
 
         ;; --------------------------------------------------
 

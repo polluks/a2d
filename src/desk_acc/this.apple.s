@@ -993,8 +993,7 @@ match:  tya
         lda     PRAVETZ_8AC_ID_ADDR,x
         cmp     pravetz_8ac_sequence,x
         bne     :+
-        dex
-      WHILE POS
+      WHILE dex : POS
         lda     #model::pravetz
         bne     found           ; always
 :
@@ -1023,8 +1022,7 @@ match:  tya
         lda     TLC_ID_ADDR,x
         cmp     tlc_sequence,x
         bne     :+
-        dex
-      WHILE POS
+      WHILE dex : POS
         lda     #model::tlc
         bne     found           ; always
 :
@@ -1034,8 +1032,7 @@ match:  tya
         lda     TK3000_ID_ADDR,x
         cmp     tk3000_sequence,x
         bne     :+
-        dex
-      WHILE POS
+      WHILE dex : POS
         lda     #model::tk3000
         bne     found           ; always
 :
@@ -1252,6 +1249,8 @@ egg:    .byte   0
         JUMP_TABLE_MGTK_CALL MGTK::SetPort, aux::grafport
         JUMP_TABLE_MGTK_CALL MGTK::HideCursor
 
+        ;; Model
+
         copy16  model_pix_ptr, bits_addr
         JUMP_TABLE_MGTK_CALL MGTK::SetPenMode, aux::notpencopy
         JUMP_TABLE_MGTK_CALL MGTK::PaintBits, SELF_MODIFIED, bits_addr
@@ -1259,17 +1258,17 @@ egg:    .byte   0
         JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::model_pos
         CALL    DrawStringFromMain, AX=model_str_ptr
 
+        ;; ProDOS version
+
         JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::pdver_pos
         CALL    DrawStringFromMain, AX=#str_prodos_version
 
-        JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::line1
-        JUMP_TABLE_MGTK_CALL MGTK::LineTo, aux::line2
+        ;; Memory
 
         JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::mem_pos
         CALL    DrawStringFromMain, AX=#str_memory_prefix
         CALL    DrawStringFromMain, AX=#str_from_int
-        bit     memory_is_mb_flag
-    IF NS
+    IF bit memory_is_mb_flag : NS
         CALL    DrawStringFromMain, AX=#str_memory_mb_suffix
     ELSE
         CALL    DrawStringFromMain, AX=#str_memory_kb_suffix
@@ -1278,8 +1277,29 @@ egg:    .byte   0
         jsr     CPUId
         jsr     DrawStringFromMain
 
-        copy8   #7, slot
-        copy8   #1<<7, mask
+        ;; Separator
+
+        JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::line1
+        JUMP_TABLE_MGTK_CALL MGTK::LineTo, aux::line2
+
+        ;; Aux Slot
+
+        JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::pos_aux
+        CALL    DrawStringRightFromMain, AX=#str_aux
+        ldax    #str_80col
+        ldy     rw_banks
+    IF Y <> #1
+        ldax    #str_ramworks
+    END_IF
+        CALL    DrawStringFromMain
+        CALL    DrawStringFromMain, AX=#str_ramworks_prefix
+        CALL    DrawStringFromMain, AX=#str_ramworks_memory
+        CALL    DrawStringFromMain, AX=#str_memory_kb_suffix
+
+        ;; Slots 1-7
+
+        copy8   #1, slot
+        copy8   #1 << 1, mask
 
     DO
         lda     slot
@@ -1360,21 +1380,8 @@ draw_maybe_sp:
        END_IF
       END_IF
 
-        lsr     mask
-        dec     slot
-    WHILE NOT ZERO
-
-        JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::pos_aux
-        CALL    DrawStringRightFromMain, AX=#str_aux
-        ldax    #str_80col
-        ldy     rw_banks
-    IF Y <> #1
-        ldax    #str_ramworks
-    END_IF
-        CALL    DrawStringFromMain
-        CALL    DrawStringFromMain, AX=#str_ramworks_prefix
-        CALL    DrawStringFromMain, AX=#str_ramworks_memory
-        CALL    DrawStringFromMain, AX=#str_memory_kb_suffix
+        asl     mask
+    WHILE inc slot : lda slot : A < #8
 
         JUMP_TABLE_MGTK_CALL MGTK::ShowCursor
         rts
@@ -1504,8 +1511,7 @@ ret:    rts
         GET_FWB $0C             ; $Cn0C == ....
 
 .macro IF_SIGNATURE_THEN_RETURN     byte, arg
-        cmp     #byte
-    IF EQ
+    IF A = #byte
         RETURN  AX=#arg         ; C=1 implicitly if Z=1
     END_IF
 .endmacro
@@ -1600,8 +1606,7 @@ notpas:
         @compare_byte := *+1
         cmp     #SELF_MODIFIED_BYTE
         bne     no_match
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         ;; match
         RETURN  C=1
@@ -1725,8 +1730,7 @@ sigtable_xdrive:        .byte   4, $07, $3C, $0B, $B0, $0C, $01, $F0, $CA
         ldx     #.sizeof(Z80Routine)-1
     DO
         swap8   Z80Routine::target,x, Z80Routine,x
-        dex
-    WHILE POS
+    WHILE dex : POS
         rts
 .endproc ; SwapRoutine
 .endproc ; DetectZ80
@@ -1862,7 +1866,6 @@ fail:   RETURN  C=0
         bne     fail
 
         ;; Probe successful
-success:
         RETURN  C=1
 
 fail:   RETURN  C=0
@@ -1902,8 +1905,7 @@ write:  sta     $C080,x         ; self-modified to $C0n0
         ldy     #6
       DO
         asl16   tmp             ; * 64
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
         CALL IntToStringWithSeparators, AX=tmp
         COPY_STRING str_from_int, str_ramworks_memory
 
@@ -1919,15 +1921,13 @@ write:  sta     $C080,x         ; self-modified to $C0n0
         ldy     #6
       DO
         asl16   memory          ; * 64
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
     ELSE
         ;; Convert number of 64K banks to MB
         ldy     #4
       DO
         lsr16   memory          ; / 16
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
         SET_BIT7_FLAG memory_is_mb_flag
     END_IF
 
@@ -1985,8 +1985,7 @@ write:  sta     $C080,x         ; self-modified to $C0n0
         sta     sigb0
         eor     #$FF            ; complement as second signature
         sta     sigb1
-        dex
-    WHILE X <> #255
+    WHILE dex : X <> #255
 .endscope
 
         ;; Iterate upwards, tallying valid banks.
@@ -2001,8 +2000,7 @@ write:  sta     $C080,x         ; self-modified to $C0n0
         iny                     ; match - count it
        END_IF
       END_IF
-        inx                     ; next bank
-    WHILE NOT_ZERO              ; if we hit 256 banks, make sure we exit
+    WHILE inx : NOT_ZERO      ; next bank; if we hit 256 banks, make sure we exit
 .endscope
 
         ;; Iterate upwards, restoring valid banks.
@@ -2018,8 +2016,7 @@ write:  sta     $C080,x         ; self-modified to $C0n0
         copy8   buf1,x, sigb1
        END_IF
       END_IF
-        inx                     ; next bank
-    WHILE NOT_ZERO              ; if we hit 256 banks, make sure we exit
+    WHILE inx : NOT_ZERO      ; next bank; if we hit 256 banks, make sure we exit
 .endscope
 
         ;; Switch back to RW bank 0 (normal aux memory)
@@ -2079,14 +2076,13 @@ write:  sta     $C080,x         ; self-modified to $C0n0
         lda     (slot_ptr),y
         cmp     sig_values,x
         bne     next
-        dex
-      WHILE POS
+      WHILE dex : POS
 
         ;; Now look for device type
         ldy     #$FB            ; $CnFB is SmartPort ID Type byte
         lda     (slot_ptr),y
         and     #%00000001      ; bit 0 = RAM card
-        beq     next
+        CONTINUE_IF ZERO
 
         ;; Locate SmartPort entry point: $Cn00 + ($CnFF) + 3
         ldy     #$FF
@@ -2103,7 +2099,7 @@ write:  sta     $C080,x         ; self-modified to $C0n0
         jsr     SELF_MODIFIED
         .byte   $00             ; STATUS
         .addr   status_params
-        bcs     next
+        CONTINUE_IF CS
 
         ;; Convert blocks (0.5k) to banks (64k)
         ldx     #7
@@ -2111,8 +2107,7 @@ write:  sta     $C080,x         ; self-modified to $C0n0
         lsr     dib_buffer+SPDIB::Device_Size_Hi
         ror     dib_buffer+SPDIB::Device_Size_Med
         ror     dib_buffer+SPDIB::Device_Size_Lo
-        dex
-      WHILE NOT_ZERO
+      WHILE dex : NOT_ZERO
 
         ;; Rounding up if needed
       IF CS
@@ -2121,8 +2116,8 @@ write:  sta     $C080,x         ; self-modified to $C0n0
 
         add16   memory, dib_buffer+SPDIB::Device_Size_Lo, memory
 
-next:   dec     slot
-    WHILE NOT_ZERO
+next:
+    WHILE dec slot : NOT_ZERO
         rts
 
 sig_offsets:
@@ -2281,8 +2276,7 @@ start:
        DO
         lda     dib_buffer+SPDIB::Device_Name-1,y
         BREAK_IF A <> #' '
-        dey
-       WHILE NOT_ZERO
+       WHILE dey : NOT_ZERO
       END_IF
         sty     dib_buffer+SPDIB::ID_String_Length
 .endscope
@@ -2298,12 +2292,10 @@ start:
         CALL    IsAlpha, A=dib_buffer+SPDIB::Device_Name,y
         IF ZS
         lda     dib_buffer+SPDIB::Device_Name,y
-         IF A >= #'a'           ; guarded by `kBuildSupportsLowercase`
+        cmp     #'a'           ; guarded by `kBuildSupportsLowercase`
         bcs     done_adjust_case ; is lower case
-         END_IF
         END_IF
-        dey
-       WHILE POS
+       WHILE dey : POS
 
         ldy     dib_buffer+SPDIB::ID_String_Length
         dey
@@ -2320,8 +2312,7 @@ start:
         sta     dib_buffer+SPDIB::Device_Name,y
           END_IF
          END_IF
-        dey
-        WHILE NOT_ZERO
+        WHILE dey : NOT_ZERO
        END_IF
 
       END_IF
@@ -2348,8 +2339,7 @@ done_adjust_case:
         COPY_STRING str_current, str_last
 
         ;; Need a comma?
-        bit     empty_flag
-      IF NC
+      IF bit empty_flag : NC
         CALL    DrawStringFromMain, AX=#str_list_separator
       END_IF
         CLEAR_BIT7_FLAG empty_flag ; saw a unit!
@@ -2367,8 +2357,7 @@ finish:
         jsr     MaybeDrawDuplicateSuffix
 
         ;; If no units, populate with "(none)"
-        bit     empty_flag
-    IF NS
+    IF bit empty_flag : NS
         CALL    DrawStringFromMain, AX=#str_none
     END_IF
 
@@ -2395,15 +2384,12 @@ num_devices:
         sp_addr = SmartPortCall::sp_addr
 
 .proc CompareWithLast
-        lda     str_current
-        cmp     str_last
-    IF EQ
+    IF lda str_current : A = str_last
         tax
       DO
         lda     str_current,x
         BREAK_IF A <> str_last,x
-        dex
-      WHILE NOT_ZERO
+      WHILE dex : NOT_ZERO
     END_IF
         rts
 .endproc ; CompareWithLast

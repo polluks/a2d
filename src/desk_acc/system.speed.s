@@ -39,17 +39,17 @@ kShortcutFast = res_char_button_fast_shortcut
 
 kDAWindowId     = $80
 kDAWidth        = 290
-kDAHeight       = 70
+kDAHeight       = 72
 kDALeft         = (kScreenWidth - kDAWidth)/2
 kDATop          = (kScreenHeight - kMenuBarHeight - kDAHeight)/2 + kMenuBarHeight
 
 kButtonInsetX   = 25
 
         DEFINE_BUTTON norm_button, kDAWindowId, res_string_button_norm, res_char_button_norm_shortcut, kButtonInsetX, 28
-        DEFINE_BUTTON fast_button, kDAWindowId, res_string_button_fast, res_char_button_fast_shortcut, kDAWidth - kButtonWidth - kButtonInsetX, 28
-        DEFINE_BUTTON ok_button, kDAWindowId, res_string_button_ok, kGlyphReturn, kDAWidth - kButtonWidth - kButtonInsetX, 52
+        DEFINE_BUTTON fast_button, kDAWindowId, res_string_button_fast, res_char_button_fast_shortcut, kDAWidth - kButtonWidth - kButtonInsetX + 1, 28
+        DEFINE_BUTTON ok_button, kDAWindowId, res_string_button_ok, kGlyphReturn, kDAWidth - kButtonWidth - kButtonInsetX + 1, 52
 
-        DEFINE_LABEL title, res_string_dialog_title, 0, 18
+        DEFINE_LABEL title, res_string_dialog_title, kDAWidth/2, kModalDialogInsetY + kSystemFontHeight - 1
 
 ;;; ============================================================
 
@@ -116,9 +116,6 @@ grafport_win:       .tag MGTK::GrafPort
 kRunPosX        = 12
 kRunPosY        = 51
 kRunDistance    = 104
-kRunWidth  = 21
-kRunHeight = 11
-
 
 run_pos:
         .byte   0
@@ -199,7 +196,8 @@ frame_counter:
         MGTK_CALL MGTK::FrameRect, frame_rect
         MGTK_CALL MGTK::SetPenSize, pensize_normal
 
-        CALL    DrawTitleString, AX=#title_label_str
+        MGTK_CALL MGTK::MoveTo, title_label_pos
+        CALL    DrawStringCentered, AX=#title_label_str
 
         BTK_CALL BTK::Draw, ok_button
         BTK_CALL BTK::Draw, norm_button
@@ -338,23 +336,24 @@ hit:    copy8   winfo::window_id, screentowindow_params::window_id
 .endproc ; CloseWindow
 
 ;;; ============================================================
-;;; Draw Title String (centered at top of port)
-;;; Input: A,X = string address
 
-.proc DrawTitleString
-        params := $6
-        str := $6
-        width := $8
+.proc DrawStringCentered
+        params := $06
+        str := params
+        width := params+2
+        dx := params
+        dy := params+2
 
         stax    str
         stax    @addr
         MGTK_CALL MGTK::StringWidth, params
-        sub16   #kDAWidth, width, title_label_pos::xcoord
-        lsr16   title_label_pos::xcoord ; /= 2
-        MGTK_CALL MGTK::MoveTo, title_label_pos
+        lsr16   width           ; /= 2
+        sub16   #0, width, dx
+        copy16  #0, dy
+        MGTK_CALL MGTK::Move, params
         MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
-.endproc ; DrawTitleString
+.endproc ; DrawStringCentered
 
 ;;; ============================================================
 

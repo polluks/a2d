@@ -18,7 +18,7 @@ test.Step(
   "Prompt to format inserted disk",
   function()
     s7d2:load(emu.subst_env("$UNFORMATTED_IMG"))
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="disk could not be read"})
 
     -- respond to alert
     a2d.DialogOK()
@@ -27,9 +27,7 @@ test.Step(
     apple2.Type("NEW.NAME")
     a2d.DialogOK()
 
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find("slot.*7.*drive.*2%?"),
-                "prompt should show slot 7, drive 2")
+    a2dtest.WaitForAlert({match="slot.*7.*drive.*2%?"})
     a2d.DialogOK()
 
     util.WaitFor(

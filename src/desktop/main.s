@@ -59,8 +59,45 @@ JT_GET_TICKS:           jmp     GetTickCount            ; *
 
         ASSERT_EQUALS ::JUMP_TABLE_LAST, *
 
+;;; Used to mark code that is used directly or indirectly by overlays
+;;; that load in the "upper" overlay memory ($5000...$9000), so must
+;;; be outside of that region. See `desktop.s` for overlay definitions.
+;;; Overlays in this range:
+;;; * `OverlayShortcutPick`
+;;; * `OverlayFileDialog`
+;;; * `OverlayFileCopy`
+;;; * `OverlayShortcutEdit`
+;;; Overlays outside this range:
+;;; * `OverlayFormatErase`
 .macro PROC_USED_IN_OVERLAY
         .assert * < OVERLAY_BUFFER || * >= OVERLAY_BUFFER + kOverlayBufferSize, error, .sprintf("Routine used by overlays in overlay zone (at $%04X)", *)
+.endmacro
+
+;;; Used to mark code that is used directly or indirectly when
+;;; overlays call into `main::ClearUpdates` to repaint directory
+;;; windows. This defends against only a smaller portion of the
+;;; "upper" overlay memory, namely ($5000...$6000), which is where the
+;;; Shortcut Picker Dialog is loaded. See `ovl_selector_pick.s` for
+;;; notes about usage. See `desktop.s` for overlay definitions.
+;;; Overlays in this range:
+;;; * `OverlayShortcutPick`
+;;; Overlays outside this range:
+;;; * `OverlayFileDialog`
+;;; * `OverlayFileCopy`
+;;; * `OverlayShortcutEdit`
+;;; * `OverlayFormatErase`
+.macro PROC_USED_CLEARING_UPDATES
+        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+.endmacro
+
+;;; Used to mark code that is used directly or indirectly by overlays
+;;; that load in the "lower" overlay memory ($800...$2000), so must
+;;; be outside of that region. See `desktop.s` for overlay definitions.
+;;; Overlays in this range:
+;;; * `OverlayFormatErase`
+.macro PROC_USED_IN_FORMAT_ERASE_OVERLAY
+        ;; Nothing is actually in this range so this is just for
+        ;; documentation purposes.
 .endmacro
 
 ;;; ============================================================
@@ -93,6 +130,12 @@ loop:
         ;; Get an event
         jsr     GetNextEvent
 
+        ;; Sample modifiers as close to event as possible
+        pha
+        jsr     ComputeModifiers
+        sta     modifiers
+        pla
+
         ;; Did the mouse move?
     IF A = #kEventKindMouseMoved
         jsr     ClearTypeDown   ; always returns Z=1
@@ -122,6 +165,11 @@ loop:
 counter:
         .byte   0
 
+;;; Computed just after `GetEvent`, so as close to synchronized with
+;;; the event as possible, without MGTK API changes.
+modifiers:
+        .byte   0
+
 .endproc ; MainLoop
 
 ;;; ============================================================
@@ -133,8 +181,8 @@ counter:
 ;;; (e.g. a window close followed by a nested loop or slow
 ;;; file operation).
 
-        PROC_USED_IN_OVERLAY
-
+        PROC_USED_CLEARING_UPDATES
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc ClearUpdates
     DO
         jsr     PeekEvent
@@ -146,7 +194,7 @@ counter:
 ;;; If caller already called GetEvent, start here.
 skip_get:
         MGTK_CALL MGTK::BeginUpdate, event_params::window_id
-        CONTINUE_IF NOT_ZERO    ; obscured
+        REDO_IF NOT_ZERO        ; obscured
 
         lda     event_params::window_id
       IF ZERO
@@ -168,6 +216,7 @@ ClearUpdatesSkipGet := ClearUpdates::skip_get
 ;;; Returns 0 if the periodic tasks were run.
 
         PROC_USED_IN_OVERLAY
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc SystemTask
         inc24   tick_counter
 
@@ -195,6 +244,7 @@ tick_counter:
 
 ;;; ============================================================
 
+        PROC_USED_CLEARING_UPDATES
 ;;; Inputs: A = `window_id` from `update` event
 .proc UpdateWindow
         sta     getwinport_params::window_id
@@ -221,7 +271,7 @@ tick_counter:
 
         ;; Handle accelerator keys
         lda     event_params::modifiers
-        bne     modifiers       ; either Open-Apple or Solid-Apple ?
+    IF ZERO                     ; either Open-Apple or Solid-Apple ?
 
         ;; --------------------------------------------------
         ;; No modifiers
@@ -246,16 +296,15 @@ tick_counter:
         jeq     KeyboardHighlightAlphaNext ; like Tab
         cmp     #'~'
         jeq     KeyboardHighlightAlphaPrev ; like Shift+Tab
-        jmp     menu_accelerators
 
+    ELSE
         ;; --------------------------------------------------
         ;; Modifiers
 
-modifiers:
         jsr     ClearTypeDown
 
         lda     event_params::modifiers
-    IF A = #3                   ; both Open-Apple + Solid-Apple ?
+      IF A = #3                 ; both Open-Apple + Solid-Apple ?
         ;; Double-modifier shortcuts
         CALL    ToUpperCase, A=event_params::key
         cmp     #res_char_menu_item_open_shortcut
@@ -271,7 +320,7 @@ modifiers:
         cmp     #CHAR_CTRL_F
         jeq     CmdFlipScreen
         rts
-    END_IF
+      END_IF
 
         ;; Non-menu keys
         lda     event_params::key
@@ -284,20 +333,20 @@ modifiers:
         jeq     CmdFocusWindow
 
         ldx     active_window_id
-    IF NOT_ZERO
+      IF NOT_ZERO
         cmp     #kShortcutGrowWindow ; Apple-G (Resize)
         jeq     CmdResize
         cmp     #kShortcutMoveWindow ; Apple-M (Move)
         jeq     CmdMove
 
-      IF A IN #'`', #'~', #CHAR_TAB ; Apple-`, Shift-Apple-`, Apple-Tab (Cycle Windows)
+       IF A IN #'`', #'~', #CHAR_TAB ; Apple-`, Shift-Apple-`, Apple-Tab (Cycle Windows)
         jmp     CmdCycleWindows
+       END_IF
       END_IF
     END_IF
 
         ;; Not one of our shortcuts - check for menu keys
         ;; (shortcuts or entering keyboard menu mode)
-menu_accelerators:
         copy8   event_params::key, menu_click_params::which_key
         copy8   event_params::modifiers, menu_click_params::key_mods
         CLEAR_BIT7_FLAG menu_modified_click_flag ; note that source is not Apple+click
@@ -472,16 +521,21 @@ offset_table:
       END_IF
 
         ;; Note if menu showing via modified click
-        jsr     ModifierDown
+        lda     MainLoop::modifiers ; bit7 = OA, bit6 = SA
+        and     #kEitherAppleModifierMask
+      IF NOT ZERO
+        lda     #$80
+      END_IF
         sta     menu_modified_click_flag
 
         MGTK_CALL MGTK::MenuSelect, menu_click_params
 
         ;; But allow double-modifier click or shortcut too
-        lda     BUTN0
-        and     BUTN1
-        ora     menu_modified_click_flag
-        sta     menu_modified_click_flag
+        jsr     ComputeModifiers ; bit7 = OA, bit6 = SA
+        and     #kEitherAppleModifierMask
+      IF A = #kEitherAppleModifierMask
+        copy8   #$80, menu_modified_click_flag
+      END_IF
 
         jmp     MenuDispatch
     END_IF
@@ -657,8 +711,9 @@ h_proc_hi:        .hibytes ScrollNoOp, ScrollLeft, ScrollRight, ScrollPageLeft, 
     IF EQ
         ;; --------------------------------------------------
         ;; Icon was already selected
-        jsr     ExtendSelectionModifierDown
-      IF NS
+        lda     MainLoop::modifiers
+        and     #kExtendSelectionModifierMask
+      IF NOT ZERO
         ;; Modifier down - remove from selection
         CALL    UnhighlightAndDeselectIcon, A=findicon_params::which_icon
         CLEAR_BIT7_FLAG maybe_select_parent_flag
@@ -667,8 +722,9 @@ h_proc_hi:        .hibytes ScrollNoOp, ScrollLeft, ScrollRight, ScrollPageLeft, 
     ELSE
         ;; --------------------------------------------------
         ;; Icon was not already selected
-        jsr     ExtendSelectionModifierDown
-      IF NS
+        lda     MainLoop::modifiers
+        and     #kExtendSelectionModifierMask
+      IF NOT ZERO
         ;; Modifier down - add to selection
         ;; ...if there is a selection, and it is same window
         lda     selected_icon_count
@@ -706,17 +762,17 @@ check_drag:
 
         RTS_IF A = #IconTK::kDragResultCanceled
 
+        ;; Snapshot modifiers before doing any real work
+        ;; TODO: Return modifier state as part of drag result
+        pha
+        jsr     ComputeModifiers
+        sta     drag_end_modifiers
+        pla
+
     IF A = #IconTK::kDragResultNotADrag
         jsr     _ActivateClickedWindow ; no-op if already active
         jmp     _CheckRenameClick
     END_IF
-
-        ;; Snapshot modifiers before doing any real work
-        pha
-        lda     BUTN1
-        and     BUTN0
-        sta     double_modifier_flag
-        pla
 
         ;; ----------------------------------------
 
@@ -754,8 +810,9 @@ check_drag:
         RTS_IF ZERO
 
         ;; Double modifier?
-        bit     double_modifier_flag
-      IF NS
+        lda     drag_end_modifiers
+        and     #kEitherAppleModifierMask
+      IF A = #kEitherAppleModifierMask
         jsr     SetOperationDstPathFromDragDropResult
         RTS_IF CS               ; failure, e.g. path too long
         jmp     MakeLinkInTarget
@@ -795,18 +852,27 @@ check_drag:
         RTS_IF CS               ; failure, e.g. path too long
 
         ;; Double modifier?
-        bit     double_modifier_flag
-    IF NS
+        lda     drag_end_modifiers
+        and     #kEitherAppleModifierMask
+    IF A = #kEitherAppleModifierMask
         jsr     GetSingleSelectedIcon
         RTS_IF ZERO
         jmp     MakeLinkInTarget
     END_IF
 
         ;; Copy/Move
-        jsr     DoCopyOrMoveSelection
+        lda     drag_end_modifiers
+        and     #kEitherAppleModifierMask
+    IF NOT ZERO
+        lda     #$80
+    END_IF
+        jsr     DoCopyOrMoveSelection ; A bit7 is "invert default" flag
         jmp     _PerformPostDropUpdates
 
-double_modifier_flag:           ; bit7
+
+;;; Computed after drag, so as close to synchronized as possible,
+;;; without IconTK API changes.
+drag_end_modifiers:
         .byte   0
 .endproc ; _IconClick
 
@@ -847,8 +913,7 @@ prev_selected_icon:
 
         PREDEFINE_SCOPE ::main::operations
 
-        bit     operations::move_flags
-    IF NS
+    IF bit operations::move_flags : NS
         ;; Update source vol's contents
         jsr     _MaybeStashDropTargetName ; in case target is in window...
         jsr     UpdateActivateAndRefreshSelectedWindow
@@ -1023,6 +1088,7 @@ clicked_window_id := _ActivateClickedWindow::window_id
 
 ;;; Used for windows that can never be obscured (e.g. dialogs)
         PROC_USED_IN_OVERLAY
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc SafeSetPortFromWindowId
         sta     getwinport_params::window_id
         MGTK_CALL MGTK::GetWinPort, getwinport_params
@@ -1045,8 +1111,7 @@ clicked_window_id := _ActivateClickedWindow::window_id
         lda     disk_in_device_table,x
         cmp     last_disk_in_devices_table,x
         bne     changed
-        dex
-      WHILE NOT_ZERO
+      WHILE dex : NOT_ZERO
     END_IF
         RETURN  A=#0
 
@@ -1058,8 +1123,7 @@ changed:
     DO
         cmp     DEVLST,y
         beq     found
-        dey
-    WHILE POS
+    WHILE dey : POS
         rts
 
 found:
@@ -1098,8 +1162,7 @@ last_disk_in_devices_table:
       DO
         CALL    CheckDiskInDevice, A=removable_device_table,x
         sta     disk_in_device_table,x
-        dex
-      WHILE NOT_ZERO
+      WHILE dex : NOT_ZERO
     END_IF
 
         pla
@@ -1110,8 +1173,6 @@ last_disk_in_devices_table:
 ;;; Input: A = unit_number
 ;;; Preserves X
 .proc CheckDiskInDevice
-        status_buffer := $800
-
         tay                     ; Y = unit_number
         txa                     ; preserve X
         pha
@@ -1163,8 +1224,7 @@ last_disk_in_devices_table:
         sta     last_disk_in_devices_table,x
         rts
        END_IF
-        dex
-      WHILE NOT ZERO
+      WHILE dex : NOT ZERO
     END_IF
         rts
 .endproc ; UpdateDiskInDevicesTables
@@ -1408,16 +1468,22 @@ rest:
         sta     INVOKER_BITSY_COMPAT
 
         ;; Get the file info to determine type.
-retry:  jsr     GetSrcFileInfo
-    IF CS
-        bit     sys_prompt_flag
-        jpl     ShowAlert
+    DO
+        jsr     GetSrcFileInfo
+      IF CS
+       IF bit sys_prompt_flag : NC
+        jsr     ShowAlert       ; arbitrary ProDOS error
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
+        REDO_IF ZERO
+        rts
+       END_IF
 
         CALL    ShowAlert, A=#kErrInsertSystemDisk
-        cmp     #kAlertResultOK
-        beq     retry           ; ok, so try again
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
+        REDO_IF ZERO
         rts                     ; cancel, so fail
-    END_IF
+      END_IF
+    DONE
 
         ;; Check file type.
         CALL    DetermineIconType, AX=#src_path_buf ; uses passed name and `src_file_info_params`
@@ -1484,9 +1550,10 @@ basic:  jsr     _CheckBasicSystem ; Only launch if BASIC.SYSTEM is found
 binary:
         lda     menu_click_params::menu_id ; From a menu (File, Selector)
         jne     launch
-        jsr     ModifierDown ; Otherwise, only launch if a button is down
-        jmi     launch
-        CALL    ShowAlertParams,  Y=#AlertButtonOptions::OKCancel, AX=#aux::str_alert_confirm_running
+        lda     MainLoop::modifiers
+        and     #kEitherAppleModifierMask
+        jne     launch
+        CALL    ShowAlertParams, Y=#AlertButtonOptions::OKCancel, AX=#aux::str_alert_confirm_running
         RTS_IF A <> #kAlertResultOK
         jmp     launch
 
@@ -1678,6 +1745,7 @@ LaunchFileWithPath := LaunchFileWithPathImpl::normal_disk
 .proc ReadLinkFile
         read_buf := $800
 
+    DO
         MLI_CALL OPEN, open_params
         bcs     err
         lda     open_params::ref_num
@@ -1690,22 +1758,24 @@ LaunchFileWithPath := LaunchFileWithPathImpl::normal_disk
         bcs     err
 
         lda     read_params::trans_count
-    IF A >= #kLinkFilePathLengthOffset
+      IF A >= #kLinkFilePathLengthOffset
 
         ldx     #kCheckHeaderLength-1
-      DO
+       DO
         lda     read_buf,x
         cmp     check_header,x
         bne     bad
-        dex
-      WHILE POS
+       WHILE dex : POS
 
         CALL    CopyToSrcPath, AX=#read_buf + kLinkFilePathLengthOffset
         RETURN  C=0
-    END_IF
+      END_IF
 
 bad:    lda     #kErrUnknown
-err:    jsr     ShowAlert
+err:    jsr     ShowAlert       ; arbitrary ProDOS error or `kErrUnknown`
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
+        REDO_IF ZERO
+    DONE
         RETURN  C=1
 
 check_header:
@@ -1723,7 +1793,7 @@ check_header:
 ;;; Input: A,X = Address
 ;;; Trashes $06
 
-        PROC_USED_IN_OVERLAY
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc UpcaseString
         ptr := $06
 
@@ -1736,8 +1806,7 @@ check_header:
         lda     (ptr),y
         jsr     ToUpperCase
         sta     (ptr),y
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
     END_IF
         rts
 .endproc ; UpcaseString
@@ -1833,8 +1902,7 @@ filerecords_free_start:
         inx                     ; include the count itself
     DO
         copy8   devlst_backup,x, DEVLST-1,x ; DEVCNT is at DEVLST-1
-        dex
-    WHILE POS
+    WHILE dex : POS
         rts
 .endproc ; RestoreDeviceList
 
@@ -1854,7 +1922,7 @@ devlst_backup:
         lda     selected_icon_count
       IF NOT_ZERO
         CALL    GetIconPath, A=selected_icon_list ; `operation_src_path` set to path; A=0 on success
-        jne     ShowAlert       ; too long
+        jne     ShowAlert       ; `ERR_INVALID_PATHNAME`
 
         CALL    CopyToBuf0, AX=#operation_src_path
       END_IF
@@ -1876,8 +1944,7 @@ devlst_backup:
         CALL    SelectorPickOverlay::Exec, A=menu_click_params::item_num
         sta     result
 
-        ;; Restore from overlays
-        ;; (restore from file dialog overlay handled in picker overlay)
+        ;; Restore from overlay(s)
         CALL    RestoreDynamicRoutine, A=#kDynamicRoutineRestoreSP ; restore from picker dialog
 
         bit     result
@@ -2024,11 +2091,9 @@ entry_num:
       DO
         lda     entry_path,y
         BREAK_IF A = #'/'
+      WHILE dey : NOT_ZERO
         dey
-      WHILE NOT_ZERO
-        dey
-        dex
-    WHILE NOT ZERO
+    WHILE dex : NOT ZERO
 
         ;; Append last two segments to `src_path_buf`
         ldx     src_path_buf
@@ -2089,6 +2154,7 @@ entry_num:
 ;;; Inputs: Source string at $06, target buffer at A,X
 ;;; Output: String length in A
 
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
         PROC_USED_IN_OVERLAY
 .proc CopyPtr1ToBuf
         ptr1 := $06
@@ -2101,8 +2167,7 @@ entry_num:
         lda     (ptr1),y
         addr := *+1
         sta     SELF_MODIFIED,y
-        dey
-    WHILE POS
+    WHILE dey : POS
         rts
 .endproc ; CopyPtr1ToBuf
 
@@ -2120,8 +2185,7 @@ entry_num:
         lda     (ptr2),y
         addr := *+1
         sta     SELF_MODIFIED,y
-        dey
-    WHILE POS
+    WHILE dey : POS
         rts
 .endproc ; CopyPtr2ToBuf
 
@@ -2132,8 +2196,7 @@ CmdAbout := AboutDialogProc
 ;;; ============================================================
 
 .proc CmdAboutThisApple
-        ldax    #str_about_this_apple
-        FALL_THROUGH_TO LaunchPassedPathOnSystemDisk
+        FALL_THROUGH_TO LaunchPassedPathOnSystemDisk, AX=#str_about_this_apple
 .endproc ; CmdAboutThisApple
 
 ;;; ============================================================
@@ -2204,14 +2267,13 @@ CmdDeskAcc      := CmdDeskAccImpl::start
         lda     selected_icon_list ; first selected icon
       IF A <> trash_icon_num    ; ignore trash
         jsr     GetIconPath     ; `operation_src_path` set to path; A=0 on success
-        jne     ShowAlert       ; too long
+        jne     ShowAlert       ; `ERR_INVALID_PATHNAME`
         CALL    CopyToSrcPath, AX=#operation_src_path
       END_IF
     END_IF
         CALL    IconToAnimate, AX=#tmp_path_buf
         tay
-        ldax    #tmp_path_buf
-        FALL_THROUGH_TO InvokeDeskAccWithIcon
+        FALL_THROUGH_TO InvokeDeskAccWithIcon, AX=#tmp_path_buf
 .endproc ; InvokeDeskAccByPath
 
 ;;; ============================================================
@@ -2228,14 +2290,17 @@ CmdDeskAcc      := CmdDeskAccImpl::start
         CALL    AnimateWindowOpen, X=#$FF ; desktop
     END_IF
 
+        ;; --------------------------------------------------
         ;; Load the DA
-retry:  MLI_CALL OPEN, open_params
-    IF CS
+
+    DO
+        MLI_CALL OPEN, open_params
+      IF CS
         CALL    ShowAlert, A=#kErrInsertSystemDisk
-        cmp     #kAlertResultOK
-        beq     retry           ; ok, so try again
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
+        REDO_IF ZERO
         rts                     ; cancel, so fail
-    END_IF
+      END_IF
 
         lda     open_params::ref_num
         sta     read_header_params::ref_num
@@ -2245,8 +2310,7 @@ retry:  MLI_CALL OPEN, open_params
 
         lda     DAHeader::aux_length
         ora     DAHeader::aux_length+1
-        beq     main
-
+      IF NOT ZERO
         ;; Aux memory segment
         copy16  DAHeader::aux_length, read_params::request_count
         MLI_CALL READ, read_params
@@ -2254,20 +2318,26 @@ retry:  MLI_CALL OPEN, open_params
         copy16  #DA_LOAD_ADDRESS, DESTINATIONLO
         add16   #DA_LOAD_ADDRESS-1, DAHeader::aux_length, ENDLO
         CALL    AUXMOVE, C=1    ; main>aux
+      END_IF
 
         ;; Main memory segment
-main:   copy16  DAHeader::main_length, read_params::request_count
+        copy16  DAHeader::main_length, read_params::request_count
         MLI_CALL READ, read_params
         MLI_CALL CLOSE, close_params
+    DONE
 
+        ;; --------------------------------------------------
         ;; Invoke it
+
         jsr     SetCursorPointer ; before invoking DA
         jsr     DA_LOAD_ADDRESS
 
+        ;; --------------------------------------------------
         ;; Restore state
+
         jsr     InitSetDesktopPort ; DA's port destroyed, set something real as current
         jsr     ShowClockForceUpdate
-        jsr     ClearUpdates
+        jsr     ClearUpdates    ; following DA close (just in case)
 
         icon := *+1
         lda     #SELF_MODIFIED_BYTE
@@ -2371,9 +2441,8 @@ main_length:    .word   0
 
         jsr     ::FileCopyOverlay::Run
         pha                     ; A = dialog result
-        CALL    RestoreDynamicRoutine, A=#kDynamicRoutineRestoreFD
         jsr     PushPointers    ; $06 = dst
-        jsr     ClearUpdates    ; following picker dialog close
+        jsr     ClearUpdates    ; following File Dialog close
         jsr     PopPointers     ; $06 = dst
         pla                     ; A = dialog result
         RTS_IF NS
@@ -2454,8 +2523,7 @@ main_length:    .word   0
         sty     filename_buf
     DO
         copy8   operation_dst_path+1,y, filename_buf,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
         copy8   #1, operation_dst_path
         rts
 .endproc ; SplitOperationDstPath
@@ -2494,8 +2562,7 @@ main_length:    .word   0
 
         ;; Close after open only if from real menu, and modifier is down.
         lda     #0
-        bit     menu_modified_click_flag
-    IF NS
+    IF bit menu_modified_click_flag : NS
         lda     selected_window_id
     END_IF
         sta     window_id_to_close
@@ -2528,8 +2595,10 @@ from_keyboard:
         ;; Close after open if modifier is down.
 from_double_click:
         copy8   #0, window_id_to_close
-        jsr     ModifierDown
-    IF NS
+
+        lda     MainLoop::modifiers ; bit7 = OA, bit6 = SA
+        and     #kEitherAppleModifierMask
+    IF NOT ZERO
         copy8   selected_window_id, window_id_to_close
     END_IF
         FALL_THROUGH_TO common
@@ -2583,8 +2652,7 @@ next:   txa
 next_icon:
         pla                     ; A = index
         tax
-        inx
-    WHILE NOT_ZERO              ; always
+    WHILE inx : NOT_ZERO        ; always
 
         ;; File (executable or data)
 maybe_open_file:
@@ -2599,7 +2667,7 @@ maybe_open_file:
 
         txa                     ; A = icon id
         jsr     GetIconPath     ; `operation_src_path` set to path; A=0 on success
-        jne     ShowAlert       ; too long
+        jne     ShowAlert       ; `ERR_INVALID_PATHNAME`
         CALL    CopyToSrcPath, AX=#operation_src_path
 
         jmp     LaunchFileWithPath
@@ -2718,7 +2786,8 @@ str_disk_copy:
         PASCAL_STRING kPathnameDiskCopy
 
 start:
-retry:
+
+    DO
         jsr     SetCursorWatch  ; before loading module (undone in module or failure)
 
         ;; Do this now since we'll use up the space later.
@@ -2729,12 +2798,13 @@ retry:
         sta     DISK_COPY_INITIAL_UNIT_NUM
 
         MLI_CALL OPEN, open_params
-    IF CS
+      IF CS
         CALL    ShowAlert, A=#kErrInsertSystemDisk
-        cmp     #kAlertResultOK
-        beq     retry           ; ok, so try again
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
+        REDO_IF ZERO
         jmp     SetCursorPointer ; after loading module (failure)
-    END_IF
+      END_IF
+    DONE
 
         lda     open_params::ref_num
         sta     read_params::ref_num
@@ -2791,21 +2861,22 @@ start:
         COPY_STRING str_new_folder, stashed_name
 
         ;; Repeat to find a free name
-   REPEAT
+    REPEAT
         CALL    GetWindowPath, A=active_window_id
         jsr     CopyToSrcPath
         CALL    AppendFilenameToSrcPath, AX=#stashed_name
         jsr     GetSrcFileInfo
-        bcc     spin
+      IF CS
         BREAK_IF A = #ERR_FILE_NOT_FOUND
         bne     error           ; always
+      END_IF
 
-spin:   jsr     SpinName
+        jsr     SpinName
     FOREVER
 
         ;; --------------------------------------------------
         ;; Try creating the folder
-create:
+
         MLI_CALL CREATE, create_params
         bcs     error
 
@@ -2902,8 +2973,7 @@ CmdNewFolder    := CmdNewFolderImpl::start
        END_IF
       END_IF
 
-        inc     index
-    WHILE NOT_ZERO              ; always
+    WHILE inc index : NOT_ZERO  ; always
 
 .endproc ; FindIconByNameInCachedWindow
 
@@ -2921,8 +2991,7 @@ CmdNewFolder    := CmdNewFolderImpl::start
         ldy     #15
     DO
         sta     digits,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         ;; While digits, pop from string (X=len) onto digits (Y=len)
         ldx     stashed_name
@@ -2931,8 +3000,7 @@ CmdNewFolder    := CmdNewFolderImpl::start
         BREAK_IF A NOT_BETWEEN #'0', #'9'
         iny
         sta     digits,y        ; stash digits as we go
-        dex
-    WHILE NOT_ZERO              ; always (name must start w/ letter)
+    WHILE dex : NOT_ZERO        ; always (name must start w/ letter)
 
         ;; Did the string end with '.' then digits?
         cmp     #'.'            ; dot before numbers?
@@ -2953,8 +3021,7 @@ CmdNewFolder    := CmdNewFolderImpl::start
         cmp     #'9'+1
         bne     concatenate     ; done
         copy8   #'0', digits+1,x
-        inx
-      WHILE X <> digits
+      WHILE inx : X <> digits
         inc     digits
     WHILE X <> #13              ; max of 13 digits
         beq     SpinName        ; restart
@@ -2982,8 +3049,7 @@ concatenate:
         lda     digits,y
         inx
         sta     stashed_name,x
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
         stx     stashed_name
         rts
 .endproc ; SpinName
@@ -3026,7 +3092,7 @@ concatenate:
 
         ;; Is right/bottom of icon beyond window? If so, adjust by delta (positive)
         sub16   tmp_rect::bottomright,x, viewport+MGTK::Rect::bottomright,x, delta
-        bmi     done
+        CONTINUE_IF NEG
 
 adjust:
         lda     delta
@@ -3037,10 +3103,7 @@ adjust:
         add16   viewport+MGTK::Rect::bottomright,x, delta, viewport+MGTK::Rect::bottomright,x
       END_IF
 
-done:
-        dex                     ; next dimension
-        dex
-    WHILE POS
+    WHILE dex : dex : POS       ; next dimension
 
         lda     dirty
     IF NOT_ZERO
@@ -3075,12 +3138,10 @@ done:   rts
         stx     selection_count_copy
     DO
         copy8   selected_icon_list-1,x, selection_list_copy-1,x
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         ;; If ejecting, clear selection
-        bit     eject_flag
-    IF NS
+    IF bit eject_flag : NS
         jsr     ClearSelection
     END_IF
 
@@ -3093,8 +3154,7 @@ done:   rts
         lda     selection_list_copy,x
       IF A <> trash_icon_num
         ldy     #kCheckDriveShowUnexpectedErrors
-        bit     eject_flag
-       IF NS
+       IF bit eject_flag : NS
         pha
         jsr     SmartportEject
         pla
@@ -3105,8 +3165,7 @@ done:   rts
 
         pla                     ; A = index
         tax                     ; X = index
-        inx
-    WHILE X <> selection_count_copy
+    WHILE inx : X <> selection_count_copy
 
         rts
 
@@ -3263,8 +3322,7 @@ entry2:
 ;;; Entry point when refreshing window contents
 entry3:
         ;; Clear selection if in the window
-        lda     selected_window_id
-    IF A = active_window_id
+    IF lda selected_window_id : A = active_window_id
         lda     #0
         sta     selected_icon_count
         sta     selected_window_id
@@ -3290,8 +3348,7 @@ entry3:
 ;;; valid across view changes.
 
 .proc _PreserveSelection
-        lda     selected_window_id
-    IF A = active_window_id
+    IF lda selected_window_id : A = active_window_id
         lda     selected_icon_count
       IF NOT_ZERO
         sta     selection_preserved_count
@@ -3303,8 +3360,7 @@ entry3:
         CALL    GetIconRecordNum, A=selected_icon_list-1,x
         ldx     selected_icon_count
         sta     selected_icon_list-1,x
-        dec     selected_icon_count
-       WHILE NOT_ZERO
+       WHILE dec selected_icon_count : NOT_ZERO
 
         copy8   #0, selected_window_id
       END_IF
@@ -3338,8 +3394,7 @@ entry3:
 
         pla
         tax                     ; X = index
-        dex
-      WHILE POS
+      WHILE dex : POS
 
         ;; For each record num in the list, find and
         ;; highlight the corresponding icon.
@@ -3349,8 +3404,7 @@ entry3:
         CALL    AddToSelectionList, A=mapping,y
         sta     icon_param
         ITK_CALL IconTK::HighlightIcon, icon_param
-        dec     selection_preserved_count
-      WHILE NOT_ZERO
+      WHILE dec selection_preserved_count : NOT_ZERO
 
         copy8   cached_window_id, selected_window_id
     END_IF
@@ -3404,8 +3458,7 @@ RefreshView := RefreshViewImpl::entry3
        END_IF
         pla                     ; A = index+1
         tax                     ; X = index+1
-        dex
-      WHILE NOT_ZERO
+      WHILE dex : NOT_ZERO
     END_IF
 
         rts
@@ -3496,8 +3549,7 @@ found:  lda     DEVLST,x
         ldx     #kMaxVolumes-1
     DO
         BREAK_IF A = device_to_icon_map,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         rts
 .endproc ; IconToDeviceIndex
@@ -3716,15 +3768,6 @@ alpha:  jsr     ShiftDown
 
         FALL_THROUGH_TO common
 
-        ;; TODO: If shift is down and there is a selection then:
-        ;; * current = last selected
-        ;; * while true
-        ;;   * current = current + delta
-        ;;   * if current does not exist, break
-        ;;   * if current is selected, continue
-        ;;   * otherwise, select current
-
-
 ;;; --------------------------------------------------
 ;;; Figure out current selected index, based on selection.
 
@@ -3747,8 +3790,7 @@ common:
     DO
         cmp     buffer+1,x
         beq     pick_next_prev
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         ;; If not in our list, use a fallback.
 fallback:
@@ -3771,8 +3813,7 @@ pick_next_prev:
         FALL_THROUGH_TO select_index
 
 select_index:
-        bit     extend_selection_flag
-    IF NS
+    IF bit extend_selection_flag : NS
         stx     cur_index
         CALL    IsIconSelected, A=buffer+1,x
       IF ZS
@@ -3842,8 +3883,7 @@ END_PARAM_BLOCK
 
         ldx     selected_icon_count
         jeq     fallback
-        cpx     cached_window_icon_count
-    IF EQ
+    IF X = cached_window_icon_count
         ;; All icons in window are selected; use fallback if not
         ;; extending selection w/ Shift
         bit     shift_flag
@@ -3862,8 +3902,6 @@ END_PARAM_BLOCK
         ;; NOTE: Intentionally uses bitmap rect as this seems
         ;; to match intuitive expectations better.
         ITK_CALL IconTK::GetBitmapRect, icon_param ; inits `tmp_rect`
-
-        ;; TODO: What about small icon views?
 
 ;;; --------------------------------------------------
 ;;; Extend rect, based on dir
@@ -3949,8 +3987,7 @@ best:
         copy16  icon_rect,y, best_value
 
 next_icon:
-        inc     index
-    WHILE NOT_ZERO              ; always
+    WHILE inc index : NOT_ZERO  ; always
 
         lda     best_icon
         bne     select
@@ -4094,23 +4131,21 @@ file_char:
         ldy     #0
         copy8   (ptr),y, len
 
-cloop:  iny
+      DO
+        iny
         lda     (ptr),y
         jsr     ToUpperCase
-        cmp     typedown_buf,y
-        bcc     next
+        BREAK_IF A < typedown_buf,y
         beq     :+
         bcs     found
 :
         cpy     typedown_buf
         beq     found
 
-        cpy     len
-        bcc     cloop
+      WHILE Y < len
 
-next:   inc     index
-        lda     index
-    WHILE A <> num_filenames
+        inc     index
+    WHILE lda index : A <> num_filenames
 
         dec     index
 found:  RETURN  A=index
@@ -4159,8 +4194,7 @@ typedown_buf:
     DO
         BREAK_IF X = cached_window_icon_count
         copy8   cached_window_icon_list,x, buffer+1,x
-        inx
-    WHILE NOT_ZERO              ; always
+    WHILE inx : NOT_ZERO        ; always
 
         stx     buffer
         rts
@@ -4235,8 +4269,7 @@ typedown_buf:
         len2 := *+1
         cpy     #SELF_MODIFIED_BYTE
         beq     gt              ; 1>2
-        iny
-    WHILE NOT_ZERO              ; always
+    WHILE iny : NOT_ZERO        ; always
 
 gt:     lda     #$FF            ; Z=0
         sec
@@ -4314,8 +4347,7 @@ ret:    rts
         dex
     DO
         copy8   cached_window_icon_list,x, selected_icon_list,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         copy8   cached_window_icon_count, selected_icon_count
         copy8   cached_window_id, selected_window_id
@@ -4339,8 +4371,7 @@ ret:    rts
         tay
 
         ;; Need at least two windows to cycle.
-        lda     num_open_windows
-    IF A >= #2
+    IF lda num_open_windows : A >= #2
         cpy     #'~'
         beq     reverse
 
@@ -4362,8 +4393,7 @@ ret:    rts
        END_IF
         lda     window_to_dir_icon_table,x
         bne     found           ; not `kWindowToDirIconFree`
-        inx
-      WHILE NOT_ZERO            ; always
+      WHILE inx : NOT_ZERO      ; always
 
         ;; --------------------------------------------------
         ;; Search downwards through window-icon map to find next.
@@ -4497,9 +4527,7 @@ _PreamblePreCached:
         ldx     #2              ; loop over dimensions
     DO
         sub16   viewport+MGTK::Rect::bottomright,x, viewport+MGTK::Rect::topleft,x, viewport_size,x
-        dex                     ; next dimension
-        dex
-    WHILE POS
+    WHILE dex : dex : POS       ; next dimension
 
         lda     cached_window_icon_count
     IF ZERO
@@ -4521,9 +4549,7 @@ _PreamblePreCached:
     DO
         ;; stash bbox dimensions before union below
         sub16   iconbb_rect+MGTK::Rect::bottomright,x, iconbb_rect+MGTK::Rect::topleft,x, bbox_size,x
-        dex                     ; next dimension
-        dex
-    WHILE POS
+    WHILE dex : dex : POS       ; next dimension
 
         MGTK_CALL MGTK::UnionRects, unionrects_viewport_iconbb
         COPY_STRUCT MGTK::Rect, iconbb_rect, ubox
@@ -4915,8 +4941,7 @@ ScrollUpdateWinfo := ScrollManager::ActivateCtlsSetThumbsWinfo
 
         pla                     ; A = index
         tax                     ; X = index
-        dex
-    WHILE POS
+    WHILE dex : POS
         rts
 .endproc ; CmdCheckAllDrives
 
@@ -4940,8 +4965,7 @@ pending_alert:
         compare := *+1
         cmp     #SELF_MODIFIED_BYTE
         BREAK_IF EQ
-        dex
-    WHILE POS
+    WHILE dex : POS
         rts
 .endproc ; UnitNumberToDeviceIndex
 
@@ -5094,7 +5118,7 @@ close_loop:
         ldy     devlst_index
         lda     DEVLST,y
         ;; NOTE: Not masked with `UNIT_NUM_MASK`, `IsDiskII` handles it.
-        jsr     IsDiskII
+        jsr     IsDiskII        ; returns Z=1 if yes
         RTS_IF ZS               ; is Disk II; that's fine
     END_IF
 
@@ -5111,7 +5135,7 @@ ret:    rts
         ;; --------------------------------------------------
 
 show_error:
-        jmp     ShowAlert
+        TAIL_CALL ShowAlertOption, X=#AlertButtonOptions::OK
 
         ;; --------------------------------------------------
 
@@ -5192,13 +5216,12 @@ arbitrary_target:
         ;; Prep struct for writing
 
         CALL    GetIconPath, A=selected_icon_list ; `operation_src_path` set to path; A=0 on success
-        jne     ShowAlert       ; too long
+        jne     ShowAlert       ; `ERR_INVALID_PATHNAME`
 
         ldx     #kHeaderSize-1
     DO
         copy8   header,x, link_struct,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         COPY_STRING operation_src_path, link_struct::path
         lda     link_struct::path
@@ -5226,9 +5249,7 @@ arbitrary_target:
         ldy     #.strlen(kAliasSuffix)-1
     DO
         copy8   suffix,y, stashed_name,x
-        dex
-        dey
-    WHILE POS
+    WHILE dex : dey : POS
 
         ;; Repeat to find a free name
     REPEAT
@@ -5253,9 +5274,7 @@ arbitrary_target:
         sta     write_params::ref_num
         sta     close_params::ref_num
         MLI_CALL WRITE, write_params
-        php
         MLI_CALL CLOSE, close_params
-        plp
         bcs     err
 
         ;; Update name case bits on disk, if possible.
@@ -5274,7 +5293,7 @@ arbitrary_target:
         jmp     TriggerRenameForFileIconWithStashedName
 
         ;; --------------------------------------------------
-err:    jmp     ShowAlert
+err:    TAIL_CALL ShowAlertOption, X=#AlertButtonOptions::OK
 
 .endproc ; CmdMakeLinkImpl
         CmdMakeLink := CmdMakeLinkImpl::target_selection
@@ -5300,8 +5319,8 @@ err:    jmp     ShowAlert
         CALL    FindIconForPath, AX=#src_path_buf
         jne     SelectIconAndEnsureVisible
 
-        lda     #ERR_VOL_NOT_FOUND
-alert:  jmp     ShowAlert
+        lda     #ERR_FILE_NOT_FOUND
+alert:  jmp     ShowAlert       ; either `ERR_INVALID_PATHNAME` or `ERR_FILE_NOT_FOUND`
 .endproc ; CmdShowLink
 
 ;;; ============================================================
@@ -5311,8 +5330,7 @@ alert:  jmp     ShowAlert
 ;;; Same inputs/outputs as `ActivateAndRefreshWindowOrClose`
 
 .proc UpdateActivateAndRefreshSelectedWindow
-        lda     selected_window_id
-        FALL_THROUGH_TO UpdateActivateAndRefreshWindow
+        FALL_THROUGH_TO UpdateActivateAndRefreshWindow, A=selected_window_id
 .endproc ; UpdateActivateAndRefreshSelectedWindow
 
 .proc UpdateActivateAndRefreshWindow
@@ -5380,8 +5398,7 @@ alert:  jmp     ShowAlert
         ITK_CALL IconTK::UnhighlightIcon, icon_param
         ITK_CALL IconTK::DrawIcon, icon_param
 
-        lda     icon_param
-        FALL_THROUGH_TO RemoveFromSelectionList
+        FALL_THROUGH_TO RemoveFromSelectionList, A=icon_param
 .endproc ; UnhighlightAndDeselectIcon
 
 ;;; ============================================================
@@ -5394,14 +5411,12 @@ alert:  jmp     ShowAlert
         ;; Find index in list
         ldx     selected_icon_count
     DO
-        dex
-    WHILE A <> selected_icon_list,x
+    WHILE dex : A <> selected_icon_list,x
 
         ;; Move everything down
     DO
         copy8   selected_icon_list+1,x, selected_icon_list,x
-        inx
-    WHILE X <> selected_icon_count
+    WHILE inx : X <> selected_icon_count
 
         dec     selected_icon_count
     IF ZERO
@@ -5422,8 +5437,7 @@ alert:  jmp     ShowAlert
         jsr     _TryActivateAndRefreshWindow
         pla                     ; A = window id
 
-        bit     exception_flag
-    IF NC
+    IF bit exception_flag : NC
         RETURN  A=#0
     END_IF
 
@@ -5530,8 +5544,9 @@ END_PARAM_BLOCK
         lda     event_params::kind
     IF A <> #MGTK::EventKind::drag
         ;; No, just a click; optionally clear selection
-        jsr     ExtendSelectionModifierDown
-        jpl     ClearSelection  ; don't clear if mis-clicking
+        lda     MainLoop::modifiers
+        and     #kExtendSelectionModifierMask
+        jeq     ClearSelection  ; don't clear if mis-clicking
         rts
     END_IF
 
@@ -5540,8 +5555,11 @@ END_PARAM_BLOCK
         lda     window_id
         cmp     selected_window_id
         bne     clear
-        jsr     ExtendSelectionModifierDown
-        bmi     :+
+
+        lda     MainLoop::modifiers
+        and     #kExtendSelectionModifierMask
+        bne     :+
+
 clear:  jsr     ClearSelection
         CALL    CacheWindowIconList, A=window_id
 :
@@ -5561,8 +5579,7 @@ clear:  jsr     ClearSelection
         lda     initial_pos,x
         sta     tmp_rect::topleft,x
         sta     tmp_rect::bottomright,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         jsr     FrameTmpRect
 
@@ -5621,8 +5638,7 @@ event_loop:
 
         pla                     ; A = index
         tax                     ; X = index
-        inx
-      WHILE NOT_ZERO            ; always
+      WHILE inx : NOT_ZERO      ; always
     END_IF
 
         ;; --------------------------------------------------
@@ -5651,9 +5667,7 @@ event_loop:
         cmp     #kDragBoundThreshold
         bcs     beyond
 
-        dex                     ; next dimension
-        dex
-    WHILE POS
+    WHILE dex : dex : POS       ; next dimension
         jmp     event_loop
 
         ;; Beyond threshold; erase rect
@@ -5675,9 +5689,7 @@ beyond:
         copy16  initial_pos,x, tmp_rect::topleft,x
         copy16  event_params::coords,x, tmp_rect::bottomright,x
       END_IF
-        dex                     ; next dimension
-        dex
-    WHILE POS
+    WHILE dex : dex : POS       ; next dimension
 
         jsr     FrameTmpRect
         jmp     event_loop
@@ -5738,16 +5750,18 @@ beyond:
         RTS_IF ZERO
 
         ;; If modifier is down, close all windows
-        jsr     ModifierDown
-        jmi     CmdCloseAll
+        lda     MainLoop::modifiers ; bit7 = OA, bit6 = SA
+        and     #kEitherAppleModifierMask
+    IF NOT ZERO
+        jmp     CmdCloseAll
+    END_IF
 
         FALL_THROUGH_TO CloseActiveWindow
 .endproc ; HandleCloseClick
 
 ;;; Close the active window
 .proc CloseActiveWindow
-        lda     active_window_id
-        FALL_THROUGH_TO CloseSpecifiedWindow
+        FALL_THROUGH_TO CloseSpecifiedWindow, A=active_window_id
 .endproc ; CloseActiveWindow
 
 ;;; Inputs: A = window_id
@@ -5836,8 +5850,7 @@ validate_windows_flag:
         .byte   0
 
 .proc ValidateWindows
-        bit     validate_windows_flag
-    IF NS
+    IF bit validate_windows_flag : NS
         CLEAR_BIT7_FLAG validate_windows_flag
         copy8   #kMaxDeskTopWindows, window_id
 
@@ -5860,8 +5873,7 @@ validate_windows_flag:
         END_IF
        END_IF
 
-        dec     window_id
-      WHILE NOT_ZERO
+      WHILE dec window_id : NOT_ZERO
     END_IF
 
         rts
@@ -5870,8 +5882,7 @@ validate_windows_flag:
 ;;; ============================================================
 
 .proc ApplyActiveWinfoToWindowGrafport
-        lda     active_window_id
-        FALL_THROUGH_TO ApplyWinfoToWindowGrafport
+        FALL_THROUGH_TO ApplyWinfoToWindowGrafport, A=active_window_id
 .endproc ; ApplyActiveWinfoToWindowGrafport
 
 .proc ApplyWinfoToWindowGrafport
@@ -5882,8 +5893,7 @@ validate_windows_flag:
         ldy     #.sizeof(MGTK::GrafPort) - 1
     DO
         copy8   (ptr),y, window_grafport,y
-        dey
-    WHILE POS
+    WHILE dey : POS
         rts
 .endproc ; ApplyWinfoToWindowGrafport
 
@@ -5896,9 +5906,7 @@ validate_windows_flag:
 
         sub16   viewport+MGTK::Rect::bottomright,x, viewport+MGTK::Rect::topleft,x, viewport+MGTK::Rect::bottomright,x
         copy16  #0, viewport+MGTK::Rect::topleft,x
-        dex                     ; next dimension
-        dex
-    WHILE POS
+    WHILE dex : dex : POS       ; next dimension
         FALL_THROUGH_TO AssignActiveWindowCliprect
 .endproc ; ResetActiveWindowViewport
 
@@ -5911,9 +5919,7 @@ validate_windows_flag:
         ldx     #.sizeof(MGTK::Rect)-1
     DO
         copy8   window_grafport+MGTK::GrafPort::maprect,x, (ptr),y
-        dey
-        dex
-    WHILE POS
+    WHILE dey : dex : POS
         rts
 .endproc ; AssignActiveWindowCliprect
 
@@ -5929,8 +5935,7 @@ validate_windows_flag:
 ;;; return zero.
 ;;; Z=0 and A=icon num if only one, Z=0 and A=0 otherwise
 .proc GetSingleSelectedIcon
-        lda     selected_icon_count
-    IF A <> #1
+    IF lda selected_icon_count : A <> #1
         RETURN  A=#0
     END_IF
         RETURN  A=selected_icon_list
@@ -5962,7 +5967,7 @@ for_icon:
         ;; Compute the path, if it fits
         CALL    GetIconPath, A=icon_param ; `operation_src_path` set to path, A=0 on success
     IF NOT_ZERO
-        jsr     ShowAlert       ; A has error if `GetIconPath` fails
+        jsr     ShowAlert       ; `ERR_INVALID_PATHNAME`
         ldx     saved_stack
         txs
         rts
@@ -5996,8 +6001,7 @@ for_path:
 
 no_win:
         ;; Is there a free window?
-        lda     num_open_windows
-    IF A >= #kMaxDeskTopWindows
+    IF lda num_open_windows : A >= #kMaxDeskTopWindows
         ;; Nope, show error.
         CALL    ShowAlertParams, Y=#AlertButtonOptions::OK, AX=#aux::str_warning_too_many_windows
         ldx     saved_stack
@@ -6010,8 +6014,7 @@ no_win:
     DO
         lda     window_to_dir_icon_table,x
         BREAK_IF ZERO           ; is `kWindowToDirIconFree`
-        inx
-    WHILE NOT_ZERO              ; always
+    WHILE inx : NOT_ZERO        ; always
 
         ;; Map the window to its source icon
         copy8   icon_param, window_to_dir_icon_table,x ; possibly `kWindowToDirIconNone` if opening via path
@@ -6072,8 +6075,7 @@ no_win:
     DO
         lda     src_path_buf,y
         BREAK_IF A = #'/'
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; Copy to `filename_buf`
         ldx     #0
@@ -6092,8 +6094,7 @@ no_win:
         ldy     #kMaxFilenameLength
     DO
         copy8   filename_buf,y, (title_ptr),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; --------------------------------------------------
         ;; Prepare path
@@ -6106,8 +6107,7 @@ no_win:
         ldy     src_path_buf
     DO
         copy8   src_path_buf,y, (path_ptr),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; --------------------------------------------------
 
@@ -6150,9 +6150,7 @@ no_win:
         ldx     #.sizeof(MGTK::Rect)-1
     DO
         sta     (winfo_ptr),y
-        dey
-        dex
-    WHILE POS
+    WHILE dey : dex : POS
 
         ;; --------------------------------------------------
         ;; Scrollbars - start off inactive but ready to go
@@ -6195,8 +6193,7 @@ no_win:
         ;; --------------------------------------------------
         ;; Create window and icons
 
-        bit     copy_new_window_bounds_flag
-    IF NS
+    IF bit copy_new_window_bounds_flag : NS
         ;; DeskTopSettings::kViewByXXX
         ldx     cached_window_id
         copy8   new_window_view_by, win_view_by_table-1,x
@@ -6206,24 +6203,19 @@ no_win:
         ldx     #.sizeof(MGTK::Point)-1
       DO
         copy8   new_window_viewloc,x, (winfo_ptr),y
-        dey
-        dex
-      WHILE POS
+      WHILE dey : dex : POS
 
         ;; maprect
         ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + .sizeof(MGTK::Rect)-1
         ldx     #.sizeof(MGTK::Rect)-1
       DO
         copy8   new_window_maprect,x, (winfo_ptr),y
-        dey
-        dex
-      WHILE POS
+      WHILE dey : dex : POS
     END_IF
 
         jsr     InitWindowIcons
 
-        bit     copy_new_window_bounds_flag
-    IF NC
+    IF bit copy_new_window_bounds_flag : NC
         jsr     ComputeInitialWindowSize
         jsr     AdjustViewportForNewIcons
     END_IF
@@ -6292,19 +6284,19 @@ OpenWindowForPath := OpenWindowImpl::for_path
 .proc MarkIconNotDimmed
         ;; Find open window for the icon
         lda     icon_param
-        beq     ret
-
+    IF NOT ZERO
         jsr     FindWindowIndexForDirIcon ; X = window id-1 if found
-    IF EQ
+      IF EQ
         ;; If found, remove from the table.
         copy8   #kWindowToDirIconFree, window_to_dir_icon_table,x
-    END_IF
+      END_IF
 
         ;; Update the icon and redraw
         CALL    MarkIconNotDimmedNoDraw, A=icon_param
         ITK_CALL IconTK::DrawIcon, icon_param
+    END_IF
 
-ret:    rts
+        rts
 .endproc ; MarkIconNotDimmed
 
 ;;; ============================================================
@@ -6370,7 +6362,7 @@ err:    RETURN  C=1
 ;;; ============================================================
 ;;; Draw all entries (icons or list items) in (cached) window
 
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+        PROC_USED_CLEARING_UPDATES
 .proc DrawWindowEntries
         ;; --------------------------------------------------
         ;; Icons
@@ -6436,7 +6428,7 @@ done:
 ;;; Output: A = icon's record index in its window
 ;;; Trashes $06
 
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+        PROC_USED_CLEARING_UPDATES
 .proc GetIconRecordNum
         jsr     GetIconEntry
         ptr := $06
@@ -6509,8 +6501,7 @@ done:
 
         pla                     ; A = index
         tax
-        inx
-       WHILE X <> selected_icon_count
+       WHILE inx : X <> selected_icon_count
 
         jsr     CachedIconsWindowToScreen
         jsr     PopPointers     ; do not tail-call optimize!
@@ -6529,15 +6520,14 @@ done:
         ITK_CALL IconTK::DrawIcon, icon_param
         pla
         tax
-        inx
-    WHILE X <> selected_icon_count
+    WHILE inx : X <> selected_icon_count
 
         rts
 .endproc ; RedrawSelectedIcons
 
 ;;; ============================================================
 
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+        PROC_USED_CLEARING_UPDATES
 .proc CachedIconsXToYImpl
         ENTRY_POINTS_FOR_BIT7_FLAG s2w, w2s, s2w_flag
 
@@ -6556,9 +6546,7 @@ done:
        ELSE
         sub16   #0, map_delta,x, offset_icons_params::delta,x
        END_IF
-        dex
-        dex
-      WHILE POS
+      WHILE dex : dex : POS
 
         ITK_CALL IconTK::OffsetAll, offset_icons_params
     END_IF
@@ -6625,8 +6613,7 @@ CachedIconsWindowToScreen := CachedIconsXToYImpl::w2s
        DO
         lda     found_windows_list-1,y
         jsr     AssignWindowBlockCounts
-        dey
-       WHILE NOT_ZERO
+       WHILE dey : NOT_ZERO
       END_IF
     END_IF
 
@@ -6661,8 +6648,7 @@ CachedIconsWindowToScreen := CachedIconsXToYImpl::w2s
         lda     (ptr),y
         cmp     #'/'
         beq     slash
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; Oops - no slash
         ldy     #1
@@ -6684,8 +6670,7 @@ slash:  cpy     #1
 ;;; ============================================================
 
 .proc FindWindowForSrcPath
-        ldax    #src_path_buf
-        FALL_THROUGH_TO FindWindowForPath
+        FALL_THROUGH_TO FindWindowForPath, AX=#src_path_buf
 .endproc ; FindWindowForSrcPath
 
 ;;; ============================================================
@@ -6719,8 +6704,7 @@ start:  stax    ptr1
         window_num := *+1
         lda     #SELF_MODIFIED_BYTE
       IF A >= #kMaxDeskTopWindows+1 ; directory windows are 1-8
-        bit     exact_match_flag
-       IF NS
+       IF bit exact_match_flag : NS
         lda     #0
        END_IF
         rts
@@ -6729,20 +6713,19 @@ start:  stax    ptr1
         tax
         lda     window_to_dir_icon_table-1,x
         ASSERT_EQUALS ::kWindowToDirIconFree, 0
-        CONTINUE_IF ZERO
+        REDO_IF ZERO
 
         CALL    GetWindowPath, A=window_num
         stax    ptr2
 
-        bit     exact_match_flag
-      IF NS
+      IF bit exact_match_flag : NS
         jsr     CompareStrings  ; Z=1 if equal
-        CONTINUE_IF ZC
+        REDO_IF ZC
         RETURN  A=window_num
       END_IF
 
         jsr     IsPathPrefixOf  ; Z=0 if prefix
-        CONTINUE_IF ZS
+        REDO_IF ZS
         ldx     found_windows_count
         copy8   window_num, found_windows_list,x
         inc     found_windows_count
@@ -6800,8 +6783,7 @@ new_window_flag:        .byte   0
         ldx     #0
     DO
         copy8   dir_buffer+SubdirectoryHeader::entry_length,x, dir_header,x
-        inx
-    WHILE X <> #.sizeof(dir_header)
+    WHILE inx : X <> #.sizeof(dir_header)
 
         ;; Is there room for the files?
         lda     dir_header::file_count+1 ; > 255?
@@ -6824,8 +6806,7 @@ too_many_files:
         jsr     _DoClose
 
         ;; Show error, unless this is during window restore.
-        bit     suppress_error_on_open_flag
-    IF NC
+    IF bit suppress_error_on_open_flag : NC
         ldax    #aux::str_warning_window_must_be_closed ; too many files to show
         ldy     active_window_id ; is a window open?
       IF ZERO
@@ -6875,8 +6856,7 @@ do_entry:
         jeq     finish
 
 next:   inc     index_in_block
-        lda     index_in_block
-    IF A <> dir_header::entries_per_block
+    IF lda index_in_block : A <> dir_header::entries_per_block
         add16_8 entry_ptr, dir_header::entry_length
     ELSE
         copy8   #$00, index_in_block
@@ -6910,8 +6890,7 @@ next:   inc     index_in_block
     DO
         ldy     file_entry_to_file_record_mapping_table-1,x
         copy8   (entry_ptr),y, record,x
-        inx
-    WHILE X <> #.sizeof(FileRecord)
+    WHILE inx : X <> #.sizeof(FileRecord)
 
         ;; Copy entry composed at $1F00 to buffer in Aux LC Bank 2
         bit     LCBANK2
@@ -6919,8 +6898,7 @@ next:   inc     index_in_block
         ldy     #.sizeof(FileRecord)-1
     DO
         copy8   record,y, (record_ptr),y
-        dey
-    WHILE POS
+    WHILE dey : POS
         bit     LCBANK1
         bit     LCBANK1
         add16_8 record_ptr, #.sizeof(FileRecord)
@@ -6976,9 +6954,8 @@ file_entry_to_file_record_mapping_table:
         MLI_CALL OPEN, open_params
     IF CS
         ;; Show error, unless this is during window restore.
-        bit     suppress_error_on_open_flag
-      IF NC
-        jsr     ShowAlert
+      IF bit suppress_error_on_open_flag : NC
+        CALL    ShowAlertOption, X=#AlertButtonOptions::OK
       END_IF
 
         TAIL_CALL _HandleFailure, C=1 ; check vol flag (yes)
@@ -7006,11 +6983,9 @@ suppress_error_on_open_flag:
 .proc _HandleFailure
         php                     ; C = check vol flag
 
-        bit     new_window_flag
-    IF NS
+    IF bit new_window_flag : NS
         ;; If opening an icon, need to reset icon state.
-        bit     icon_param      ; Were we opening a path? (N=1)
-      IF NC
+      IF bit icon_param : NC    ; Were we opening a path? (N=1)
         jsr     MarkIconNotDimmed
       END_IF
 
@@ -7168,8 +7143,7 @@ vol_blocks_used:  .word   0
         tax
         sub16   window_filerecord_table+2,x, window_filerecord_table,x, size
         add16   window_filerecord_table-2,x, size, window_filerecord_table,x
-        inc     index
-    WHILE NOT_ZERO              ; always
+    WHILE inc index : NOT_ZERO              ; always
 
         ;; Update "start of free memory" pointer
         lda     window_id_to_filerecord_list_count
@@ -7208,9 +7182,7 @@ copy_new_window_bounds_flag:
         ldx     #2              ; loop over dimensions
     DO
         sub16   bbox_dx,x, iconbb_rect+MGTK::Rect::topleft,x, bbox_dx,x
-        dex
-        dex
-    WHILE POS
+    WHILE dex : dex: POS
 
         ;; Account for window header
         add16_8 bbox_dy, #kWindowHeaderHeight
@@ -7299,7 +7271,6 @@ assign_height:
     END_IF
 
         winfo_ptr := $06
-        tmpw := $08
 
         CALL    GetWindowPtr, A=cached_window_id
         stax    winfo_ptr
@@ -7356,8 +7327,7 @@ assign_height:
         copy8   (ptr),y, flags
 
         ;; Does Aux Type matter, and if so does it match?
-        bit     flags
-      IF NS                     ; bit 7 = compare aux
+      IF bit flags : NS         ; bit 7 = compare aux
         iny                     ; ASSERT: Y = FTORecord::aux_suf
         ASSERT_EQUALS ICTRecord::aux_suf, ICTRecord::flags+1
         lda     aux_type
@@ -7370,8 +7340,7 @@ assign_height:
       END_IF
 
         ;; Does Block Count matter, and if so does it match?
-        bit     flags
-      IF VS                     ; bit 6 = compare blocks
+      IF bit flags : VS         ; bit 6 = compare blocks
         ldy     #ICTRecord::blocks
         lda     blocks_used
         cmp     (ptr),y
@@ -7448,9 +7417,9 @@ next:   add16_8 ptr, #.sizeof(ICTRecord)
 ;;; Output: $40...$4F holds copy of window's `MapInfo`
 ;;; Trashes $06
 
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
-
 window_mapinfo_cache := $40
+
+        PROC_USED_CLEARING_UPDATES
 
 .proc CacheWindowMapInfo
         winfo_ptr := $06
@@ -7462,9 +7431,7 @@ window_mapinfo_cache := $40
         ldx     #.sizeof(MGTK::MapInfo) - 1
     DO
         copy8   (winfo_ptr),y, window_mapinfo_cache,x
-        dey
-        dex
-    WHILE POS
+    WHILE dey : dex : POS
 
         rts
 .endproc ; CacheWindowMapInfo
@@ -7472,7 +7439,7 @@ window_mapinfo_cache := $40
 ;;; ============================================================
 ;;; Draw header (items/K in disk/K available/lines) for `cached_window_id`
 
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+        PROC_USED_CLEARING_UPDATES
 .proc DrawWindowHeader
 
 ;;; Local variables on ZP
@@ -7610,8 +7577,7 @@ draw:   MGTK_CALL MGTK::DrawString, text_input_buf
 .endproc ; _PrepAvailable
 
 .proc _Measure
-        ldax    #text_input_buf
-        FALL_THROUGH_TO _MeasureString
+        FALL_THROUGH_TO _MeasureString, AX=#text_input_buf
 .endproc ; _Measure
 
 ;;; Measure text, pascal string address in A,X; result in A,X
@@ -7631,6 +7597,10 @@ draw:   MGTK_CALL MGTK::DrawString, text_input_buf
 ;;; Compute bounding box for icons within cached window
 ;;; Inputs: `cached_window_id` is set
 ;;; Outputs: `iconbb_rect` updated (unless cached window is empty)
+
+.ifdef DEBUG
+        PROC_USED_CLEARING_UPDATES
+.endif
 .proc ComputeIconsBBox
 
         lda     cached_window_icon_count
@@ -7680,8 +7650,7 @@ draw:   MGTK_CALL MGTK::DrawString, text_input_buf
       DO
         txa
         sta     cached_window_icon_list-1,x ; entries are 1-based
-        dex
-      WHILE NOT_ZERO
+      WHILE dex : NOT_ZERO
     END_IF
 
         jsr     PopPointers     ; do not tail-call optimize!
@@ -7802,9 +7771,7 @@ END_PARAM_BLOCK
       DO
         copy8   (ptr2),y, scratch::date_a,x ; order descending
         copy8   (ptr1),y, scratch::date_b,x
-        dey
-        dex
-      WHILE POS
+      WHILE dey : dex : POS
 
         ;; Crack the ProDOS values into more useful structs, and
         ;; handle various year encodings.
@@ -7945,9 +7912,7 @@ END_PARAM_BLOCK
         ldx     #init_view_size-1
     DO
         copy8   init_views,y, init_view,x
-        dey
-        dex
-    WHILE POS
+    WHILE dey : dex : POS
 
         ;; Init/zero out the rest of the state
         copy16  icon_coords+MGTK::Point::xcoord, initial_xcoord
@@ -7962,8 +7927,7 @@ END_PARAM_BLOCK
         dex
     DO
         copy8   cached_window_icon_list,x, record_order_list,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         copy8   #0, cached_window_icon_count
 
@@ -8001,8 +7965,7 @@ END_PARAM_BLOCK
 
         pla                     ; A = index
         tax                     ; X = index
-        inx
-    WHILE NOT_ZERO              ; always
+    WHILE inx : NOT_ZERO        ; always
 
         jsr     PopPointers     ; do not tail-call optimise!
         rts
@@ -8058,8 +8021,7 @@ records_base_ptr:
         ldy     #kMaxFilenameLength
     DO
         copy8   (file_record),y, name_tmp,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; Copy out file metadata needed to determine icon type
         jsr     FileRecordToSrcFileInfo ; uses `FileRecord` ptr in $08
@@ -8081,18 +8043,14 @@ records_base_ptr:
         ldx     #kMaxFilenameLength
     DO
         copy8   name_tmp,x, (icon_entry),y
-        dey
-        dex
-    WHILE POS
+    WHILE dey : dex : POS
 
         ;; Assign location
         ldy     #IconEntry::iconx + .sizeof(MGTK::Point) - 1
         ldx     #.sizeof(MGTK::Point) - 1
     DO
         copy8   icon_coords,x, (icon_entry),y
-        dey
-        dex
-    WHILE POS
+    WHILE dey : dex : POS
 
         jsr     GetCachedWindowViewBy
         ASSERT_EQUALS DeskTopSettings::kViewByIcon, 0
@@ -8112,16 +8070,14 @@ records_base_ptr:
         sbc     #0
         sta     (icon_entry),y
         iny
-        inx
-      WHILE X < #2
+      WHILE inx : X < #2
     END_IF
 
         ;; Next col
         add16_8 icon_coords+MGTK::Point::xcoord, col_spacing
         inc     icons_this_row
         ;; Next row?
-        lda     icons_this_row
-    IF A = icons_per_row
+    IF lda icons_this_row : A = icons_per_row
         add16_8 icon_coords+MGTK::Point::ycoord, row_spacing
         copy16  initial_xcoord, icon_coords+MGTK::Point::xcoord
         copy8   #0, icons_this_row
@@ -8226,6 +8182,8 @@ records_base_ptr:
 ;;; Input: A = window_od
 ;;; Output: A = entry count
 ;;; Trashes $06
+
+        PROC_USED_CLEARING_UPDATES
 .proc GetFileRecordCountForWindow
         ptr := $06
 
@@ -8247,7 +8205,7 @@ records_base_ptr:
 ;;; ============================================================
 ;;; A = entry number
 
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+        PROC_USED_CLEARING_UPDATES
 .proc DrawListViewRow
 
         ptr := $06
@@ -8262,8 +8220,7 @@ records_base_ptr:
         ldy     #.sizeof(FileRecord)-1
     DO
         copy8   (ptr),y, list_view_filerecord,y
-        dey
-    WHILE POS
+    WHILE dey : POS
         bit     LCBANK1
         bit     LCBANK1
 
@@ -8340,8 +8297,7 @@ set_pos:
 .proc _PrepareColSize
         file_type := list_view_filerecord + FileRecord::file_type
 
-        lda     file_type
-    IF A = #FT_DIRECTORY
+    IF lda file_type : A = #FT_DIRECTORY
         copy8   #1, text_buffer2
         copy8   #'-', text_buffer2+1
         rts
@@ -8349,8 +8305,7 @@ set_pos:
 
         blocks := list_view_filerecord + FileRecord::blocks
 
-        ldax    blocks
-        FALL_THROUGH_TO ComposeSizeString
+        FALL_THROUGH_TO ComposeSizeString, AX=blocks
 .endproc ; _PrepareColSize
 
 .endproc ; DrawListViewRow
@@ -8359,7 +8314,7 @@ set_pos:
 ;;; Populate `text_buffer2` with "12,345K"
 ;;; Trashes: $06
 
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+        PROC_USED_CLEARING_UPDATES
 .proc ComposeSizeString
         value := $06
 
@@ -8387,9 +8342,7 @@ set_pos:
         ldy     #0
     DO
         copy8   str_from_int+1,y, text_buffer2+1,x
-        iny
-        inx
-    WHILE Y <> str_from_int
+    WHILE iny : inx : Y <> str_from_int
 
         ;; Append ".5" if needed
         frac_flag := *+1
@@ -8407,9 +8360,7 @@ set_pos:
         ldy     #0
     DO
         copy8   str_kb_suffix+1, y, text_buffer2+1,x
-        iny
-        inx
-    WHILE Y <> str_kb_suffix
+    WHILE iny : inx : Y <> str_kb_suffix
 
         stx     text_buffer2
         rts
@@ -8417,7 +8368,7 @@ set_pos:
 
 ;;; ============================================================
 
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+        PROC_USED_CLEARING_UPDATES
 .proc ComposeDateString
         lda     datetime_for_conversion ; any bits set?
         ora     datetime_for_conversion+1
@@ -8578,6 +8529,7 @@ done:
 ;;; Inputs: A = icon number
 ;;; Output: A,X = IconEntry address
 
+        PROC_USED_CLEARING_UPDATES
 .proc GetIconEntry
         sta     get_icon_entry_params::id
         ITK_CALL IconTK::GetIconEntry, get_icon_entry_params
@@ -8589,6 +8541,7 @@ done:
 ;;; Inputs: A = window id
 ;;; Output: A,X = Winfo address
 
+        PROC_USED_CLEARING_UPDATES
 .proc GetWindowPtr
         asl     a
         tax
@@ -8789,6 +8742,7 @@ finish:
 ;;; Draw text right aligned, pascal string address in A,X
 ;;; String must be in aux or LC memory.
 
+        PROC_USED_CLEARING_UPDATES
 .proc DrawStringRight
         params := $06
         str := params
@@ -8816,9 +8770,10 @@ map_delta_y:    .word   0
 ;;; Trashes: $08
 
 .proc PrepActiveWindowScreenMapping
-        lda     active_window_id
-        FALL_THROUGH_TO PrepWindowScreenMapping
+        FALL_THROUGH_TO PrepWindowScreenMapping, A=active_window_id
 .endproc ; PrepActiveWindowScreenMapping
+
+        PROC_USED_CLEARING_UPDATES
 
 .proc PrepWindowScreenMapping
         .assert window_mapinfo_cache + .sizeof(MGTK::MapInfo) <= $50, error, "collision"
@@ -8831,9 +8786,7 @@ map_delta_y:    .word   0
         ldx     #2              ; loop over dimensions
     DO
         sub16   window_mapinfo_cache+MGTK::GrafPort::maprect+MGTK::Rect::topleft,x, window_mapinfo_cache+MGTK::GrafPort::viewloc,x, map_delta,x
-        dex
-        dex
-    WHILE POS
+    WHILE dex : dex : POS
         rts
 
 .endproc ; PrepWindowScreenMapping
@@ -8936,8 +8889,7 @@ is_sp:  CALL    FindSmartportDispatchAddress, A=block_params::unit_num
       DO
         lda     dib_buffer+SPDIB::Device_Name-1,y
         BREAK_IF A <> #' '
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
     END_IF
         sty     dib_buffer+SPDIB::ID_String_Length
 .endscope
@@ -8957,8 +8909,7 @@ is_sp:  CALL    FindSmartportDispatchAddress, A=block_params::unit_num
         bcs     done_adjust_case  ; is lower case
         END_IF
        END_IF
-        dey
-      WHILE POS
+      WHILE dey : POS
 
         ldy     dib_buffer+SPDIB::ID_String_Length
         dey
@@ -8976,8 +8927,7 @@ is_sp:  CALL    FindSmartportDispatchAddress, A=block_params::unit_num
         sta     dib_buffer+SPDIB::Device_Name,y
          END_IF
         END_IF
-        dey
-       WHILE NOT_ZERO
+       WHILE dey : NOT_ZERO
       END_IF
     END_IF
 done_adjust_case:
@@ -9149,9 +9099,7 @@ error:
         ldx     #kMaxFilenameLength
     DO
         copy8   cvi_data_buffer,x, (icon_ptr),y
-        dey
-        dex
-    WHILE POS
+    WHILE dey : dex : POS
 
         ;; NOTE: Done with `cvi_data_buffer` at this point,
         ;; so $800 is free.
@@ -9256,8 +9204,7 @@ finish: jsr     PopPointers     ; do not tail-call optimise!
 .proc FreeDesktopIconPosition
         ldx     #kMaxVolumes-1
     DO
-        dex
-    WHILE A <> desktop_icon_usage_table,x
+    WHILE dex : A <> desktop_icon_usage_table,x
         copy8   #0, desktop_icon_usage_table,x
         rts
 .endproc ; FreeDesktopIconPosition
@@ -9270,8 +9217,7 @@ finish: jsr     PopPointers     ; do not tail-call optimise!
     DO
         cmp     cached_window_icon_list,x
         beq     remove
-        dex
-    WHILE POS
+    WHILE dex : POS
         rts
 
 remove:
@@ -9292,8 +9238,7 @@ remove:
         ldx     #kMaxDeskTopWindows-1
     DO
         BREAK_IF A = window_to_dir_icon_table,x
-        dex
-    WHILE POS
+    WHILE dex : POS
         rts
 .endproc ; FindWindowIndexForDirIcon
 
@@ -9335,9 +9280,7 @@ kMaxAnimationStep = 7
       DO
         sub16   maprect+MGTK::Rect::bottomright,x, maprect+MGTK::Rect::topleft,x, win_rect + MGTK::Rect::bottomright,x
         add16   win_rect + MGTK::Rect::topleft,x, win_rect + MGTK::Rect::bottomright,x, win_rect + MGTK::Rect::bottomright,x
-        dex                     ; next dimension
-        dex
-      WHILE POS
+      WHILE dex : dex : POS     ; next dimension
     END_IF
 
         ;; --------------------------------------------------
@@ -9375,12 +9318,9 @@ kMaxAnimationStep = 7
 
         pla                     ; A = step
         tax                     ; X = step
-        inx
-      WHILE X <> #kMaxAnimationStep-1
+      WHILE inx : X <> #kMaxAnimationStep-1
 
-        iny
-        iny
-    WHILE Y <> #.sizeof(MGTK::Rect)
+    WHILE iny : iny: Y <> #.sizeof(MGTK::Rect)
 
         ;; --------------------------------------------------
         ;; Animate it
@@ -9463,8 +9403,7 @@ table:
         dec     step
         step := *+1
         lda     #SELF_MODIFIED_BYTE
-        cmp     #AS_BYTE(-3)
-    WHILE NE
+    WHILE A <> #AS_BYTE(-3)
         rts
 .endproc ; _AnimateClose
 
@@ -9486,9 +9425,7 @@ table:
         ldy     #.sizeof(MGTK::Rect)-1
     DO
         copy8   rect_table,x, tmp_rect,y
-        dex
-        dey
-    WHILE POS
+    WHILE dex : dey : POS
 
         FALL_THROUGH_TO FrameTmpRect
 .endproc ; _FrameTableRect
@@ -9499,15 +9436,16 @@ AnimateWindowOpen       := AnimateWindowImpl::open
 
 ;;; ============================================================
 
+.ifdef DEBUG
+        PROC_USED_CLEARING_UPDATES
+.endif
 .proc FrameTmpRect
         ;; Skip if degenerate, to avoid cursor flashes
         ldx     #2              ; loop over dimensions
     DO
         ecmp16  tmp_rect::topleft,x, tmp_rect::bottomright,x
         beq     ret
-        dex
-        dex
-    WHILE POS
+    WHILE dex : dex : POS
 
         MGTK_CALL MGTK::SetPattern, checkerboard_pattern
         jsr     SetPenModeXOR
@@ -9557,7 +9495,7 @@ ret:    rts
 target_is_icon:
         jsr     GetIconPath     ; `operation_src_path` set to path; A=0 on success
     IF NE
-        jsr     ShowAlert
+        jsr     ShowAlert       ; `ERR_INVALID_PATHNAME`
         RETURN  C=1             ; failure
     END_IF
 
@@ -9623,11 +9561,23 @@ FinishOperation:
 ;;; File > Copy To...
 ;;; Drag / Drop (to anything but Trash)
 ;;; Caller sets `operation_dst_path` (destination)
+;;; Input: A = bit7=1 to invert default
 .proc DoCopyOrMoveSelection
+        sta     invert_flag
+
         lda     selected_window_id
     IF NOT_ZERO                 ; dragging volume always copies
+        ;; In case `CheckMoveOrCopy` fails, recovery path needs to be functional
+        tsx
+        stx     saved_stack
+        copy16  #operations::DoNothing, operation_complete_callback
+        CLEAR_BIT7_FLAG do_op_flag
+
+        lda     selected_window_id
         jsr     GetWindowPath
-        jsr     CheckMoveOrCopy
+        invert_flag := *+1
+        ldy     #SELF_MODIFIED_BYTE
+        jsr     CheckMoveOrCopy ; A,X = path, Y = invert flag
     END_IF
         SKIP_NEXT_2_BYTE_INSTRUCTION
 
@@ -9677,7 +9627,7 @@ iterate_selection:
         lda     selected_icon_list,x
       IF A <> trash_icon_num
         jsr     GetIconPath     ; `operation_src_path` set to path; A=0 on success
-        jne     ShowErrorAlert  ; too long
+        jne     ShowErrorAlert  ; `ERR_INVALID_PATHNAME`
 
         ;; During selection iteration, allow Escape to cancel the operation.
         jsr     CheckCancel
@@ -9685,8 +9635,7 @@ iterate_selection:
         ;; If copy, validate the source vs. target during enumeration phase
         ;; NOTE: Here rather than in `CopyProcessSelectedFile` because we don't
         ;; run this for copy using paths (i.e. Duplicate, Copy to RAMCard)
-        bit     do_op_flag
-       IF NC
+       IF bit do_op_flag : NC
         bit     operation_flags
         ASSERT_EQUALS operations::kOperationFlagsCheckBadCopy, $40
         IF VS
@@ -9718,14 +9667,12 @@ iterate_selection:
 
         pla                     ; A = index
         tax                     ; X = index
-        inx
-    WHILE X <> selected_icon_count
+    WHILE inx : X <> selected_icon_count
 
         ;; --------------------------------------------------
 
         ;; Done icons - did we complete the operation?
-        bit     do_op_flag
-    IF NS
+    IF bit do_op_flag : NS
         jsr     InvokeOperationCompleteCallback
         RETURN  A=#0
     END_IF
@@ -10007,15 +9954,13 @@ entry_err_flag: .byte   0       ; bit7
     DO
         ldy     map,x
         copy8   file_entry,y, src_file_info_params::access,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         ;; Fix `storage_type`
         ldx     #4
     DO
         lsr     src_file_info_params::storage_type
-        dex
-    WHILE NOT_ZERO
+    WHILE dex: NOT_ZERO
 
         rts
 
@@ -10145,8 +10090,7 @@ retry:  MLI_CALL READ, read_src_dir_entry_params
     END_IF
 
         inc     entry_index_in_block
-        lda     entry_index_in_block
-    IF A >= entries_per_block
+    IF lda entry_index_in_block : A >= entries_per_block
         ;; Advance to first entry in next "block"
         copy8   #0, entry_index_in_block
 retry2: MLI_CALL READ, read_padding_bytes_params
@@ -10291,7 +10235,7 @@ fail:   jmp     CloseFilesCancelDialogWithAppropriateResult
         ;; Issue a `GET_FILE_INFO` on destination to set `DEVNUM`
 retry:  CALL    GetFileInfo, AX=#operation_dst_path
     IF CS
-        jsr     ShowErrorAlertDst
+        jsr     ShowErrorAlertDst ; arbitrary ProDOS error
         beq     retry           ; always
     END_IF
 
@@ -10355,8 +10299,7 @@ operation_traversal_callbacks_for_copy:
 .proc _CopyDialogEnumerationCallback
         jsr     SetPortForProgressDialogAndShieldCursor
 
-        bit     move_flags
-    IF NC
+    IF bit move_flags : NC
         CALL    DrawProgressDialogLabel, Y=#0, AX=#aux::str_copy_copying
     ELSE
         CALL    DrawProgressDialogLabel, Y=#0, AX=#aux::str_move_moving
@@ -10434,7 +10377,7 @@ operation_lifecycle_callbacks_for_copy:
         ;; Populate `src_file_info_params`
 retry:  jsr     GetSrcFileInfo
     IF CS
-        jsr     ShowErrorAlert
+        jsr     ShowErrorAlert  ; arbitrary ProDOS error
         beq     retry           ; always
     END_IF
         copy8   DEVNUM, src_vol_devnum
@@ -10465,8 +10408,7 @@ retry:  jsr     GetSrcFileInfo
         jsr     _CopyCreateFile
         bcs     done
 
-        bit     move_flags      ; same volume relink move?
-      IF VS
+      IF bit move_flags : VS    ; same volume relink move?
         jmp     RelinkFile
       END_IF
 
@@ -10480,8 +10422,7 @@ retry:  jsr     GetSrcFileInfo
         jsr     _CopyCreateFile
         bcs     done
 
-        bit     move_flags      ; same volume relink move?
-    IF VS
+    IF bit move_flags : VS      ; same volume relink move?
         jsr     RelinkFile
         jmp     NotifyPathChanged
     END_IF
@@ -10491,8 +10432,7 @@ retry:  jsr     GetSrcFileInfo
         jsr     GetAndApplySrcInfoToDst ; copy modified date/time
         jsr     MaybeFinishFileMove
 
-        bit     move_flags
-    IF NS
+    IF bit move_flags : NS
         jsr     NotifyPathChanged
     END_IF
 
@@ -10574,7 +10514,7 @@ ok_dir: jsr     RemoveSrcPathSegment
 retry:  MLI_CALL GET_FILE_INFO, dst_file_info_params
 .if ::kCopyInteractive
     IF NOT_ZERO
-        jsr     ShowErrorAlertDst
+        jsr     ShowErrorAlertDst ; arbitrary ProDOS error
         beq     retry           ; always
     END_IF
 .else
@@ -10613,7 +10553,7 @@ retry:  MLI_CALL GET_FILE_INFO, dst_file_info_params
         copy16  #0, dst_file_info_params::blocks_used
 retry:  jsr     GetDstFileInfo
     IF CS AND A <> #ERR_FILE_NOT_FOUND
-        jsr     ShowErrorAlertDst
+        jsr     ShowErrorAlertDst ; arbitrary ProDOS error
         beq     retry           ; always
     END_IF
 
@@ -10634,8 +10574,7 @@ retry:  jsr     GetDstFileInfo
         ;; Show appropriate message
 
         ldax    #aux::str_large_copy_prompt
-        bit     move_flags
-    IF NS
+    IF bit move_flags : NS
         ldax    #aux::str_large_move_prompt
     END_IF
         CALL    ShowAlertBasedOnFileCount ; A,X = string
@@ -10653,8 +10592,7 @@ retry:  jsr     GetDstFileInfo
 
 .proc MaybeFinishFileMove
         ;; Copy or move?
-        bit     move_flags
-    IF NS
+    IF bit move_flags : NS
         ;; Was a move - delete file
 retry:  MLI_CALL DESTROY, destroy_src_params
       IF CS
@@ -10664,7 +10602,7 @@ retry:  MLI_CALL DESTROY, destroy_src_params
         rts                     ; silently leave file
        END_IF
 
-        jsr     ShowErrorAlert
+        jsr     ShowErrorAlert  ; arbitrary ProDOS error
         beq     retry           ; always
       END_IF
     END_IF
@@ -10701,8 +10639,7 @@ retry:  MLI_CALL DESTROY, destroy_src_params
         bit     operations::operation_flags
         ASSERT_EQUALS operations::kOperationFlagsCheckVolFree, $80
     IF NC
-        bit     move_flags      ; same volume relink move?
-      IF VC
+      IF bit move_flags : VC    ; same volume relink move?
         ;; No, verify that there is room.
         jsr     _CheckSpaceAvailable
         RTS_IF CS
@@ -10732,7 +10669,7 @@ retry:
         MLI_CALL CREATE, create_params
     IF CS
       IF A <> #ERR_DUPLICATE_FILENAME
-        jsr     ShowErrorAlertDst
+        jsr     ShowErrorAlertDst ; arbitrary ProDOS error (except `ERR_DUPLICATE_FILENAME`)
         beq     retry           ; always
       END_IF
 
@@ -10740,7 +10677,7 @@ retry:
         ;; File exists
         jsr     GetDstFileInfo
       IF CS
-        jsr     ShowErrorAlertDst
+        jsr     ShowErrorAlertDst ; arbitrary ProDOS error
         beq     retry           ; always
       END_IF
 
@@ -10753,8 +10690,7 @@ retry:
       END_IF
 
         ;; Regular file - prompt to replace
-        bit     operations::all_flag
-      IF NC
+      IF bit operations::all_flag : NC
         CALL    ShowAlertParams, Y=#AlertButtonOptions::YesNoAllCancel, AX=#aux::str_exists_prompt
 
         cmp     #kAlertResultNo
@@ -10775,7 +10711,7 @@ retry2: MLI_CALL DESTROY, destroy_dst_params
         jsr     UnlockDstFile
         beq     retry2
        END_IF
-        jsr     ShowErrorAlertDst
+        jsr     ShowErrorAlertDst ; arbitrary ProDOS error (except `ERR_ACCESS_ERROR`)
         beq     retry2          ; always
       END_IF
 .endif
@@ -10871,7 +10807,7 @@ Start:  lda     DEVNUM
 :
         CALL    GetFileEntryBlock, AX=#src_path_buf
     IF CS
-        CALL    ShowErrorAlert, A=#ERR_PATH_NOT_FOUND
+        CALL    ShowErrorAlert  ; arbitrary ProDOS error
         beq     :-              ; always
     END_IF
         stax    src_block_params::block_num
@@ -10879,7 +10815,7 @@ Start:  lda     DEVNUM
 :
         CALL    GetFileEntryBlock, AX=#dst_path_buf
     IF CS
-        CALL    ShowErrorAlert, A=#ERR_PATH_NOT_FOUND
+        CALL    ShowErrorAlert  ; arbitrary ProDOS error
         beq     :-              ; always
     END_IF
         stax    dst_block_params::block_num
@@ -10908,8 +10844,7 @@ Start:  lda     DEVNUM
         ldy     #FileEntry::header_pointer-1
     DO
         swap8   (src_ptr),y, (dst_ptr),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; --------------------------------------------------
         ;; Write out the updated blocks
@@ -10938,8 +10873,7 @@ Start:  lda     DEVNUM
         ldx     #2
       DO
         swap8   src_block + SubdirectoryHeader::parent_pointer,x, dst_block + SubdirectoryHeader::parent_pointer,x
-        dex
-      WHILE POS
+      WHILE dex : POS
 
         ;; Write out the updated key blocks
         jsr     _WriteBlocks
@@ -10950,7 +10884,7 @@ Start:  lda     DEVNUM
 
 :       MLI_CALL DESTROY, destroy_src_params
     IF CS
-        jsr     ShowErrorAlert
+        jsr     ShowErrorAlert  ; arbitrary ProDOS error
         beq     :-              ; always
     END_IF
         rts
@@ -10960,13 +10894,13 @@ Start:  lda     DEVNUM
 .proc _ReadBlocks
 :       MLI_CALL READ_BLOCK, src_block_params
     IF CS
-        jsr     ShowErrorAlert
+        jsr     ShowErrorAlert  ; arbitrary ProDOS error
         beq     :-              ; always
     END_IF
 
 :       MLI_CALL READ_BLOCK, dst_block_params
     IF CS
-        jsr     ShowErrorAlert
+        jsr     ShowErrorAlert  ; arbitrary ProDOS error
         beq     :-              ; always
     END_IF
 
@@ -10978,13 +10912,13 @@ Start:  lda     DEVNUM
 .proc _WriteBlocks
 :       MLI_CALL WRITE_BLOCK, src_block_params
     IF CS
-        jsr     ShowErrorAlert
+        jsr     ShowErrorAlert  ; arbitrary ProDOS error
         beq     :-              ; always
     END_IF
 
 :       MLI_CALL WRITE_BLOCK, dst_block_params
     IF CS
-        jsr     ShowErrorAlert
+        jsr     ShowErrorAlert  ; arbitrary ProDOS error
         beq     :-              ; always
     END_IF
 
@@ -11030,7 +10964,7 @@ retry:  MLI_CALL READ, read_src_params
         cmp     #ERR_END_OF_FILE
         beq     close
 .if ::kCopyInteractive
-        jsr     ShowErrorAlert
+        jsr     ShowErrorAlert  ; arbitrary ProDOS error (except `ERR_END_OF_FILE`)
         beq     retry           ; always
 .else
         .refto retry
@@ -11039,8 +10973,7 @@ fail:   jmp     OpHandleErrorCode
       END_IF
 
 .if ::kCopyInteractive
-        bit     src_dst_exclusive_flag
-      IF NS
+      IF bit src_dst_exclusive_flag : NS
         ;; Swap
         MLI_CALL GET_MARK, mark_src_params
         MLI_CALL CLOSE, close_src_params
@@ -11056,7 +10989,7 @@ fail:   jmp     OpHandleErrorCode
         jsr     _WriteDst
 .if ::kCopyInteractive
         bit     src_dst_exclusive_flag
-        CONTINUE_IF NC
+        REDO_IF NC
 
         ;; Swap
         MLI_CALL CLOSE, close_dst_params
@@ -11072,8 +11005,7 @@ fail:   jmp     OpHandleErrorCode
 close:
         MLI_CALL CLOSE, close_dst_params
 .if ::kCopyInteractive
-        bit     src_dst_exclusive_flag
-    IF NC
+    IF bit src_dst_exclusive_flag : NC
         MLI_CALL CLOSE, close_src_params
     END_IF
 .else
@@ -11105,7 +11037,7 @@ src_dst_exclusive_flag:
 retry:  MLI_CALL OPEN, open_src_params
 .if ::kCopyInteractive
     IF CS
-        jsr     ShowErrorAlert
+        jsr     ShowErrorAlert  ; arbitrary ProDOS error
         beq     retry           ; always
     END_IF
 .else
@@ -11140,7 +11072,7 @@ retry:  MLI_CALL OPEN, open_dst_params
         cmp     #ERR_VOL_NOT_FOUND
         beq     finish
       END_IF
-        jsr     ShowErrorAlertDst
+        jsr     ShowErrorAlertDst ; arbitrary ProDOS error (except `ERR_VOL_NOT_FOUND`)
         beq     retry           ; always
     END_IF
 .else
@@ -11217,13 +11149,11 @@ _OpenDstOrFail := _OpenDstImpl::fail_ok
         tya
        DO
         ora     (ptr),y
-        iny
-       WHILE NOT_ZERO
+       WHILE iny : NOT_ZERO
         inc     ptr+1           ; second half
        DO
         ora     (ptr),y
-        iny
-       WHILE NOT_ZERO
+       WHILE iny : NOT_ZERO
         tay
        IF ZERO
         ;; Block is all zeros, skip over it
@@ -11262,7 +11192,7 @@ retry:  MLI_CALL WRITE, write_dst_params
 .if ::kCopyInteractive
         .refto ret
     IF CS
-        jsr     ShowErrorAlertDst
+        jsr     ShowErrorAlertDst ; arbitrary ProDOS error
         beq     retry           ; always
     END_IF
 .else
@@ -11355,7 +11285,7 @@ operation_lifecycle_callbacks_for_delete:
 
 retry:  jsr     GetSrcFileInfo
     IF CS
-        jsr     ShowErrorAlert
+        jsr     ShowErrorAlert  ; arbitrary ProDOS error
         beq     retry           ; always
     END_IF
 
@@ -11419,7 +11349,7 @@ unlock: jsr     UnlockSrcFile
 
 done:   rts
 
-error:  jsr     ShowErrorAlert
+error:  jsr     ShowErrorAlert  ; arbitrary ProDOS error (except `ERR_ACCESS_ERROR`)
         beq     retry           ; always
 .endproc ; DeleteFileCommon
 
@@ -11528,7 +11458,7 @@ operation_traversal_callbacks_for_enumeration:
         jsr     CopyPathsFromBufsToSrcAndDst
 retry:  jsr     GetSrcFileInfo
     IF CS
-        jsr     ShowErrorAlert
+        jsr     ShowErrorAlert  ; arbitrary ProDOS error
         beq     retry           ; always
     END_IF
 
@@ -11733,7 +11663,7 @@ CloseFilesCancelDialogWithCanceledResult := CloseFilesCancelDialogImpl::canceled
 ;;; ============================================================
 ;;; Move or Copy? Compare src/dst paths, same vol = move.
 ;;; Button down inverts the default action.
-;;; Input: A,X = source path
+;;; Input: A,X = source path, Y = invert flag
 ;;; Output: A=bit 7 set if move, clear if copy
 ;;;           bit 6 set if same vol move and block ops supported
 
@@ -11743,7 +11673,8 @@ CloseFilesCancelDialogWithCanceledResult := CloseFilesCancelDialogImpl::canceled
 
         stax    src_ptr
 
-        jsr     ModifierDown    ; Apple inverts the default
+        ;; Y bit7 is invert flag
+        tya
         and     #%10000000
         sta     flag
 
@@ -11804,7 +11735,7 @@ match:  lda     flag
         ;; Same vol - but are block operations supported?
 retry:  CALL    GetFileInfo, AX=src_ptr
     IF CS
-        jsr     ShowErrorAlert
+        jsr     ShowErrorAlert  ; arbitrary ProDOS error
         beq     retry           ; always
     END_IF
 
@@ -11844,7 +11775,7 @@ retry:  CALL    GetFileInfo, AX=src_ptr
         copy8   #$A, dst_file_info_params::param_count ; GET_FILE_INFO
         pla
     IF CS
-        jsr     ShowErrorAlertDst
+        jsr     ShowErrorAlertDst ; arbitrary ProDOS error
         beq     :-              ; always
     END_IF
         rts
@@ -11852,40 +11783,39 @@ retry:  CALL    GetFileInfo, AX=src_ptr
 
 ;;; ============================================================
 ;;; Show Alert Dialog
-;;; A=error. If `ERR_VOL_NOT_FOUND` or `ERR_FILE_NOT_FOUND`, will show
+;;; A=error. If `ERR_VOL_NOT_FOUND` will show
 ;;; "please insert the disk: ..." using `operation_src_path` (or `operation_dst_path` if
 ;;; destination) to supply the disk name.
 ;;; Output: returns A=0/Z=1, otherwise aborts
 .proc ShowErrorAlertImpl
         ENTRY_POINTS_FOR_BIT7_FLAG dst, src, dst_flag
 
-    IF A NOT_IN #ERR_VOL_NOT_FOUND, #ERR_PATH_NOT_FOUND
-        jsr     ShowAlert
+    IF A <> #ERR_VOL_NOT_FOUND
+        jsr     ShowAlert       ; arbitrary ProDOS error (except `ERR_VOL_NOT_FOUND`)
         ASSERT_EQUALS ::kAlertResultTryAgain, 0
-        bne     close           ; not kAlertResultTryAgain = 0
+        bne     cancel          ; not kAlertResultTryAgain = 0
         rts                     ; A=0/Z=1
     END_IF
 
-        ;; if err is "not found" prompt specifically for src/dst disk
+        ;; if err is "volume not found" prompt specifically for src/dst disk
         ldax    #operation_src_path
-        bit     dst_flag
-    IF NS
+    IF bit dst_flag : NS
         ldax    #operation_dst_path
     END_IF
         jsr     GetVolumeName   ; populates `filename_buf`
         push16  #filename_buf
         FORMAT_MESSAGE 1, aux::str_alert_insert_disk_format
 
-        CALL    ShowAlertParams, Y=#AlertButtonOptions::TryAgainCancel, AX=#text_input_buf
-        ASSERT_EQUALS ::kAlertResultTryAgain, 0
-        bne     close           ; not kAlertResultTryAgain = 0
-
+        CALL    ShowAlertParams, Y=#AlertButtonOptions::OKCancel, AX=#text_input_buf
+    IF A <> #kAlertResultCancel
         ;; Poll drives before trying again
         MLI_CALL ON_LINE, on_line_all_drives_params
-        bne     close
+        bne     cancel
         rts                     ; A=0/Z=1
+    END_IF
 
-close:  jmp     CloseFilesCancelDialogWithAppropriateResult
+cancel:
+        TAIL_CALL CloseFilesCancelDialogWithAppropriateResult
 
 dst_flag:       .byte   0       ; bit7
 
@@ -11965,17 +11895,17 @@ ShowErrorAlertDst := ShowErrorAlertImpl::dst
 
         jsr     GetIconPath     ; `operation_src_path` set to path; A=0 on success
       IF NE
-        jsr     ShowAlert
+        jsr     ShowAlert       ; `ERR_INVALID_PATHNAME`
         jmp     next
       END_IF
         CALL    CopyToSrcPath, AX=#operation_src_path
 
         ;; Try to get file/volume info
-common: jsr     GetSrcFileInfo
+retry:  jsr     GetSrcFileInfo
       IF CS
-        jsr     ShowAlert
-        cmp     #kAlertResultTryAgain
-        beq     common
+        jsr     ShowAlert       ; arbitrary ProDOS error
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
+        beq     retry
         jmp     next
       END_IF
 
@@ -12051,7 +11981,8 @@ write_protected_flag:
         jsr     OpenPromptDialog
         jsr     SetPortForPromptDialog
 
-        CALL    DrawDialogTitle, AX=#aux::label_get_info
+        MGTK_CALL MGTK::MoveTo, prompt_dialog_title_pos
+        CALL    DrawStringCentered, AX=#aux::label_get_info
 
         ;; Draw labels
         CALL    DrawDialogLabel, Y=#1 | DDL_LRIGHT, AX=#aux::str_info_name
@@ -12137,8 +12068,7 @@ write_protected_flag:
     IF ZERO
         ;; Volume - regular label
         ldax    #aux::str_info_no
-        bit     write_protected_flag
-      IF NS
+      IF bit write_protected_flag : NS
         ldax    #aux::str_info_yes
       END_IF
         CALL    DrawDialogLabel, Y=#6 | DDL_VALUE
@@ -12264,8 +12194,7 @@ num_blocks:
 .proc _ToggleFileLock
         ;; Modify file
         lda     src_file_info_params::access
-        bit     locked_button::state
-    IF NS
+    IF bit locked_button::state : NS
         ;; Unlock
         ora     #LOCKED_MASK
     ELSE
@@ -12351,7 +12280,7 @@ start:
         ;; Original path
         CALL    GetIconPath, A=selected_icon_list ; `operation_src_path` set to path; A=0 on success
     IF NE
-        jsr     ShowAlert
+        jsr     ShowAlert       ; `ERR_INVALID_PATHNAME`
         RETURN  A=result_flags
     END_IF
         CALL    CopyToSrcPath, AX=#operation_src_path
@@ -12368,7 +12297,8 @@ start:
         jsr     _DialogOpen
 
         ;; Run the dialog
-retry:  jsr     _DialogRun
+run_dialog:
+        jsr     _DialogRun
         beq     success
 
         ;; Failure
@@ -12408,7 +12338,7 @@ success:
         jsr     GetDstFileInfo
     IF CC
         CALL    ShowAlert, A=#ERR_DUPLICATE_FILENAME
-        jmp     retry
+        jmp     run_dialog
     END_IF
         ;; Try to rename
 
@@ -12416,18 +12346,21 @@ no_change:
         ;; Update case bits, in memory or on disk
         jsr     ApplyCaseBits ; applies `stashed_name` to `src_path_buf`
 
+retry:
         MLI_CALL RENAME, rename_params
-        bcc     finish
+    IF CS
         ;; Failed, maybe retry
-        jsr     ShowAlert       ; Alert options depend on specific ProDOS error
+        jsr     ShowAlert       ; arbitrary ProDOS error
         ASSERT_EQUALS ::kAlertResultTryAgain, 0
-        jeq     retry           ; `kAlertResultTryAgain` = 0
+        beq     retry           ; `kAlertResultTryAgain` = 0
         jsr     _DialogClose
         jmp     fail
+    END_IF
 
         ;; --------------------------------------------------
         ;; Completed - tear down the dialog...
-finish: jsr     _DialogClose
+
+        jsr     _DialogClose
 
         ;; Erase the icon, in case new name is shorter
         copy8   selected_icon_list, icon_param
@@ -12441,8 +12374,7 @@ finish: jsr     _DialogClose
         ldy     new_name_buf
     DO
         copy8   new_name_buf,y, (icon_name_ptr),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; If not volume, find and update associated FileEntry
         lda     selected_window_id
@@ -12465,8 +12397,7 @@ finish: jsr     _DialogClose
         ldy     new_name_buf
     DO
         copy8   new_name_buf,y, (file_record_ptr),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; Copy out file metadata needed to determine icon type
         jsr     FileRecordToSrcFileInfo ; uses `FileRecord` ptr in $08
@@ -12481,8 +12412,6 @@ finish: jsr     _DialogClose
     IF ZERO
 
         tmpc := $50
-        tmpx := tmpc + MGTK::Point::xcoord
-        tmpy := tmpc + MGTK::Point::ycoord
         delta := $54
 
         ;; Compute old bounds of icon bitmap
@@ -12504,9 +12433,7 @@ finish: jsr     _DialogClose
         sub16   tmpc,x, tmp_rect::bottomright,x, delta
         add16in (icon_ptr),y, delta, (icon_ptr),y
         iny
-        inx
-        inx
-      WHILE X <> #4
+      WHILE inx : inx : X <> #4
     END_IF
 
 end_filerecord_and_icon_update:
@@ -12524,8 +12451,7 @@ end_filerecord_and_icon_update:
         ldy     new_name_buf
       DO
         copy8   new_name_buf,y, (dst),y
-        dey
-      WHILE POS
+      WHILE dey : POS
 
         lda     result_flags
         ora     #$80
@@ -12575,7 +12501,7 @@ DoRename        := DoRenameImpl::start
 .proc _DialogRun
     REPEAT
         jsr     _InputLoop
-        CONTINUE_IF NS          ; continue?
+        REDO_IF NS              ; continue?
         bne     _DialogClose    ; canceled!
 
         lda     text_input_buf  ; treat empty as cancel
@@ -12699,9 +12625,7 @@ ignore:
         ldx     #2              ; loop over dimensions
     DO
         sub16   tmp_rect::bottomright,x, tmp_rect::topleft,x, tmp_rect::bottomright,x
-        dex
-        dex
-    WHILE POS
+    WHILE dex : dex : POS
 
         ;; Assert: width is < 256, so operating on lower byte is enough
         lsr   tmp_rect::x2      ; want half, for centering
@@ -12872,8 +12796,7 @@ list:   .word   0               ; 0 items in list
       END_IF
         pla
         tax
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         ;; --------------------------------------------------
         ;; Update prefixes
@@ -12937,8 +12860,7 @@ list:   .word   0               ; 0 items in list
         ldy     dst_path_buf
     DO
         copy8   dst_path_buf,y, new_path,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; Copy the suffix from `old_path` to `new_path`
         ldx     src_path_buf
@@ -12957,8 +12879,7 @@ list:   .word   0               ; 0 items in list
 assign: ldy     new_path
     DO
         copy8   new_path,y, (dst),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         rts
 .endproc ; _UpdateTargetPath
@@ -13065,8 +12986,7 @@ compare:
         @char := *+1
         cmp     #SELF_MODIFIED_BYTE
         bne     ok
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         ;; Self or subfolder
         RETURN  A=#$FF
@@ -13088,8 +13008,9 @@ ok:     RETURN  A=#0
         MGTK_CALL MGTK::OpenWindow, winfo_about_dialog
         CALL    SafeSetPortFromWindowId, A=#winfo_about_dialog::kWindowId
         CALL    DrawDialogFrame, AX=#aux::about_dialog_frame_rect
-        jsr     SetPenModeXOR
-        CALL    DrawDialogTitle, AX=#aux::str_about1
+
+        MGTK_CALL MGTK::MoveTo, prompt_dialog_title_pos
+        CALL    DrawStringCentered, AX=#aux::str_about1
         CALL    DrawDialogLabel, Y=#1 | DDL_CENTER, AX=#aux::str_about2
         CALL    DrawDialogLabel, Y=#2 | DDL_CENTER, AX=#aux::str_about3
         CALL    DrawDialogLabel, Y=#3 | DDL_CENTER, AX=#aux::str_about4
@@ -13263,14 +13184,15 @@ get_case_bits_per_option_and_adjust_string:
 ;;; minus flag set on failure.
 
 ;;; Routines are:
-;;;  0 = format/erase disk        - A$ 800,L$1400 call w/ A = 4 = format, A = 5 = erase
-;;;  1 = shortcut picker          - A$9000,L$1000
-;;;  2 = common file dialog       - A$6000,L$1000
-;;;  3 = part of copy file        - A$7000,L$ 800
-;;;  4 = shortcut editor          - L$7000,L$ 800
-;;;  5 = restore shortcut picker  - A$5000,L$1000 (restore $5000...$5FFF)
-;;;  6 = restore file dialog      - A$6000,L$1400 (restore $6000...$73FF)
-;;;  7 = restore buffer           - A$5000,L$2800 (restore $5000...$77FF)
+;;;  0 = format/erase disk        - A$ 800,L$1000 call w/ A = 4 = format, A = 5 = erase
+;;;  1 = shortcut picker          - A$5000,L$0800
+;;;  2 = common file dialog       - A$B600,L$0900
+;;;  3 = file copy dialog         - A$B500,L$0100
+;;;  4 = shortcut editor          - L$5800,L$0400
+;;;  5 = restore shortcut (1/4)   - A$5000,L$1000 (restore $5000...$5FFF)
+;;;  6 = restore buffer           - A$5000,L$4000 (restore $5000...$9FFF)
+;;;
+;;; `desktop.s` has the definitions for segment locations/sizes
 ;;;
 ;;; Routines 1-5 need appropriate "restore routines" applied when complete.
 
@@ -13278,14 +13200,14 @@ get_case_bits_per_option_and_adjust_string:
 
 .proc LoadDynamicRoutineImpl
 
-kNumOverlays = 8
+kNumOverlays = 7
 
 pos_table:
         .dword  kOverlayFormatEraseOffset
         .dword  kOverlayShortcutPickOffset, kOverlayFileDialogOffset
         .dword  kOverlayFileCopyOffset
         .dword  kOverlayShortcutEditOffset, kOverlayDeskTopRestoreSPOffset
-        .dword  kOverlayDeskTopRestoreFDOffset, kOverlayDeskTopRestoreBufferOffset
+        .dword  kOverlayDeskTopRestoreBufferOffset
         ASSERT_RECORD_TABLE_SIZE pos_table, kNumOverlays, 4
 
 len_table:
@@ -13293,7 +13215,7 @@ len_table:
         .word   kOverlayShortcutPickLength, kOverlayFileDialogLength
         .word   kOverlayFileCopyLength
         .word   kOverlayShortcutEditLength, kOverlayDeskTopRestoreSPLength
-        .word   kOverlayDeskTopRestoreFDLength, kOverlayDeskTopRestoreBufferLength
+        .word   kOverlayDeskTopRestoreBufferLength
         ASSERT_RECORD_TABLE_SIZE len_table, kNumOverlays, 2
 
 addr_table:
@@ -13301,7 +13223,7 @@ addr_table:
         .word   kOverlayShortcutPickAddress, kOverlayFileDialogAddress
         .word   kOverlayFileCopyAddress
         .word   kOverlayShortcutEditAddress, kOverlayDeskTopRestoreSPAddress
-        .word   kOverlayDeskTopRestoreFDAddress, kOverlayDeskTopRestoreBufferAddress
+        .word   kOverlayDeskTopRestoreBufferAddress
         ASSERT_ADDRESS_TABLE_SIZE addr_table, kNumOverlays
 
         DEFINE_OPEN_PARAMS open_params, str_desktop, IO_BUFFER
@@ -13317,14 +13239,12 @@ str_desktop:
         ;; Called with routine # in A
 
 load:   pha
-        copy8   #AlertButtonOptions::OKCancel, button_options
-        ASSERT_NOT_EQUALS AlertButtonOptions::OKCancel, 0
+        copy8   #AlertButtonOptions::TryAgainCancel, button_options
         bne     :+              ; always
 
 restore:
         pha
-        ;; Need to set low bit in this case to override the default.
-        copy8   #AlertButtonOptions::OK|%00000001, button_options
+        copy8   #AlertButtonOptions::OK, button_options
 
 :       jsr     SetCursorWatch ; before loading overlay
         pla
@@ -13342,12 +13262,11 @@ restore:
 
 retry:  MLI_CALL OPEN, open_params
     IF CS
-        lda     #kErrInsertSystemDisk
         button_options := *+1
         ldx     #SELF_MODIFIED_BYTE
-        jsr     ShowAlertOption
-        cmp     #kAlertResultOK
-        beq     retry
+        CALL    ShowAlertOption, A=#kErrInsertSystemDisk ; X = `AlertButtonOptions:*`
+        cmp     #kAlertResultCancel ; might be any of OK, Cancel, or Try Again!
+        bne     retry
         jsr     SetCursorPointer ; after loading overlay (failure)
         RETURN  A=#$FF          ; failed
     END_IF
@@ -13383,8 +13302,7 @@ RestoreDynamicRoutine   := LoadDynamicRoutineImpl::restore
         lda     (path_ptr),y
         cmp     #'/'
         beq     :+
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
         iny
 :
         dey
@@ -13398,24 +13316,25 @@ RestoreDynamicRoutine   := LoadDynamicRoutineImpl::restore
 
 ;;; ============================================================
 
-        PROC_USED_IN_OVERLAY
 
 ;;; A,X = A * 16
+        PROC_USED_IN_OVERLAY
 .proc ATimes16
         ldx     #4
         bne     AShiftX       ; always
 .endproc ; ATimes16
 
 ;;; A,X = A * 32
+        PROC_USED_CLEARING_UPDATES
 .proc ATimes32
         ldx     #5
         bne     AShiftX       ; always
 .endproc ; ATimes32
 
 ;;; A,X = A * 64
+        PROC_USED_IN_OVERLAY
 .proc ATimes64
-        ldx     #6
-        FALL_THROUGH_TO AShiftX
+        FALL_THROUGH_TO AShiftX, X=#6
 .endproc ; ATimes64
 
 ;;; A,X = A << X
@@ -13425,8 +13344,7 @@ RestoreDynamicRoutine   := LoadDynamicRoutineImpl::restore
     DO
         asl     a
         rol     hi
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         hi := *+1
         ldx     #SELF_MODIFIED_BYTE
@@ -13441,8 +13359,7 @@ RestoreDynamicRoutine   := LoadDynamicRoutineImpl::restore
 ;;; Output: A,X = case bits
 ;;; Trashes: $06/$08
 
-        PROC_USED_IN_OVERLAY
-
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc CalculateCaseBits
         ptr  := $06
         bits := $08
@@ -13455,8 +13372,7 @@ RestoreDynamicRoutine   := LoadDynamicRoutineImpl::restore
         cmp     #'a'            ; set C if lowercase
         ror     bits+1
         ror     bits
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
         sec
         ror     bits+1
         ror     bits
@@ -13469,11 +13385,9 @@ RestoreDynamicRoutine   := LoadDynamicRoutineImpl::restore
 
 ;;; Outputs: N=0/Z=1 if ok, N=0/Z=0 if canceled; N=1 means call again
 
-        PROC_USED_IN_OVERLAY
-
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc PromptInputLoop
-        bit     has_input_field_flag
-    IF NS
+    IF bit has_input_field_flag : NS
         LETK_CALL LETK::Idle, prompt_le_params
     END_IF
 
@@ -13547,8 +13461,7 @@ RestoreDynamicRoutine   := LoadDynamicRoutineImpl::restore
       END_IF
     END_IF
 
-        bit     has_input_field_flag
-    IF NC
+    IF bit has_input_field_flag : NC
         lda     #$FF            ; in case handler is just RTS
         jmp     (PromptDialogClickHandlerHook)
     END_IF
@@ -13573,8 +13486,7 @@ RestoreDynamicRoutine   := LoadDynamicRoutineImpl::restore
     IF NOT_ZERO
         ;; Modifiers
 
-        bit     has_input_field_flag
-      IF NS
+      IF bit has_input_field_flag : NS
         LETK_CALL LETK::Key, prompt_le_params
         jsr     UpdateOKButton
       ELSE
@@ -13595,8 +13507,7 @@ RestoreDynamicRoutine   := LoadDynamicRoutineImpl::restore
         bmi     _HandleKeyOK    ; always
       END_IF
 
-        bit     has_input_field_flag
-      IF NS
+      IF bit has_input_field_flag : NS
         jsr     IsControlChar   ; pass through control characters
         bcc     allow
         CALL    IsFilenameChar, Y=prompt_line_edit_rec+LETK::LineEditRecord::caret_pos
@@ -13634,6 +13545,8 @@ KeyHookRelay:
 
 .endproc ; PromptInputLoop
 
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
+
 ;;; NOTE: These are referenced by indirect JMP and *must not*
 ;;; cross page boundaries.
 PAD_IF_NEEDED_TO_AVOID_PAGE_BOUNDARY
@@ -13662,6 +13575,7 @@ yes:    RETURN  C=0
 
 ;;; Input: A=character, Y=caret_pos
 ;;; Output: C=0 if valid filename character, C=1 otherwise
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc IsFilenameChar
         cmp     #'.'
         beq     allow_if_not_first
@@ -13745,8 +13659,7 @@ ignore: RETURN  C=1
 ;;; ============================================================
 
 .proc DrawDialogPathBuf0
-        ldax    #path_buf0
-        FALL_THROUGH_TO DrawDialogPath
+        FALL_THROUGH_TO DrawDialogPath, AX=#path_buf0
 .endproc ; DrawDialogPathBuf0
 
         .include "../lib/drawdialogpath.s"
@@ -13867,8 +13780,7 @@ exit:   rts
         ldy     #::kPathBufferSize-1
     DO
         copy8   (path_ptr),y, (data_ptr),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; Copy view_by in
         pla                     ; A = window_id
@@ -13882,34 +13794,26 @@ exit:   rts
         ldx     #.sizeof(MGTK::Point)-1
     DO
         copy8   (winfo_ptr),y, new_window_viewloc,x
-        dey
-        dex
-    WHILE POS
+    WHILE dey : dex : POS
 
         ldy     #DeskTopFileItem::viewloc+.sizeof(MGTK::Point)-1
         ldx     #.sizeof(MGTK::Point)-1
     DO
         copy8   new_window_viewloc,x, (data_ptr),y
-        dey
-        dex
-    WHILE POS
+    WHILE dey : dex : POS
 
         ;; Bounds - copy to `new_window_maprect` as a temp location, then into data
         ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + .sizeof(MGTK::Rect)-1
         ldx     #.sizeof(MGTK::Rect)-1
     DO
         copy8   (winfo_ptr),y, new_window_maprect,x
-        dey
-        dex
-    WHILE POS
+    WHILE dey : dex : POS
 
         ldy     #DeskTopFileItem::maprect+.sizeof(MGTK::Rect)-1
         ldx     #.sizeof(MGTK::Rect)-1
     DO
         copy8   new_window_maprect,x, (data_ptr),y
-        dey
-        dex
-    WHILE POS
+    WHILE dey : dex : POS
 
         ;; Offset to next entry
         add16_8 data_ptr, #.sizeof(DeskTopFileItem)
@@ -13961,7 +13865,7 @@ SaveWindows := save_restore_windows::Save
 ;;;   and `parent_entry_number` fields.
 ;;;
 ;;; Input: A,X = path
-;;; Output: C=0, A,X=block, Y=entry on success; C=1 on error
+;;; Output: C=0, A,X=block, Y=entry on success; C=1, A=code on error
 ;;;         If successful, $06 points at `FileEntry` in block buffer
 .proc GetFileEntryBlock
 
@@ -13996,8 +13900,7 @@ kEntriesPerBlock = $0D
         lda     path_buf,y      ; find last '/'
         BREAK_IF A = #'/'
         inx                     ; length of filename
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         dey                     ; length not including '/'
     IF ZERO
@@ -14024,7 +13927,7 @@ kEntriesPerBlock = $0D
         ;; --------------------------------------------------
         ;; Open directory, search blocks for filename
 
-        JUMP_TABLE_MLI_CALL OPEN, open_params
+        MLI_CALL OPEN, open_params
         jcs     exit
 
         lda     open_params::ref_num
@@ -14035,7 +13938,7 @@ next_block:
         ;; This is the block we're about to read; save for later.
         copy16  block_buf+2, current_block
 
-        JUMP_TABLE_MLI_CALL READ, read_params
+        MLI_CALL READ, read_params
         bcs     close
         copy8   #AS_BYTE(-1), entry_num
         entry_ptr := $06
@@ -14082,18 +13985,24 @@ next_entry:
         lda     (entry_ptr),y
         cmp     filename,y
         bne     next_entry
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         ;; Match!
         clc
 
 close:  php
-        JUMP_TABLE_MLI_CALL CLOSE, close_params
+        pha
+        MLI_CALL CLOSE, close_params
+        pla
         plp
-exit:
+    IF CC
         ;; Only valid if C=0
-        RETURN  AX=current_block, Y=entry_num
+        ldax    current_block
+        ldy     entry_num
+    END_IF
+
+exit:
+        rts
 
         DEFINE_OPEN_PARAMS open_params, path_buf, io_buf
         DEFINE_READWRITE_PARAMS read_params, block_buf, BLOCK_SIZE
@@ -14116,8 +14025,7 @@ exit:
     IF Y <> #0
       DO
         addax8  #.sizeof(FileEntry)
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
     END_IF
 
         rts
@@ -14131,6 +14039,7 @@ exit:
 ;;; ============================================================
 
         PROC_USED_IN_OVERLAY
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 
 ;;; ============================================================
 
@@ -14142,8 +14051,7 @@ mli_relay_checkevents_flag:     ; bit7
 
         ;; Since this is likely to be I/O bound, process events
         ;; so the mouse stays responsive.
-        bit     mli_relay_checkevents_flag
-    IF NS
+    IF bit mli_relay_checkevents_flag : NS
         jsr     CheckEvents
     END_IF
 
@@ -14163,8 +14071,7 @@ mli_relay_checkevents_flag:     ; bit7
         ldy     #3      ; ptr is off by 1
     DO
         copy8   (params_src),y, params-1,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         ;; Bank and call
         sta     ALTZPOFF
@@ -14185,18 +14092,21 @@ params:  .res    3
 
 ;;; Preserves A
         PROC_USED_IN_OVERLAY
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc SetCursorWatch
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::watch
         rts
 .endproc ; SetCursorWatch
 
         PROC_USED_IN_OVERLAY
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc SetCursorPointer
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
         rts
 .endproc ; SetCursorPointer
 
         PROC_USED_IN_OVERLAY
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc SetCursorIBeam
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
         rts
@@ -14204,6 +14114,8 @@ params:  .res    3
 
 ;;; ============================================================
 
+        PROC_USED_IN_OVERLAY
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc CheckEvents
         MGTK_CALL MGTK::CheckEvents
         rts
@@ -14211,6 +14123,7 @@ params:  .res    3
 
 ;;; ============================================================
 
+        PROC_USED_CLEARING_UPDATES
 .proc UnshieldCursor
         MGTK_CALL MGTK::UnshieldCursor
         rts
@@ -14220,8 +14133,7 @@ params:  .res    3
 
 ;;; Inputs: A = new `prompt_button_flags` value
 
-        PROC_USED_IN_OVERLAY
-
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc OpenPromptDialog
         sta     prompt_button_flags
 
@@ -14250,8 +14162,7 @@ params:  .res    3
 
 ;;; ============================================================
 
-        PROC_USED_IN_OVERLAY
-
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc ClosePromptDialog
         MGTK_CALL MGTK::CloseWindow, winfo_prompt_dialog
         jsr     ClearUpdates     ; following CloseWindow
@@ -14260,8 +14171,7 @@ params:  .res    3
 
 ;;; ============================================================
 
-        PROC_USED_IN_OVERLAY
-
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc SetPortForPromptDialog
         TAIL_CALL SafeSetPortFromWindowId, A=#winfo_prompt_dialog::kWindowId
 .endproc ; SetPortForPromptDialog
@@ -14278,7 +14188,7 @@ params:  .res    3
         DDL_RIGHT  = $30      ; Right aligned
         DDL_LRIGHT = $40      ; Right aligned relative to `kDialogLabelRightX`
 
-        PROC_USED_IN_OVERLAY
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc DrawDialogLabel
         stringwidth_params := $8
         stringptr := $8
@@ -14338,10 +14248,9 @@ calc_y:
 
 ;;; ============================================================
 
-        PROC_USED_IN_OVERLAY
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc UpdateOKButton
-        bit     has_device_picker_flag
-    IF NS
+    IF bit has_device_picker_flag : NS
         lda     #0
         jsr     ::FormatEraseOverlay::ValidSelection ; preserves A
         bpl     set_state
@@ -14368,29 +14277,35 @@ ret:    rts
 .endproc ; UpdateOKButton
 
 ;;; ============================================================
+;;; Draw string centered at current position
+;;; Input: A,X = string
+;;; Trashes $06...$09
+;;; Assert: String is not empty
 
         PROC_USED_IN_OVERLAY
-.proc DrawDialogTitle
-        text_params     := $6
-        text_addr       := text_params + 0
-        text_width      := text_params + 2
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
+.proc DrawStringCentered
+        params := $06
+        str := params
+        width := params+2
+        dx := params
+        dy := params+2
 
-        stax    text_addr       ; input is length-prefixed string
+        stax    str
         stax    @addr
-        MGTK_CALL MGTK::StringWidth, text_params
-
-        sub16   #kPromptDialogWidth, text_width, pos_dialog_title::xcoord
-        lsr16   pos_dialog_title::xcoord ; /= 2
-        MGTK_CALL MGTK::MoveTo, pos_dialog_title
+        MGTK_CALL MGTK::StringWidth, params
+        lsr16   width           ; /= 2
+        sub16   #0, width, dx
+        copy16  #0, dy
+        MGTK_CALL MGTK::Move, params
         MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
-.endproc ; DrawDialogTitle
-
+.endproc ; DrawStringCentered
 
 ;;; ============================================================
 
         PROC_USED_IN_OVERLAY
-
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc NoOp
         rts
 .endproc ; NoOp
@@ -14399,6 +14314,7 @@ ret:    rts
 
 ;;; Input: A,X = number
 ;;; Output: C=0 if plural, C=1 if singular; A,X unchanged
+        PROC_USED_CLEARING_UPDATES
 .proc IsPlural
     IF X = #0 AND A = #1
         ;; singular
@@ -14439,11 +14355,13 @@ ret:    rts
         RETURN  A=event_params::kind
 .endproc ; GetEvent
 
+        PROC_USED_CLEARING_UPDATES
 .proc PeekEvent
         MGTK_CALL MGTK::PeekEvent, event_params
         rts
 .endproc ; PeekEvent
 
+        PROC_USED_CLEARING_UPDATES
 .proc SetPenModeXOR
         MGTK_CALL MGTK::SetPenMode, penXOR
         rts
@@ -14454,11 +14372,14 @@ ret:    rts
         rts
 .endproc ; SetPenModeCopy
 
+        PROC_USED_CLEARING_UPDATES
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc SetPenModeNotCopy
         MGTK_CALL MGTK::SetPenMode, notpencopy
         rts
 .endproc ; SetPenModeNotCopy
 
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc DrawDialogFrame
         stax    addr
         jsr     SetPenModeNotCopy
@@ -14525,21 +14446,20 @@ ret:    rts
 ;;; Inputs: A = window id
 ;;; Outputs: Z = 1 if found, and X = index in `window_id_to_filerecord_list_entries`
 
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+        PROC_USED_CLEARING_UPDATES
 .proc FindIndexInFileRecordListEntries
         ldx     window_id_to_filerecord_list_count
         dex
     DO
         BREAK_IF A = window_id_to_filerecord_list_entries,x
-        dex
-    WHILE POS
+    WHILE dex : POS
         rts
 .endproc ; FindIndexInFileRecordListEntries
 
 ;;; Input: A = window_id
 ;;; Output: A,X = address of FileRecord list (first entry is length)
 ;;; Assert: Window is found in list.
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+        PROC_USED_CLEARING_UPDATES
 .proc GetFileRecordListForWindow
         jsr     FindIndexInFileRecordListEntries
         txa
@@ -14564,7 +14484,7 @@ ret:    rts
 .endproc ; GetActiveWindowViewBy
 
 ;;; Assert: There is a cached window
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+        PROC_USED_CLEARING_UPDATES
 .proc GetCachedWindowViewBy
         ldx     cached_window_id
         RETURN  A=win_view_by_table-1,x
@@ -14591,42 +14511,39 @@ ret:    rts
 
 ;;; ============================================================
 
-;;; Test if either modifier (Open-Apple or Solid-Apple) is down.
-;;; Output: A=high bit/N flag set if either is down.
+kEitherAppleModifierMask        = %11000000 ; OA or SA
+kExtendSelectionModifierMask    = %10000001 ; OA or Shift
 
-        PROC_USED_IN_OVERLAY
-.proc ModifierDown
-        lda     BUTN0
-        ora     BUTN1
-        rts
-.endproc ; ModifierDown
-
-;;; Test if either primary modifier (Open-Apple) or shift is down,
-;;; (if shift key can be detected).
-;;; Output: A=high bit/N flag set if either is down.
-
-.proc ExtendSelectionModifierDown
+;;; Grab the state of Open Apple, Solid Apple, and Shift (if possible)
+;;; Output: A = bit 7 = OA, bit 6 = SA, bit 0 = Shift
+.proc ComputeModifiers
         ;; IIgs? Use KEYMODREG instead
         CALL    ReadSetting, X=#DeskTopSettings::system_capabilities
         and     #DeskTopSettings::kSysCapIsIIgs
         bne     iigs
 
-        jsr     TestShiftMod  ; Shift key state, if detectable
-        ora     BUTN0           ; Either way, check button state
+        jsr     TestShiftMod    ; bit7 = shift down, if detectable
+        rol                     ; C = shift (s)
+        php
+        lda     BUTN0           ; A = %Oxxxxxxx
+        asl                     ; A = %xxxxxxxx C=O
+        lda     BUTN1           ; A = %Sxxxxxxx C=O
+        ror                     ; A = %OSxxxxxx
+        lsr                     ; A = %xOSxxxxx
+        and     #%01100000      ; A = %0OS00000
+        plp                     ; A = %0OS00000 C=s
+        rol                     ; A = %OS00000s
         rts
 
-        ;; IIgs - do everything using one I/O location
-iigs:   lda     KEYMODREG
-        and     #%10000001      ; bit 7 = Command (OA), bit 0 = Shift
-        beq     ret
-        lda     #$80
-ret:    rts
-.endproc ; ExtendSelectionModifierDown
+        ;; IIgs - has everything using one I/O location
+iigs:   lda     KEYMODREG       ; bits match our return value
+        and     #%11000001
+        rts
+.endproc ; ComputeModifiers
 
 ;;; Test if shift is down (if it can be detected).
 ;;; Output: A=high bit/N flag set if down.
 
-        PROC_USED_IN_OVERLAY
 .proc ShiftDown
         CALL    ReadSetting, X=#DeskTopSettings::system_capabilities
         and     #DeskTopSettings::kSysCapIsIIgs
@@ -14663,7 +14580,7 @@ ret:    rts
 ;;; ============================================================
 
 
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+        PROC_USED_CLEARING_UPDATES
 ;;; Input: A = window_id (0=desktop)
 .proc CacheWindowIconList
         sta     cached_window_id
@@ -14679,8 +14596,7 @@ ret:    rts
         copy8   window_entry_table,x, cached_window_icon_list,y
         inx
         iny
-        cpy     cached_window_icon_count
-      WHILE NE
+      WHILE Y <> cached_window_icon_count
     END_IF
 
         rts
@@ -14756,8 +14672,7 @@ shift_offsets:
         delta := *+1
         adc     #SELF_MODIFIED_BYTE
         sta     window_entry_offset_table,x
-        inx
-    WHILE X <> #kMaxDeskTopWindows+1
+    WHILE inx : X <> #kMaxDeskTopWindows+1
 
 done_shift:
 
@@ -14771,9 +14686,7 @@ done_shift:
       DO
         copy8   cached_window_icon_list,y, window_entry_table,x
         inx
-        iny
-        cpy     cached_window_icon_count
-      WHILE NE
+      WHILE iny : Y <> cached_window_icon_count
     END_IF
 
         rts
@@ -14786,7 +14699,7 @@ window_entry_table:             .res    ::kMaxIconCount+1, 0
 ;;; logic with 127 icons. A simpler fix may be possible, see commit
 ;;; 41ebde49 for another attempt, but that introduces other issues.
 
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+        PROC_USED_CLEARING_UPDATES
 .proc CacheActiveWindowIconList
         TAIL_CALL CacheWindowIconList, A=active_window_id
 .endproc ; CacheActiveWindowIconList
@@ -14799,6 +14712,7 @@ window_entry_table:             .res    ::kMaxIconCount+1, 0
 
 ;;; A,X = A,X * Y
 ;;; Uses $10..$19
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc Multiply_16_8_16
 PARAM_BLOCK muldiv_params, $10
 number          .word           ; (in)
@@ -14829,7 +14743,8 @@ END_PARAM_BLOCK
 ;;; Library Routines
 ;;; ============================================================
 
-        .assert * >= OVERLAY_BUFFER + kOverlayBufferSize, error, "Routines used by overlays in overlay zone"
+        PROC_USED_IN_OVERLAY
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
 
         RC_AUXMEM = 1
         RC_LCBANK = 1
@@ -15065,7 +14980,7 @@ desktop_icon_usage_table:
 
 ;;; ============================================================
 
-        .assert * < OVERLAY_BUFFER || * >= $6000, error, "Routine used when clearing updates in overlay zone"
+        PROC_USED_CLEARING_UPDATES
 ;;; FileRecord for list view
 list_view_filerecord:
         .tag FileRecord
@@ -15231,16 +15146,9 @@ str_date_and_time:
         ReadSetting := main::ReadSetting
         WriteSetting := main::WriteSetting
         GetNextEvent := main::GetNextEvent
-        SystemTask := main::SystemTask
-        Bell := main::Bell
-        Multiply_16_8_16 := main::Multiply_16_8_16
         DetectDoubleClick := main::DetectDoubleClick
         AdjustOnLineEntryCase := main::AdjustOnLineEntryCase
         AdjustFileEntryCase := main::AdjustFileEntryCase
-
-        IntToString := main::IntToString
-        IntToStringWithSeparators := main::IntToStringWithSeparators
-        ComposeSizeString := main::ComposeSizeString
 
 ;;; ============================================================
 

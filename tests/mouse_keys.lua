@@ -1,6 +1,12 @@
 a2d.ConfigureRepaintTime(0.25)
 
-local file_menu_x, file_menu_y = 30, 5
+local file_menu_x, file_menu_y
+a2dtest.OCRIterate(function(run, x, y)
+    if run == "File" then
+      file_menu_x, file_menu_y = x, y
+      return false
+    end
+end)
 
 --[[
   Enter MouseKeys mode. "Pull down" a menu (using Comma) and select an
@@ -60,12 +66,18 @@ test.Step(
         m.MoveToApproximately(apple2.SCREEN_WIDTH/2, apple2.SCREEN_HEIGHT/2)
         m.MoveByApproximately(0, -apple2.SCREEN_HEIGHT)
         test.Snap("verify cursor at top center")
+    end)
+    a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(apple2.SCREEN_WIDTH/2, apple2.SCREEN_HEIGHT/2)
         m.MoveByApproximately(0, apple2.SCREEN_HEIGHT)
         test.Snap("verify cursor at bottom center")
+    end)
+    a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(apple2.SCREEN_WIDTH/2, apple2.SCREEN_HEIGHT/2)
         m.MoveByApproximately(-apple2.SCREEN_WIDTH, 0)
         test.Snap("verify cursor at left center")
+    end)
+    a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(apple2.SCREEN_WIDTH/2, apple2.SCREEN_HEIGHT/2)
         m.MoveByApproximately(apple2.SCREEN_WIDTH, 0)
         test.Snap("verify cursor at right center")

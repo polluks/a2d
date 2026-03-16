@@ -36,9 +36,9 @@ test.Step(
   function()
     a2d.OpenMenu(a2d.SHORTCUTS_MENU)
     local ocr = a2dtest.OCRScreen()
-    test.Expect(not ocr:find("Edit a Shortcut..."), "Edit should be disabled")
-    test.Expect(not ocr:find("Delete a Shortcut..."), "Delete should be disabled")
-    test.Expect(not ocr:find("Run a Shortcut..."), "Run should be disabled")
+    test.ExpectNotMatch(ocr, "Edit a Shortcut...", "Edit should be disabled")
+    test.ExpectNotMatch(ocr, "Delete a Shortcut...", "Delete should be disabled")
+    test.ExpectNotMatch(ocr, "Run a Shortcut...", "Run should be disabled")
     test.Snap("verify no separator present")
     apple2.EscapeKey()
 
@@ -46,11 +46,11 @@ test.Step(
     emu.wait(1)
     a2d.OpenMenu(a2d.SHORTCUTS_MENU)
     local ocr = a2dtest.OCRScreen()
-    test.Expect(ocr:find("Edit a Shortcut..."), "Edit should be enabled")
-    test.Expect(ocr:find("Delete a Shortcut..."), "Delete should be enabled")
-    test.Expect(ocr:find("Run a Shortcut..."), "Run should be enabled")
+    test.ExpectMatch(ocr, "Edit a Shortcut...", "Edit should be enabled")
+    test.ExpectMatch(ocr, "Delete a Shortcut...", "Delete should be enabled")
+    test.ExpectMatch(ocr, "Run a Shortcut...", "Run should be enabled")
     test.Snap("verify separator present")
-    test.Expect(ocr:find("BASIC.system"), "Shortcut should be present")
+    test.ExpectMatch(ocr, "BASIC.system", "Shortcut should be present")
     apple2.EscapeKey()
 
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_DELETE_A_SHORTCUT)
@@ -59,9 +59,9 @@ test.Step(
 
     a2d.OpenMenu(a2d.SHORTCUTS_MENU)
     local ocr = a2dtest.OCRScreen()
-    test.Expect(not ocr:find("Edit a Shortcut..."), "Edit should be disabled")
-    test.Expect(not ocr:find("Delete a Shortcut..."), "Delete should be disabled")
-    test.Expect(not ocr:find("Run a Shortcut..."), "Run should be disabled")
+    test.ExpectNotMatch(ocr, "Edit a Shortcut...", "Edit should be disabled")
+    test.ExpectNotMatch(ocr, "Delete a Shortcut...", "Delete should be disabled")
+    test.ExpectNotMatch(ocr, "Run a Shortcut...", "Run should be disabled")
     test.Snap("verify no separator present")
     apple2.EscapeKey()
 end)
@@ -82,9 +82,9 @@ test.Step(
   function()
     a2d.OpenMenu(a2d.SHORTCUTS_MENU)
     local ocr = a2dtest.OCRScreen()
-    test.Expect(not ocr:find("Edit a Shortcut..."), "Edit should be disabled")
-    test.Expect(not ocr:find("Delete a Shortcut..."), "Delete should be disabled")
-    test.Expect(not ocr:find("Run a Shortcut..."), "Run should be disabled")
+    test.ExpectNotMatch(ocr, "Edit a Shortcut...", "Edit should be disabled")
+    test.ExpectNotMatch(ocr, "Delete a Shortcut...", "Delete should be disabled")
+    test.ExpectNotMatch(ocr, "Run a Shortcut...", "Run should be disabled")
     test.Snap("verify no separator present")
     apple2.EscapeKey()
 
@@ -92,9 +92,9 @@ test.Step(
     emu.wait(1)
     a2d.OpenMenu(a2d.SHORTCUTS_MENU)
     local ocr = a2dtest.OCRScreen()
-    test.Expect(ocr:find("Edit a Shortcut..."), "Edit should be enabled")
-    test.Expect(ocr:find("Delete a Shortcut..."), "Delete should be enabled")
-    test.Expect(ocr:find("Run a Shortcut..."), "Run should be enabled")
+    test.ExpectMatch(ocr, "Edit a Shortcut...", "Edit should be enabled")
+    test.ExpectMatch(ocr, "Delete a Shortcut...", "Delete should be enabled")
+    test.ExpectMatch(ocr, "Run a Shortcut...", "Run should be enabled")
     test.Snap("verify no separator present")
     apple2.EscapeKey()
 
@@ -104,9 +104,9 @@ test.Step(
 
     a2d.OpenMenu(a2d.SHORTCUTS_MENU)
     local ocr = a2dtest.OCRScreen()
-    test.Expect(not ocr:find("Edit a Shortcut..."), "Edit should be disabled")
-    test.Expect(not ocr:find("Delete a Shortcut..."), "Delete should be disabled")
-    test.Expect(not ocr:find("Run a Shortcut..."), "Run should be disabled")
+    test.ExpectNotMatch(ocr, "Edit a Shortcut...", "Edit should be disabled")
+    test.ExpectNotMatch(ocr, "Delete a Shortcut...", "Delete should be disabled")
+    test.ExpectNotMatch(ocr, "Run a Shortcut...", "Run should be disabled")
     test.Snap("verify no separator present")
     apple2.EscapeKey()
 
@@ -127,6 +127,7 @@ test.Step(
     a2d.OAShortcut("3") -- at boot
     a2d.DialogCancel()
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
+    emu.wait(5)
     test.Snap("verify 'at boot' not checked")
     a2d.DialogCancel()
 end)
@@ -143,6 +144,7 @@ test.Step(
     a2d.OAShortcut("4") -- at first use
     a2d.DialogCancel()
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
+    emu.wait(5)
     test.Snap("verify 'at first use' not checked")
     a2d.DialogCancel()
 end)
@@ -159,6 +161,7 @@ test.Step(
     a2d.OAShortcut("2") -- list only
     a2d.DialogCancel()
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
+    emu.wait(2)
     test.Snap("verify 'list only' not checked")
     a2d.DialogCancel()
 end)
@@ -295,7 +298,7 @@ test.Step(
     emu.wait(5)
 
     a2d.OpenMenu(a2d.SHORTCUTS_MENU)
-    test.Expect(a2dtest.OCRScreen():upper():find("READ.ME"), "READ.ME shortcut should appear")
+    test.ExpectIMatch(a2dtest.OCRScreen(), "READ.ME", "READ.ME shortcut should appear")
     apple2.EscapeKey()
 
     a2d.DeletePath("/A2.DESKTOP/LOCAL")
@@ -339,8 +342,7 @@ test.Step(
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
     a2d.OAShortcut("1") -- menu and list
     a2d.DialogOK()
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find("list is full"), "alert should be about list being full")
+    a2dtest.WaitForAlert({match="list is full"})
     a2d.DialogOK()
     a2d.DialogCancel()
 
@@ -366,8 +368,7 @@ test.Step(
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
     a2d.OAShortcut("2") -- list only
     a2d.DialogOK()
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find("list is full"), "alert should be about list being full")
+    a2dtest.WaitForAlert({match="list is full"})
     a2d.DialogOK()
     a2d.DialogCancel()
 
@@ -398,8 +399,7 @@ test.Step(
 
     a2d.OAShortcut("1") -- menu and list
     a2d.DialogOK()
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find("list is full"), "alert should be about list being full")
+    a2dtest.WaitForAlert({match="list is full"})
     a2d.DialogOK()
     a2d.DialogCancel()
 
@@ -424,8 +424,8 @@ test.Step(
     a2d.DialogOK()
     emu.wait(5)
 
-    test.Expect(a2dtest.OCRScreen({invert=true}):find("TESTS"),
-                "TESTS volume should be selected")
+    test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "TESTS",
+                     "TESTS volume should be selected")
 
     a2d.DialogCancel()
 
@@ -448,12 +448,12 @@ test.Step(
 
     a2d.OAShortcut("3")
     a2d.DialogOK()
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="not valid"})
     a2d.DialogCancel()
 
     a2d.OAShortcut("4")
     a2d.DialogOK()
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="not valid"})
     a2d.DialogCancel()
 
     a2d.OAShortcut("5")
@@ -483,12 +483,12 @@ test.Step(
 
     a2d.OAShortcut("3")
     a2d.DialogOK()
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="not valid"})
     a2d.DialogCancel()
 
     a2d.OAShortcut("4")
     a2d.DialogOK()
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="not valid"})
     a2d.DialogCancel()
 
     a2d.OAShortcut("5")
@@ -514,11 +514,11 @@ test.Step(
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
     emu.wait(5)
 
-    test.Expect(a2dtest.OCRScreen():upper():find("SAMPLE%.MEDIA.*A2.DESKTOP"),
-                "should be in SAMPLE.MEDIA")
+    test.ExpectIMatch(a2dtest.OCRScreen(), "SAMPLE%.MEDIA.*A2.DESKTOP",
+                      "should be in SAMPLE.MEDIA")
 
-    test.Expect(a2dtest.OCRScreen({invert=true}):upper():find("KARATEKA%.YELL"),
-                "KARATEKA.YELL should be selected")
+    test.ExpectIMatch(a2dtest.OCRScreen({invert=true}), "KARATEKA%.YELL",
+                      "KARATEKA.YELL should be selected")
 
     a2d.DialogCancel()
 end)
@@ -535,8 +535,8 @@ test.Step(
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
     emu.wait(5)
 
-    test.Expect(a2dtest.OCRScreen({invert=true}):find("TESTS"),
-                "TESTS volume should be selected")
+    test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "TESTS",
+                     "TESTS volume should be selected")
 
     a2d.DialogCancel()
 end)
@@ -592,25 +592,25 @@ test.Step(
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_RUN_A_SHORTCUT)
     local dialog_x, dialog_y = a2dtest.GetFrontWindowContentRect()
 
-    test.Expect(not a2dtest.OCRScreen():find("OK"), "OK button should be disabled")
+    test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(dialog_x + 60, dialog_y + 30)
         m.Click()
     end)
     a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find("OK"), "OK button should be enabled")
+    test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(dialog_x + 300, dialog_y + 90)
         m.Click()
     end)
     a2d.WaitForRepaint()
-    test.Expect(not a2dtest.OCRScreen():find("OK"), "OK button should be disabled")
+    test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
 
     apple2.DownArrowKey()
     a2d.WaitForRepaint()
-    test.Expect(a2dtest.OCRScreen():find("OK"), "OK button should be enabled")
+    test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
 
     a2d.DialogCancel()
 
@@ -661,10 +661,79 @@ test.Step(
     a2d.AddShortcut("/A2.DESKTOP/DUPE")
     a2d.DeletePath("/A2.DESKTOP/DUPE")
     a2d.OAShortcut("1")
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find("file cannot be found"),
-                "alert should be about file not found")
+    a2dtest.WaitForAlert({match="file cannot be found"})
     a2d.DialogOK()
+
+    -- cleanup
+    a2d.DeletePath("/A2.DESKTOP/LOCAL")
+    a2d.Reboot()
+    a2d.WaitForDesktopReady()
+end)
+
+--[[
+  Regression test - make sure volume shortcuts are created correctly.
+]]
+test.Step(
+  "volume shortcuts are created with correct paths",
+  function()
+    a2d.AddShortcut("/A2.DESKTOP")
+    a2d.OAShortcut("1")
+    emu.wait(1)
+    a2dtest.ExpectAlertNotShowing()
+    test.ExpectEquals(a2dtest.GetFrontWindowTitle():upper(), "A2.DESKTOP", "shortcut should have opened window")
+
+    -- cleanup
+    a2d.DeletePath("/A2.DESKTOP/LOCAL")
+    a2d.Reboot()
+    a2d.WaitForDesktopReady()
+end)
+
+--[[
+  Create multiple shortcuts. Delete one that is not the last. Verify
+  the correct shortcut is removed.
+]]
+test.Variants(
+  {
+    {"Deleting a shortcut removes the right one - menu and list", {}},
+    {"Deleting a shortcut removes the right one - list only", {list_only=true}},
+  },
+  function(idx, name, options)
+    a2d.AddShortcut("/A2.DESKTOP/READ.ME", options)
+    a2d.AddShortcut("/A2.DESKTOP/PRODOS", options)
+    a2d.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", options)
+    a2d.CloseAllWindows()
+
+    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_DELETE_A_SHORTCUT)
+    local ocr = a2dtest.OCRScreen()
+    test.ExpectIMatch(ocr, "READ%.ME", "shortcut should be present")
+    test.ExpectIMatch(ocr, "PRODOS", "shortcut should be present")
+    test.ExpectIMatch(ocr, "BASIC%.SYSTEM", "shortcut should be present")
+    apple2.DownArrowKey() -- READ.ME
+    apple2.DownArrowKey() -- PRODOS
+    a2d.DialogOK()
+
+    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_DELETE_A_SHORTCUT)
+    local ocr = a2dtest.OCRScreen()
+    test.ExpectIMatch(ocr, "READ%.ME", "shortcut should be present")
+    test.ExpectNotIMatch(ocr, "PRODOS", "shortcut should be removed")
+    test.ExpectIMatch(ocr, "BASIC%.SYSTEM", "shortcut should be present")
+    apple2.DownArrowKey() -- READ.ME
+    a2d.DialogOK()
+
+    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_DELETE_A_SHORTCUT)
+    local ocr = a2dtest.OCRScreen()
+    test.ExpectNotIMatch(ocr, "READ%.ME", "shortcut should be removed")
+    test.ExpectNotIMatch(ocr, "PRODOS", "shortcut should be removed")
+    test.ExpectIMatch(ocr, "BASIC%.SYSTEM", "shortcut should be present")
+    apple2.DownArrowKey() -- BASIC.SYSTEM
+    a2d.DialogOK()
+
+    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_DELETE_A_SHORTCUT)
+    local ocr = a2dtest.OCRScreen()
+    test.ExpectNotIMatch(ocr, "READ%.ME", "shortcut should be removed")
+    test.ExpectNotIMatch(ocr, "PRODOS", "shortcut should be removed")
+    test.ExpectNotIMatch(ocr, "BASIC%.SYSTEM", "shortcut should be removed")
+    a2d.DialogCancel()
 
     -- cleanup
     a2d.DeletePath("/A2.DESKTOP/LOCAL")

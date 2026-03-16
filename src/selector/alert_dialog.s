@@ -80,8 +80,9 @@ buttons:        .byte   0       ; AlertButtonOptions
 options:        .byte   AlertOptions::Beep | AlertOptions::SaveBack
 .endparams
 
-start:  bit     app::invoked_during_boot_flag ; if no UI, just return cancel
-    IF NS
+start:
+    IF bit app::invoked_during_boot_flag : NS
+        ;; if no UI, just return cancel
         RETURN  A=#kAlertResultCancel
     END_IF
 
@@ -95,8 +96,7 @@ start:  bit     app::invoked_during_boot_flag ; if no UI, just return cancel
     DO
         cmp     alert_table,y
         beq     :+
-        dey
-    WHILE POS
+    WHILE dey : POS             ; TODO: Same result if `NOT_ZERO`, then can drop next line
         ldy     #0              ; default
 :
 
@@ -112,8 +112,7 @@ start:  bit     app::invoked_during_boot_flag ; if no UI, just return cancel
         tay                     ; Y = index
         copy8   alert_options_table,y, alert_params::buttons
 
-        ldax    #alert_params
-        FALL_THROUGH_TO Alert
+        FALL_THROUGH_TO Alert, AX=#alert_params
 .endproc ; AlertById
 
 ;;; ============================================================

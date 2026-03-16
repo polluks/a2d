@@ -58,7 +58,7 @@
 ;;; Param blocks
 
         kDialogWidth = 287
-        kDialogHeight = 75
+        kDialogHeight = 77
 
         ;; The following rects are iterated over to identify
         ;; a hit target for a click.
@@ -67,9 +67,10 @@
         kUpRectIndex = 1        ; 1-based
         kDownRectIndex = 2
 
-        kControlMarginX = 16
+        kMarginX = kModalDialogInsetX
+        kMarginY = kModalDialogInsetY
 
-        kFieldTop = 14
+        kFieldTop = kMarginY + 5
         kField1Left = 22
         kField2Left = kField1Left + 40
         kField3Left = kField2Left + 48
@@ -83,7 +84,7 @@
 
         kUpDownButtonWidth = 10
         kUpDownButtonHeight = 10
-        kUpDownButtonLeft = kDialogWidth - kUpDownButtonWidth - kControlMarginX
+        kUpDownButtonLeft = kDialogWidth - kUpDownButtonWidth - kMarginX
 
         first_hit_rect := *
         DEFINE_RECT_SZ up_arrow_rect, kUpDownButtonLeft, kFieldTop - 6, kUpDownButtonWidth, kUpDownButtonHeight
@@ -109,11 +110,11 @@
         DEFINE_POINT date_sep2_pos, kField3Left - 12, kFieldTop + 10
         DEFINE_POINT time_sep_pos,  kField5Left -  9, kFieldTop + 10
 
-        DEFINE_RECT_SZ date_rect, kControlMarginX, kFieldTop-kFieldPaddingY, 122, kFieldHeight+kFieldPaddingY*2
+        DEFINE_RECT_SZ date_rect, kMarginX, kFieldTop-kFieldPaddingY, 122, kFieldHeight+kFieldPaddingY*2
         DEFINE_RECT_SZ time_rect, 150, kFieldTop-kFieldPaddingY, 102, kFieldHeight+kFieldPaddingY*2
 
-        kOKButtonLeft = kDialogWidth - kButtonWidth - kControlMarginX
-        kOKButtonTop = kDialogHeight - kButtonHeight - 7
+        kOKButtonLeft = (kDialogWidth + 1) - kButtonWidth - kMarginX
+        kOKButtonTop  = (kDialogHeight + 1) - kButtonHeight - kMarginY
         DEFINE_BUTTON ok_button, kDAWindowId, res_string_button_ok, kGlyphReturn, kOKButtonLeft, kOKButtonTop
 
 .params settextbg_black_params
@@ -446,8 +447,7 @@ init_window:
         lda     selected_field
         sbc     #1
         bne     UpdateSelection
-        bit     clock_24hours
-    IF NC
+    IF bit clock_24hours : NC
         lda     #Field::period
     ELSE
         lda     #Field::period-1
@@ -460,8 +460,7 @@ init_window:
         lda     selected_field
         adc     #1
 
-        bit     clock_24hours
-    IF NC
+    IF bit clock_24hours : NC
         cmp     #Field::period+1
     ELSE
         cmp     #Field::period
@@ -586,8 +585,7 @@ hit_target_jump_table:
         dex
         txa
 
-        bit     clock_24hours
-    IF NS
+    IF bit clock_24hours : NS
         RTS_IF A = #Field::period
     END_IF
 
@@ -620,10 +618,8 @@ loop:   MGTK_CALL MGTK::GetEvent, event_params ; Repeat while mouse is down
 
         ;; Hour requires special handling for 12-hour clock; patch the
         ;; min/max table depending on clock setting and period.
-        bit     clock_24hours
-    IF NC
-        lda     hour
-      IF A < #12
+    IF bit clock_24hours : NC
+      IF lda hour : A < #12
         copy8   #kHourMin, min_table + Field::hour - 1
         copy8   #11, max_table + Field::hour - 1
       ELSE
@@ -777,9 +773,7 @@ month_length_table:
         ldy     #kLength - 1
     DO
         copy8   month_name_table,x, (ptr),y
-        dex
-        dey
-    WHILE POS
+    WHILE dex : dey : POS
 
         rts
 .endproc ; PrepareMonthString
@@ -811,8 +805,7 @@ str_pm: PASCAL_STRING "PM"
 
 .proc PrepareHourString
         lda     hour
-        bit     clock_24hours
-    IF NC
+    IF bit clock_24hours : NC
       IF A = #0
         lda     #12
       END_IF
@@ -822,8 +815,7 @@ str_pm: PASCAL_STRING "PM"
     END_IF
 
         jsr     NumberToASCII
-        bit     clock_24hours
-    IF NC AND A = #'0'
+    IF bit clock_24hours : NC AND A = #'0'
         lda     #' '
     END_IF
         sta     hour_string+1
@@ -1045,12 +1037,11 @@ label_downarrow:
 
 .proc DrawPeriod
         MGTK_CALL MGTK::MoveTo, period_pos
-        bit     clock_24hours
-    IF NS
+
+    IF bit clock_24hours : NS
         MGTK_CALL MGTK::DrawString, spaces_string
     ELSE
-        lda     hour
-      IF A < #12
+      IF lda hour : A < #12
         MGTK_CALL MGTK::DrawString, str_am
       ELSE
         MGTK_CALL MGTK::DrawString, str_pm
@@ -1216,8 +1207,7 @@ loop:
         ora     #$40            ; settings changed
         sta     dialog_result
 
-        lda     selected_field
-    IF A = #Field::period
+    IF lda selected_field : A = #Field::period
         CALL    SelectField, A=#Field::minute
     END_IF
 
@@ -1311,16 +1301,22 @@ current:
         JSR_TO_AUX aux::RunDA
         sta     result
 
-        bit     result
-    IF NS
+    IF bit result : VS
+        jsr     SaveSettings
+
+        ;; If we failed to save settings (e.g. write protected), don't
+        ;; bother trying to save the date as that is more error prone;
+        ;; e.g. if write protected, the CLOSE will fail leaving the IO
+        ;; buffer and file control block permanently in use.
+        bcs     ret
+    END_IF
+
+    IF bit result : NS
         jsr     SaveDate
     END_IF
 
-        bit     result
-    IF VS
-        jsr     SaveSettings
-    END_IF
 
+ret:
         rts
 
 result: .byte   0
@@ -1332,7 +1328,15 @@ result: .byte   0
 filename:
         PASCAL_STRING kFilenameLauncher
 
-filename_buffer:
+write_buffer:
+        .tag    DateTime
+        sizeof_write_buffer = * - write_buffer
+
+        ;; If running from RAMCard, we temporarily swap the ProDOS
+        ;; prefix for writing back to the startup disk.
+current_prefix:
+        .res ::kPathBufferSize
+orig_prefix:
         .res ::kPathBufferSize
 
         DEFINE_OPEN_PARAMS open_params, filename, DA_IO_BUFFER
@@ -1340,87 +1344,95 @@ filename_buffer:
         DEFINE_READWRITE_PARAMS write_params, write_buffer, sizeof_write_buffer
         DEFINE_CLOSE_PARAMS close_params
 
-write_buffer:
-        .tag    DateTime
-        sizeof_write_buffer = * - write_buffer
+        DEFINE_GET_PREFIX_PARAMS current_prefix_params, current_prefix
+        DEFINE_GET_PREFIX_PARAMS orig_prefix_params, orig_prefix
+
 
 .proc SaveSettings
         ;; ProDOS GP has the updated data, copy somewhere usable.
         COPY_STRUCT DateTime, DATELO, write_buffer
 
+        ;; First time - ask if we should even try.
+        CLEAR_BIT7_FLAG retry_flag
+
         ;; Write to desktop current prefix
-        ldax    #filename
-        stax    open_params::pathname
-        jsr     DoWrite
+        jsr     _DoWrite
         bcs     done            ; failed and canceled
 
         ;; Write to the original file location, if necessary
         jsr     JUMP_TABLE_GET_RAMCARD_FLAG
-        beq     done
-        ldax    #filename_buffer
-        stax    open_params::pathname
-        jsr     JUMP_TABLE_GET_ORIG_PREFIX
-        jsr     AppendFilename
-        jsr     DoWrite
+    IF ZC
+        CALL    JUMP_TABLE_GET_ORIG_PREFIX, AX=#orig_prefix
+        JUMP_TABLE_MLI_CALL GET_PREFIX, current_prefix_params
+retry:
+        JUMP_TABLE_MLI_CALL SET_PREFIX, orig_prefix_params
+      IF CS
+        jsr     _CheckRetry
+        beq     retry
+        sec                     ; failed
+        rts
+      END_IF
+        jsr     _DoWrite
+        JUMP_TABLE_MLI_CALL SET_PREFIX, current_prefix_params
+        ;; Assert: Succeeded (otherwise RAMCard was deleted out from under us)
+    END_IF
 
 done:   rts
 .endproc ; SaveSettings
 
-.proc AppendFilename
-        ;; Append filename to buffer
-        inc     filename_buffer ; Add '/' separator
-        ldx     filename_buffer
-        copy8   #'/', filename_buffer,x
-
-        ldx     #0              ; Append filename
-        ldy     filename_buffer
+.proc _DoWrite
     DO
-        inx
-        iny
-        copy8   filename,x, filename_buffer,y
-    WHILE X <> filename
-        sty     filename_buffer
-        rts
-.endproc ; AppendFilename
-
-.proc DoWrite
-        ;; First time - ask if we should even try.
-        copy8   #kErrSaveChanges, message
-
-retry:
         JUMP_TABLE_MLI_CALL OPEN, open_params
-        bcs     error
+      IF CC
         lda     open_params::ref_num
         sta     set_mark_params::ref_num
         sta     write_params::ref_num
         sta     close_params::ref_num
-
         JUMP_TABLE_MLI_CALL SET_MARK, set_mark_params ; seek
-        bcs     close
+        bcs     :+
         JUMP_TABLE_MLI_CALL WRITE, write_params
-close:  php                     ; preserve result
+:       php                     ; preserve result
         JUMP_TABLE_MLI_CALL CLOSE, close_params
+        ;; BUG: If write protected, this will leave the `io_buffer` in use!
         plp
-        bcc     ret             ; succeeded
+      END_IF
+      IF CS
+        jsr     _CheckRetry
+        REDO_IF EQ
+        bne     failed          ; always
+      END_IF
+    DONE
+        rts                     ; C=0
 
-error:
-        message := *+1
-        lda     #SELF_MODIFIED_BYTE
-        jsr     JUMP_TABLE_SHOW_ALERT
+failed:
+        sec
+        rts                     ; C=1
+.endproc ; _DoWrite
 
-        ;; Second time - prompt to insert.
-        ldx     #kErrInsertSystemDisk
-        stx     message
-
+;;; Before calling: ensure `retry_flag` was cleared at some point.
+;;; Input: A = ProDOS error code
+;;; Output: Z = 1 if retry was selected
+.proc _CheckRetry
+    IF bit retry_flag : NC
+        ;; First time - prompt see if we want to try saving.
+        SET_BIT7_FLAG retry_flag
+        CALL    JUMP_TABLE_SHOW_ALERT, A=#kErrSaveChanges ; OK/Cancel
         cmp     #kAlertResultOK
-        beq     retry
+        rts                     ; Z=1 if OK selected (i.e. retry)
+    END_IF
 
-        sec                     ; failed
-ret:    rts
+        ;; Special case
+    IF A = #ERR_VOL_NOT_FOUND
+        lda     #kErrInsertSystemDisk ; Try Again/Cancel
+    END_IF
+        jsr     JUMP_TABLE_SHOW_ALERT ; arbitrary ProDOS error
+        ;; Responses are either OK or Try Again/Cancel
+        cmp     #kAlertResultTryAgain
+        rts
+.endproc ; _CheckRetry
 
-second_try_flag:
-        .byte   0
-.endproc ; DoWrite
+retry_flag:        .byte   0 ; bit7
+
 .endproc ; save_date
 SaveDate := save_date::SaveSettings
 

@@ -2,12 +2,48 @@
 ;;; Not included in the package - just used as a reference for
 ;;; testing that edge cases build and generate the expected code.
 
+;;; The suggested approach is to extending these tests is as follows:
+;;;
+;;; (1) Write out the test case using macros, e.g.:
+;;;
+;;;   IF X < #5
+;;;   nop
+;;;   END_IF
+;;;
+;;; (2) Comment out the macros, and write the expected output, e.g.:
+;;;
+;;;   ;; IF X < #5
+;;;   cpx #5
+;;;   bcs end_if
+;;;
+;;;   nop
+;;;
+;;;   ;; END_IF
+;;;   end_if := *
+;;;
+;;; (3) Build, and capture an MD5 of `out/asmtest.system.SYS`
+;;;
+;;; (4) Switch the code back to the macros:
+;;;
+;;;   IF X < #5
+;;;   nop
+;;;   END_IF
+;;;
+;;; (5) Build, and compare the MD5 of `out/asmtest.system.SYS` with
+;;; that from (3). If these don't match, then either the macros aren't
+;;; working as expected, or you made a mistake in the transcription in
+;;; (2).
+;;;
+;;; (6) Once they match, commit final code here. There is no need to
+;;; capture intermediate states as long as the output is verified
+;;; whenever changing the macro definitions.
+
         .include "../config.inc"
 
         .include "../inc/macros.inc"
 
 ;;; ============================================================
-;;; Flow Control Macros - Branch & Loop
+;;; Control Flow Macros - Branch & Loop
 ;;; ============================================================
 
 ;;; --------------------------------------------------
@@ -104,7 +140,7 @@
         nop
     FOREVER
 
-;;; BREAK
+;;; BREAK_IF
     DO
         nop
         BREAK_IF NC
@@ -119,7 +155,7 @@
         nop
     FOREVER
 
-;;; CONTINUE
+;;; CONTINUE_IF
     DO
         nop
         CONTINUE_IF NC
@@ -128,13 +164,31 @@
     WHILE CS
 
     DO
+        ;; NOTE: With `FOREVER`, `CONTINUE_IF` is branches to the
+        ;; start of the loop body not the end of the loop body, to
+        ;; save a few cycles.
         nop
         CONTINUE_IF NC
         CONTINUE_IF NOT NC
         nop
     FOREVER
 
-;;; RTS
+;;; REDO_IF
+    DO
+        nop
+        REDO_IF NC
+        REDO_IF NOT NC
+        nop
+    WHILE CS
+
+    DO
+        nop
+        REDO_IF NC
+        REDO_IF NOT NC
+        nop
+    FOREVER
+
+;;; RTS_IF
         RTS_IF NC
         RTS_IF NOT NC
 
@@ -182,7 +236,7 @@
         nop
     UNTIL NOT A < #$12
 
-;;; BREAK
+;;; BREAK_IF
     DO
         nop
         BREAK_IF A < #$12
@@ -190,7 +244,15 @@
         nop
     WHILE CS
 
-;;; CONTINUE
+;;; REDO_IF
+    DO
+        nop
+        REDO_IF A < #$12
+        REDO_IF NOT A < #$12
+        nop
+    WHILE CS
+
+;;; CONTINUE_IF
     DO
         nop
         CONTINUE_IF A < #$12
@@ -198,7 +260,7 @@
         nop
     WHILE CS
 
-;;; RTS
+;;; RTS_IF
         RTS_IF A < #$12
         RTS_IF NOT A < #$12
 
@@ -230,21 +292,28 @@ table := *
         nop
     UNTIL A < table,y
 
-;;; BREAK
+;;; BREAK_IF
     DO
         nop
         BREAK_IF A < table,y
         nop
     WHILE CS
 
-;;; CONTINUE
+;;; REDO_IF
+    DO
+        nop
+        REDO_IF A < table,y
+        nop
+    WHILE CS
+
+;;; CONTINUE_IF
     DO
         nop
         CONTINUE_IF A < table,y
         nop
     WHILE CS
 
-;;; RTS
+;;; RTS_IF
         RTS_IF A < table,y
 
 ;;; --------------------------------------------------
@@ -349,6 +418,31 @@ table := *
     DO
         nop
         BREAK_IF NOT X NOT_IN #1, #2, #3
+        nop
+    WHILE CC
+
+;;; REDO_IF ... IN / NOT_IN
+    DO
+        nop
+        REDO_IF X IN #1, #2, #3
+        nop
+    WHILE CC
+
+    DO
+        nop
+        REDO_IF X NOT_IN #1, #2, #3
+        nop
+    WHILE CC
+
+    DO
+        nop
+        REDO_IF NOT X IN #1, #2, #3
+        nop
+    WHILE CC
+
+    DO
+        nop
+        REDO_IF NOT X NOT_IN #1, #2, #3
         nop
     WHILE CC
 
@@ -499,6 +593,31 @@ table := *
         nop
     WHILE CS
 
+;;; REDO_IF ... BETWEEN / NOT_BETWEEN
+    DO
+        nop
+        REDO_IF A BETWEEN #'A', #'Z'
+        nop
+    WHILE CS
+
+    DO
+        nop
+        REDO_IF A NOT_BETWEEN #'A', #'Z'
+        nop
+    WHILE CS
+
+    DO
+        nop
+        REDO_IF NOT A BETWEEN #'A', #'Z'
+        nop
+    WHILE CS
+
+    DO
+        nop
+        REDO_IF NOT A NOT_BETWEEN #'A', #'Z'
+        nop
+    WHILE CS
+
 ;;; CONTINUE_IF ... BETWEEN / NOT_BETWEEN
     DO
         nop
@@ -541,6 +660,7 @@ table := *
     DO
 @cheap:
         BREAK_IF CS
+        REDO_IF CS
         CONTINUE_IF CS
         beq     @cheap
     WHILE A < #123
@@ -709,8 +829,108 @@ table := *
         nop
     WHILE NOT A BETWEEN #1, #9 OR CS
 
+;;; --------------------------------------------------
+;;; Statements within conditions
+;;; --------------------------------------------------
+
+        ;; BIT
+    IF bit var : NS
+        nop
+    END_IF
+    IF BIT var : NS
+        nop
+    END_IF
+
+        ;; LDA
+    IF lda var : NS
+        nop
+    END_IF
+    IF LDA var : NS
+        nop
+    END_IF
+
+        ;; LDX
+    IF ldx var : NS
+        nop
+    END_IF
+    IF LDX var : NS
+        nop
+    END_IF
+
+        ;; LDY
+    IF ldy var : NS
+        nop
+    END_IF
+    IF LDY var : NS
+        nop
+    END_IF
+
+        ;; INC
+    DO
+        nop
+    WHILE inc var : X < #10
+    DO
+        nop
+    WHILE INC var : X < #10
+
+        ;; INX
+    DO
+        nop
+    WHILE inx : X < #10
+    DO
+        nop
+    WHILE INX : X < #10
+
+        ;; INY
+    DO
+        nop
+    WHILE iny : X < #10
+    DO
+        nop
+    WHILE INY : X < #10
+
+        ;; DEC
+    DO
+        nop
+    WHILE dec var : X < #10
+    DO
+        nop
+    WHILE DEC var : X < #10
+
+        ;; DEX
+    DO
+        nop
+    WHILE dex : X < #10
+    DO
+        nop
+    WHILE DEX : X < #10
+
+        ;; DEY
+    DO
+        nop
+    WHILE dey : X < #10
+    DO
+        nop
+    WHILE DEY : X < #10
+
+        ;; Multiple statements
+    DO
+        nop
+    WHILE dex : dex : POS
+
+        ;; Staments in "gotos"
+    DO
+        nop
+        REDO_IF bit var : NS
+        nop
+        CONTINUE_IF bit var : NS
+        nop
+        BREAK_IF bit var : NS
+        nop
+    WHILE POS
+
 ;;; ============================================================
-;;; Flow Control Macros - Functions
+;;; Control Flow Macros - Functions
 ;;; ============================================================
 
 var:
@@ -773,6 +993,57 @@ kSet = 1
         TAIL_CALL target, Y=#kConstant, AX=var
         TAIL_CALL target, C=1, A=table,x, X=table,y
 
+;;; FALL_THROUGH_TO
+
+        FALL_THROUGH_TO ft1
+ft1:
+        FALL_THROUGH_TO ft2, A=#1
+ft2:
+        FALL_THROUGH_TO ft3, A=#0
+ft3:
+        FALL_THROUGH_TO ft4, A=#kConstant
+ft4:
+        FALL_THROUGH_TO ft5, A=var
+ft5:
+        FALL_THROUGH_TO ft6, A=table,x
+ft6:
+
+        FALL_THROUGH_TO ft7, A=#0
+ft7:
+        FALL_THROUGH_TO ft8, X=#0
+ft8:
+        FALL_THROUGH_TO ft9, Y=#0
+ft9:
+        FALL_THROUGH_TO ft10, AX=#0
+ft10:
+        FALL_THROUGH_TO ft11, AY=#0
+ft11:
+        FALL_THROUGH_TO ft12, XY=#0
+ft12:
+
+        FALL_THROUGH_TO ft13, C=0
+ft13:
+        FALL_THROUGH_TO ft14, C=1
+ft14:
+        FALL_THROUGH_TO ft15, C=kClear
+ft15:
+        FALL_THROUGH_TO ft16, C=kSet
+ft16:
+
+        FALL_THROUGH_TO ft17, C=1
+ft17:
+        FALL_THROUGH_TO ft18, D=1
+ft18:
+
+        FALL_THROUGH_TO ft19, C=0, D=1, A=#0, X=#1, Y=#2
+ft19:
+        FALL_THROUGH_TO ft20, Y=#kConstant, AX=var
+ft20:
+        FALL_THROUGH_TO ft21, C=1, A=table,x, X=table,y
+ft21:
+
+
+
 ;;; RETURN
         RETURN
 
@@ -820,7 +1091,7 @@ kSet = 1
         nop
 .endrepeat
         ;; Should be `BMI`
-        CONTINUE_IF NS
+        REDO_IF NS
 
         ;; Should be `BCS`
     WHILE CS
@@ -830,7 +1101,7 @@ kSet = 1
         nop
 .endrepeat
         ;; Should be `BPL` / `JMP`
-        CONTINUE_IF NS
+        REDO_IF NS
 
         ;; Should be `BCC` / `JMP`
     WHILE CS
@@ -855,7 +1126,9 @@ kSet = 1
         RTS_IF A BETWEEN '0', #'9' ; RTS_IF: Expected immediate 1st argument for 'BETWEEN'
         RTS_IF A BETWEEN #'0', '9' ; RTS_IF: Expected immediate 2nd argument for 'BETWEEN'
         RTS_IF A IN                ; RTS_IF: Expected argument(s) after 'IN'
+        RTS_IF aa >= #1            ; RTS_IF: Expected boolean expression, saw identifier ('aa')
         RTS_IF A IN #0 #1          ; Expected 'end-of-line' but found '#'
+        RTS_IF BIT var             ; RTS_IF: Expected end-of-statement (':')
 
         CALL    target, FOO=        ; CALL: Expected 'reg=...'
         CALL    target, A           ; CALL: Expected 'A=...'
@@ -863,5 +1136,6 @@ kSet = 1
         CALL    target, A=kConstant ; CALL: Constant in 'A=expr' assignment; did you mean '#kConstant'?
         CALL    target, C=1 bad     ; CALL: Unexpected tokens after 'C=...'
         CALL    target, C=var       ; CALL: Expected constant expression after 'C='
-.endif
 
+        FALL_THROUGH_TO target      ; FALL_THROUGH_TO: Target not adjacent: 'target'
+.endif

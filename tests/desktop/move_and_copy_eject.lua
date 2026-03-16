@@ -43,12 +43,12 @@ test.Step(
     a2d.DialogOK()
 
     for i = 1, 3 do
-      a2dtest.WaitForAlert()
+      a2dtest.WaitForAlert({imatch="insert the disk: WITH%.FILES"})
       drive:unload()
       drive:load(src)
       a2d.DialogOK()
 
-      a2dtest.WaitForAlert()
+      a2dtest.WaitForAlert({imatch="insert the disk: FLOPPY2"})
       drive:unload()
       drive:load(dst)
       a2d.DialogOK()
@@ -60,7 +60,7 @@ test.Step(
     a2d.OpenPath("/FLOPPY2/LOREM.IPSUM")
 
     emu.wait(5)
-    test.Expect(a2dtest.OCRScreen():find("Lorem ipsum.*hac habitasse"), "file contents should be the same")
+    test.ExpectMatch(a2dtest.OCRScreen(), "Lorem ipsum.*hac habitasse", "file contents should be the same")
 
     -- cleanup
     a2d.CloseWindow()
@@ -91,7 +91,7 @@ test.Step(
     drive:unload()
     a2d.Drag(src_x, src_y, dst_x, dst_y, {sa_drop=true})
 
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the disk: WITH%.FILES"})
     a2d.DialogCancel()
 
     emu.wait(5)
@@ -126,12 +126,12 @@ test.Step(
     a2d.Drag(src_x, src_y, dst_x, dst_y, {sa_drop=true})
     drive:unload()
 
-    a2dtest.WaitForAlert() -- Insert the disk
+    a2dtest.WaitForAlert({match="Insert the disk: WITH%.FILES"})
     a2d.DialogCancel()
     a2d.WaitForRepaint()
 
-    a2dtest.WaitForAlert() -- The volume cannot be found
-    a2d.DialogOK()
+    a2dtest.WaitForAlert({match="volume cannot be found"})
+    a2d.DialogOK() -- OK
     emu.wait(5)
 
     test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "one icon should be selected")
@@ -142,3 +142,39 @@ test.Step(
     drive:load(src)
 end)
 
+--[[
+  Open a window for a floppy disk. Drag a file to a folder on the same
+  disk. When alert shows, click Cancel. Verify that DeskTop doesn't
+  crash.
+]]
+test.Step(
+  "no crash on cancel after failed copy-or-move check",
+  function()
+    local drive = s6d1
+    local src = drive.filename
+
+    a2d.CreateFolder("/WITH.FILES/FOLDER")
+    emu.wait(1)
+
+    a2d.OpenPath("/WITH.FILES")
+    emu.wait(1)
+
+    a2d.Select("FOLDER")
+    local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
+
+    a2d.Select("LOREM.IPSUM")
+    local src_x, src_y = a2dtest.GetSelectedIconCoords()
+
+    drive:unload()
+    a2d.Drag(src_x, src_y, dst_x, dst_y)
+
+    a2dtest.WaitForAlert({match="Insert the disk: WITH%.FILES"})
+    a2d.DialogCancel()
+    emu.wait(1)
+
+    a2dtest.ExpectNotHanging()
+
+    -- cleanup
+    drive:load(src)
+    a2d.DeletePath("/WITH.FILES/FOLDER")
+end)

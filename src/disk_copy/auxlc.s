@@ -206,8 +206,8 @@ pensize_frame:  .byte   kBorderDX, kBorderDY
         DEFINE_BUTTON dialog_ok_button, winfo_dialog::kWindowId, res_string_button_ok, kGlyphReturn, 350, 90
 
         ;; For drawing/updating the dialog title
-        DEFINE_POINT point_title, kDialogWidth/2, 15
-        DEFINE_RECT rect_erase_title, kEraseLeft, 4, kEraseRight, 15
+        DEFINE_POINT point_title, kDialogWidth/2, 17
+        DEFINE_RECT rect_erase_title, kEraseLeft, 4, kEraseRight, 17
 
         DEFINE_RECT rect_erase_select_src, 270, 38, 420, 46
 
@@ -231,7 +231,7 @@ str_reading:
         ;; Progress bar
         kProgressTop = 72
         kProgressHeight = 9
-        kProgressLeft = 16
+        kProgressLeft = 19
         kProgressWidth = kDialogWidth-kProgressLeft*2
         DEFINE_RECT_SZ progress_frame, kProgressLeft-1, kProgressTop-1, kProgressWidth+2, kProgressHeight+2
         DEFINE_RECT_SZ progress_bar, kProgressLeft, kProgressTop, kProgressWidth, kProgressHeight
@@ -335,9 +335,9 @@ str_from_int:   PASCAL_STRING "000,000" ; filled in by IntToString
         kDestTextY   = 135
         kTipTextY    = 145
 
-        kOverviewTextX  =  40
-        kSlotDriveTextX = 110
-        kBlocksTextX    = 300
+        kOverviewTextX  =  18
+        kSlotDriveTextX =  88
+        kBlocksTextX    = 308
 
         DEFINE_LABEL blocks_read, res_string_label_blocks_read, kBlocksTextX, kSourceTextY
         DEFINE_LABEL blocks_written, res_string_label_blocks_written, kBlocksTextX, kDestTextY
@@ -640,7 +640,7 @@ maybe_format:
 
 try_format:
         ldx     dest_drive_index
-        CALL    main::IsDiskII, A=drive_unitnum_table,x
+        CALL    main::IsDiskII, A=drive_unitnum_table,x ; returns Z=1 if yes
         beq     format
 
         ldx     dest_drive_index
@@ -800,8 +800,7 @@ check:  lda     current_drive_selection
         lda     #SELF_MODIFIED_BYTE
         CALL    ShowAlertDialog, X=#$80 ; X != 0 means Y=unit number, auto-dismiss
 
-        cmp     #kAlertResultOK
-      IF NE
+      IF A <> #kAlertResultOK
         pla                     ; Cancel
         pla
         jmp     InitDialog
@@ -946,8 +945,7 @@ CmdDiskCopy := SetCopyModeImpl::disk_copy
         MGTK_CALL MGTK::PaintRect, rect_erase_title
         MGTK_CALL MGTK::MoveTo, point_title
         ldax    #label_quick_copy
-        bit     disk_copy_flag
-    IF NS
+    IF bit disk_copy_flag : NS
         ldax    #label_disk_copy
     END_IF
         TAIL_CALL DrawStringCentered
@@ -1054,8 +1052,7 @@ ret:    rts
         ldy     #3              ; ptr is off by 1
     DO
         copy8   (params_src),y, params-1,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         ;; Bank and call
         sta     RAMRDON
@@ -1119,8 +1116,7 @@ params: .res    3
         tay
       DO
         copy8   (src_ptr),y, (dst_ptr),y
-        dey
-      WHILE POS
+      WHILE dey : POS
         rts
 .endproc ; AssignDriveName
 
@@ -1188,8 +1184,7 @@ match:  RETURN  C=0
         ldy     #kMaxFilenameLength
     DO
         copy8   str_name,y, (ptr),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; If less than 15 characters, increase len by one
         ldy     str_name
@@ -1223,13 +1218,15 @@ match:  RETURN  C=0
         params := $0A
         str := params
         width := params+2
+        dx := params
+        dy := params+2
 
         stax    str
         stax    @addr
         MGTK_CALL MGTK::StringWidth, params
-        lsr16   width
-        sub16   #0, width, params+MGTK::Point::xcoord
-        copy16  #0, params+MGTK::Point::ycoord
+        lsr16   width           ; /= 2
+        sub16   #0, width, dx
+        copy16  #0, dy
         MGTK_CALL MGTK::Move, params
         MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
@@ -1277,8 +1274,7 @@ match:  RETURN  C=0
         ora     #AS_BYTE(~CASE_MASK) ; guarded by `kBuildSupportsLowercase`
         sta     (ptr),y
       END_IF
-        iny
-    WHILE Y < #16               ; bits
+    WHILE iny : Y < #16         ; bits
         rts
 
         ;; --------------------------------------------------
@@ -1317,12 +1313,10 @@ fallback:
         ldy     #.sizeof(MGTK::Point)-1
     DO
         copy8   (pt_ptr),y, list_entry_pos,y
-        dey
-    WHILE POS
+    WHILE dey : POS
         pla
 
-        bit     selection_mode_flag  ; source or destination?
-    IF NS
+    IF bit selection_mode_flag : NS ; source or destination?
         tax                     ; indirection for destination
         lda     destination_index_table,x
     END_IF
@@ -1384,7 +1378,7 @@ fallback:
        IF A = #ERR_DEVICE_NOT_CONNECTED
         ;; Device Not Connected - skip, unless it's a Disk II device
         dey                     ; Y = 0
-        CALL    main::IsDiskII, A=(on_line_ptr),y ; A = unmasked unit number
+        CALL    main::IsDiskII, A=(on_line_ptr),y ; A = unmasked unit number; returns Z=1 if yes
         bne     next_device
 
         lda     #ERR_DEVICE_NOT_CONNECTED
@@ -1395,15 +1389,15 @@ fallback:
         CALL    main::ReadBootBlock, A=drive_unitnum_table,x
         bcs     next_device     ; failure
 
-        jsr     IsPascalBootBlock
-        IF EQ
+        jsr     IsPascalBootBlock ; returns C=0 if yes
+        IF CC
         ;; Pascal
         CALL    GetDriveNameTableSlot, A=num_drives ; result in A,X
         jsr     GetPascalVolName ; A,X is buffer to populate
         jmp     keep_it
         END_IF
 
-        jsr     IsDOS33BootBlock
+        jsr     IsDOS33BootBlock ; returns C=0 if yes
         IF CC
         ;; DOS 3.3
         CALL    AssignDriveName, AX=#str_dos33
@@ -1434,9 +1428,8 @@ keep_it:
 
 next_device:
         pla
-        tax
-        inx                     ; X = index
-    WHILE X <> #kMaxNumDrives+1
+        tax                     ; X = index
+    WHILE inx : X <> #kMaxNumDrives+1
 
         rts
 
@@ -1480,8 +1473,7 @@ next_device:
 
         pla
         tax
-        inx
-    WHILE X <> num_src_drives
+    WHILE inx : X <> num_src_drives
 
         ;; Clear selection
         copy8   #$FF, current_drive_selection
@@ -1530,8 +1522,7 @@ next_device:
 
         pla
         tax
-        inx
-    WHILE X <> num_drives
+    WHILE inx : X <> num_drives
         rts
 .endproc ; GetAllBlockCounts
 
@@ -1546,7 +1537,7 @@ next_device:
 
         pha
         tax                     ; X is device index
-        CALL    main::IsDiskII, A=drive_unitnum_table,x
+        CALL    main::IsDiskII, A=drive_unitnum_table,x ; returns Z=1 if yes
     IF EQ
         ;; Disk II - always 280 blocks
         pla
@@ -1654,6 +1645,7 @@ numerator:      .word   0              ; (in) populated dynamically
 denominator:    .word   0              ; (in) populated dynamically
 result:         .word   0              ; (out)
 remainder:      .word   0              ; (out)
+        REF_MULDIV_MEMBERS
 .endparams
 
 .proc DrawProgressBar
@@ -1668,8 +1660,7 @@ remainder:      .word   0              ; (out)
         tmp_written := $08
         copy16  blocks_read, tmp_read
         copy16  blocks_written, tmp_written
-        bit     progress_muldiv_params::denominator+1
-    IF NC
+    IF bit progress_muldiv_params::denominator+1 : NC
         ;; Use (read + written) / total*2
         asl16   progress_muldiv_params::denominator
     ELSE
@@ -1839,8 +1830,7 @@ err_writing_flag:
     DO
         copy8   default_block_buffer,y,      (ptr1),y
         copy8   default_block_buffer+$100,y, (ptr2),y
-        iny
-    WHILE NOT_ZERO
+    WHILE iny : NOT_ZERO
 
         sta     RAMRDOFF
         sta     RAMWRTOFF
@@ -1868,8 +1858,7 @@ ret:    rts
     DO
         copy8   (ptr1),y, default_block_buffer,y
         copy8   (ptr2),y, default_block_buffer+$100,y
-        iny
-    WHILE NOT_ZERO
+    WHILE iny : NOT_ZERO
 
         sta     RAMRDOFF
         sta     RAMWRTOFF
@@ -2073,8 +2062,7 @@ find_in_alert_table:
     DO
         cmp     alert_table,y
         beq     :+
-        iny
-    WHILE Y <> #kNumAlertMessages
+    WHILE iny : Y <> #kNumAlertMessages
         ldy     #0              ; default
 :
         ;; Y = index
@@ -2102,8 +2090,7 @@ find_in_alert_table:
         tay
     DO
         copy8   (ptr),y, str_confirm_erase_buf-1,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         pla
         clc
@@ -2212,8 +2199,7 @@ Alert := alert_dialog::Alert
 
         loop_counter := *+1
         lda     #SELF_MODIFIED_BYTE
-        cmp     #kMaxCounter
-    IF GE
+    IF A >= #kMaxCounter
         copy8   #0, loop_counter
         jsr     main::ResetIIgsRGB ; in case it was reset by control panel
     END_IF

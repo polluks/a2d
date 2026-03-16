@@ -7,111 +7,152 @@
         .include "../inc/prodos.inc"
         .include "../lib/alert_dialog.inc"
 
+.scope save_settings
+
 filename:
         PASCAL_STRING kPathnameDeskTopConfig
 
-filename_buffer:
-        .res kPathBufferSize
-
         write_buffer := DA_IO_BUFFER - kDeskTopSettingsFileSize
 
+        ;; If running from RAMCard, we temporarily swap the ProDOS
+        ;; prefix for writing back to the startup disk.
+        current_prefix := write_buffer - kPathBufferSize
+        orig_prefix := current_prefix - kPathBufferSize
+        data_buffer := orig_prefix
+
+        DEFINE_DESTROY_PARAMS destroy_params, filename
         DEFINE_CREATE_PARAMS create_params, filename, ACCESS_DEFAULT, $F1
         DEFINE_OPEN_PARAMS open_params, filename, DA_IO_BUFFER
         DEFINE_READWRITE_PARAMS write_params, write_buffer, kDeskTopSettingsFileSize
         DEFINE_CLOSE_PARAMS close_params
 
+        DEFINE_GET_PREFIX_PARAMS current_prefix_params, current_prefix
+        DEFINE_GET_PREFIX_PARAMS orig_prefix_params, orig_prefix
+
+local_dir:      PASCAL_STRING kFilenameLocalDir
+        DEFINE_CREATE_PARAMS create_localdir_params, local_dir, ACCESS_DEFAULT, FT_DIRECTORY,, ST_LINKED_DIRECTORY
+
+;;; ============================================================
+
 ;;; Run from Main, but with Aux LCBANK1 in
 .proc SaveSettings
 
         ;; Copy from Main LCBANK2 to somewhere ProDOS can read.
-
         sta     ALTZPOFF
         bit     LCBANK2
         bit     LCBANK2
-
         COPY_STRUCT DeskTopSettings, SETTINGS, write_buffer + kDeskTopSettingsFileOffset
         copy8   #kDeskTopSettingsFileVersion, write_buffer
-
         sta     ALTZPON
         bit     LCBANK1
         bit     LCBANK1
 
+        ;; First time - ask if we should even try.
+        CLEAR_BIT7_FLAG retry_flag
+
         ;; Write to desktop current prefix
-        ldax    #filename
-        stax    create_params::pathname
-        stax    open_params::pathname
         jsr     _DoWrite
         bcs     done            ; failed and canceled
 
         ;; Write to the original file location, if necessary
         jsr     JUMP_TABLE_GET_RAMCARD_FLAG
-        beq     done
-        ldax    #filename_buffer
-        stax    create_params::pathname
-        stax    open_params::pathname
-        jsr     JUMP_TABLE_GET_ORIG_PREFIX
-        jsr     _AppendFilename
+    IF ZC
+        CALL    JUMP_TABLE_GET_ORIG_PREFIX, AX=#orig_prefix
+        JUMP_TABLE_MLI_CALL GET_PREFIX, current_prefix_params
+retry:
+        JUMP_TABLE_MLI_CALL SET_PREFIX, orig_prefix_params
+      IF CS
+        jsr     _CheckRetry
+        beq     retry
+        sec                     ; failed
+        rts
+      END_IF
         jsr     _DoWrite
+        JUMP_TABLE_MLI_CALL SET_PREFIX, current_prefix_params
+        ;; Assert: Succeeded (otherwise RAMCard was deleted out from under us)
+    END_IF
 
 done:   rts
-
-.proc _AppendFilename
-        ;; Append filename to buffer
-        inc     filename_buffer ; Add '/' separator
-        ldx     filename_buffer
-        lda     #'/'
-        sta     filename_buffer,x
-
-        ldx     #0              ; Append filename
-        ldy     filename_buffer
-    DO
-        inx
-        iny
-        lda     filename,x
-        sta     filename_buffer,y
-    WHILE X <> filename
-        sty     filename_buffer
-        rts
-.endproc ; _AppendFilename
+.endproc ; SaveSettings
 
 .proc _DoWrite
-        ;; First time - ask if we should even try.
-        copy8   #kErrSaveChanges, message
+        ldax    DATELO
+        stax    create_params::create_date
+        stax    create_localdir_params::create_date
+        ldax    TIMELO
+        stax    create_params::create_time
+        stax    create_localdir_params::create_time
 
-retry:
-        ;; Create if necessary
-        copy16  DATELO, create_params::create_date
-        copy16  TIMELO, create_params::create_time
+        ;; Create local dir if necessary
+    DO
+        JUMP_TABLE_MLI_CALL CREATE, create_localdir_params
+      IF CS AND A <> #ERR_DUPLICATE_FILENAME
+        jsr     _CheckRetry
+        REDO_IF EQ
+        bne     failed          ; always
+      END_IF
+   DONE
+        ;; Destroy existing settings file if necessary
+        ;; This is to catch write failures before the file `OPEN`, as
+        ;; failure to `WRITE`/`FLUSH` will make the `CLOSE` fail,
+        ;; leaving the `io_buffer` in use.
+    DO
+        JUMP_TABLE_MLI_CALL DESTROY, destroy_params
+      IF CS AND A <> #ERR_FILE_NOT_FOUND
+        jsr     _CheckRetry
+        REDO_IF EQ
+        bne     failed          ; always
+      END_IF
+    DONE
+
+        ;; Create/write settings file if necessary
+    DO
         JUMP_TABLE_MLI_CALL CREATE, create_params
-
         JUMP_TABLE_MLI_CALL OPEN, open_params
-        bcs     error
+      IF CC
         lda     open_params::ref_num
         sta     write_params::ref_num
         sta     close_params::ref_num
         JUMP_TABLE_MLI_CALL WRITE, write_params
-        php                     ; preserve result
         JUMP_TABLE_MLI_CALL CLOSE, close_params
-        plp
-        bcc     ret             ; succeeded
+      END_IF
+      IF CS
+        jsr     _CheckRetry
+        REDO_IF EQ
+        bne     failed          ; always
+      END_IF
+    DONE
+        rts                     ; C=0
 
-error:
-        message := *+1
-        lda     #SELF_MODIFIED_BYTE
-        jsr     JUMP_TABLE_SHOW_ALERT
-
-        ;; Second time - prompt to insert.
-        ldx     #kErrInsertSystemDisk
-        stx     message
-
-        cmp     #kAlertResultOK
-        beq     retry
-
-        sec                     ; failed
-ret:    rts
-
-second_try_flag:
-        .byte   0
+failed:
+        sec
+        rts                     ; C=1
 .endproc ; _DoWrite
 
-.endproc ; SaveSettings
+;;; Before calling: ensure `retry_flag` was cleared at some point.
+;;; Input: A = ProDOS error code
+;;; Output: Z = 1 if retry was selected
+.proc _CheckRetry
+    IF bit retry_flag : NC
+        ;; First time - prompt see if we want to try saving.
+        SET_BIT7_FLAG retry_flag
+        CALL    JUMP_TABLE_SHOW_ALERT, A=#kErrSaveChanges ; OK/Cancel
+        cmp     #kAlertResultOK
+        rts                     ; Z=1 if OK selected (i.e. retry)
+    END_IF
+
+        ;; Special case
+    IF A = #ERR_VOL_NOT_FOUND
+        lda     #kErrInsertSystemDisk ; Try Again/Cancel
+    END_IF
+        jsr     JUMP_TABLE_SHOW_ALERT ; arbitrary ProDOS error
+        ;; Responses are either OK or Try Again/Cancel
+        cmp     #kAlertResultTryAgain
+        rts
+.endproc ; _CheckRetry
+
+retry_flag:        .byte   0 ; bit7
+
+.endscope ; save_settings
+SaveSettings := save_settings::SaveSettings
+write_buffer := save_settings::data_buffer

@@ -105,8 +105,7 @@ load_target:
       DO
         lda     INVOKER_FILENAME,y
         sta     PRODOS_INTERPRETER_BUF,y         ; ProDOS interpreter protocol
-        dey
-      WHILE POS
+      WHILE dey : POS
 
         ;; ProDOS 2.4's Bitsy Bye populates $380 with the path to the
         ;; interpreter, so set both for good measure.
@@ -118,20 +117,17 @@ load_target:
         lda    INVOKER_INTERPRETER,x
         sta     PRODOS_SYS_PATH,x
         sta     BITSY_SYS_PATH,x
-        dex
-      WHILE POS
+      WHILE dex : POS
 
         ;; When launching BASIS.SYSTEM, ProDOS 2.4's Bitsy Bye populates
         ;; $280 with the path containing the target file.
         BITSY_DIR_PATH := $280
-        bit     INVOKER_BITSY_COMPAT
-      IF NS
+      IF bit INVOKER_BITSY_COMPAT : NS
         ldy     INVOKER_PREFIX
        DO
         lda     INVOKER_PREFIX,y
         sta     BITSY_DIR_PATH,y
-        dey
-       WHILE POS
+       WHILE dey : POS
       END_IF
 
     END_IF

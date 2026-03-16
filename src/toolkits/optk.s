@@ -203,8 +203,7 @@ grafport_win:   .tag    MGTK::GrafPort
       END_IF
 
         tax                     ; X = index
-        inx
-    WHILE X <> max_entries
+    WHILE inx : X <> max_entries
 
         rts
 .endproc ; UpdateImpl
@@ -346,7 +345,7 @@ last:   lda     max_entries_minus_one
         sbc     #1
       IF NEG
         lda     max_entries
-        CONTINUE_IF NOT_ZERO    ; always
+        REDO_IF NOT_ZERO        ; always
       END_IF
         jsr     _CallIsEntryProc
     UNTIL NC

@@ -251,8 +251,7 @@ restore_buffer_overlay_flag:
 .proc Exit
         jsr     MaybeCallExitHook
 
-        bit     restore_buffer_overlay_flag
-    IF NS
+    IF bit restore_buffer_overlay_flag : NS
         CALL    JUMP_TABLE_RESTORE_OVL, A=#kDynamicRoutineRestoreBuffer
     END_IF
 
@@ -289,7 +288,7 @@ exit_hook := MaybeCallExitHook::hook
         ;; Check file type
         JUMP_TABLE_MLI_CALL GET_FILE_INFO, get_file_info_params
     IF CS
-fail:   rts
+        rts
     END_IF
 
         lda     get_file_info_params::file_type
@@ -456,8 +455,6 @@ fail:   RETURN  C=1             ; failure
 
 ;;; Output: C=0 on success, C=1 on failure
 .proc ShowDHRFile
-        ptr := $06
-
         ;; If suffix is ".A2FM" show in mono mode
         CALL    CheckSuffix, AX=#str_a2fm_suffix
     IF CC
@@ -497,11 +494,9 @@ fail:   RETURN  C=1             ; failure
     DO
       DO
         copy8   (ptr),y, (ptr),y
-        iny
-      WHILE NOT_ZERO
+      WHILE iny : NOT_ZERO
         inc     ptr+1
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         sta     SET80STORE
         sta     RAMWRTOFF
@@ -590,15 +585,14 @@ next:
         and     #(1 << 6)
         sta     spill
 
-        dey
-      WHILE POS
+      WHILE dey : POS
 
         pla
         clc
         adc     #1
     WHILE A <> #kRows
 
-done:   rts
+        rts
 .endproc ; HRToDHR
 
 ;;; ============================================================
@@ -627,8 +621,7 @@ done:   rts
     IF NS
         JUMP_TABLE_MLI_CALL READ, read_lores_params
     END_IF
-        lda     #$80            ; main
-        FALL_THROUGH_TO convert
+        FALL_THROUGH_TO convert, A=#$80 ; main
 
 convert:
         sta     is_main
@@ -676,10 +669,8 @@ convert:
        END_IF
 
         ;; In double-lores, the aux-bank patterns are shifted
-        bit     double_flag
-       IF NS
-        bit     is_main
-        IF NC
+       IF bit double_flag : NS
+        IF bit is_main : NC
         ;; rotate lo nibble left, A = 0000abcd
         asl                     ; A = 000abcd0
         adc     #%11110000      ; A = xxxxbcd0 C=a
@@ -712,13 +703,11 @@ convert:
         inc     hr_ptr+1
         inc     hr_ptr+1
         inc     hr_ptr+1
-        dex
-       WHILE NOT_ZERO
+       WHILE dex : NOT_ZERO
         pla                     ; restore ptr
         sta     hr_ptr+1
 
-        iny                     ; next col
-      WHILE Y <> #kCols
+      WHILE iny : Y <> #kCols   ; next col
 
         pla                     ; A = row
         clc
@@ -790,8 +779,7 @@ dorow:  ldx     #8
     DO
         jsr     GetBit
         jsr     PutBit2
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         ;; We've written out 88*2 bits = 176 bits.  This means 1 bit was shifted into
         ;; the last bit.  We need to get it from the MSB to the LSB, so it needs
@@ -866,8 +854,7 @@ color_mode_flag:   .byte   0    ; bit7=0 = B&W, bit7=1 = color
 .endproc ; ToggleMode
 
 .proc SetColorMode
-        bit     color_mode_flag
-    IF NC
+    IF bit color_mode_flag : NC
         SET_BIT7_FLAG color_mode_flag
         jsr     JUMP_TABLE_COLOR_MODE
     END_IF
@@ -875,8 +862,7 @@ color_mode_flag:   .byte   0    ; bit7=0 = B&W, bit7=1 = color
 .endproc ; SetColorMode
 
 .proc SetBWMode
-        bit     color_mode_flag
-    IF NS
+    IF bit color_mode_flag : NS
         CLEAR_BIT7_FLAG color_mode_flag
         jsr     JUMP_TABLE_MONO_MODE
     END_IF
@@ -944,8 +930,7 @@ not_00: cmp     #%01000000
 
     DO
         jsr     Write
-        dec     count
-    WHILE NOT_ZERO
+    WHILE dec count : NOT_ZERO
 
         jmp     loop
 
@@ -966,8 +951,7 @@ not_01: cmp     #%10000000
         CALL    Write, A=read_buf+1
         CALL    Write, A=read_buf+2
         CALL    Write, A=read_buf+3
-        dec     count
-    WHILE NOT_ZERO
+    WHILE dec count : NOT_ZERO
 
         jmp     loop
 
@@ -987,8 +971,7 @@ not_10:
         jsr     Write
         jsr     Write
         jsr     Write
-        dec     count
-    WHILE NOT_ZERO
+    WHILE dec count : NOT_ZERO
 
         jmp     loop
 
@@ -1021,8 +1004,7 @@ UnpackRead := UnpackReadImpl::start
 
         CALL    UnpackRead, AX=#Write
 
-        bit     dhr_flags       ; if hires, need to convert
-    IF NC
+    IF bit dhr_flags : NC       ; if hires, need to convert
         jsr     HRToDHR
     END_IF
 
@@ -1105,14 +1087,11 @@ clear:  copy16  #hires, ptr
     DO
       DO
         sta     (ptr),y
-        iny
-      WHILE NOT_ZERO
+      WHILE iny : NOT_ZERO
         inc     ptr+1
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
         rts
 
-done:
 .endproc ; ClearScreen
 
 ;;; ============================================================
@@ -1137,8 +1116,7 @@ done:
         bne     no              ; different - not a match
         dey
         beq     yes             ; out of suffix - it's a match
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
 no:     RETURN  C=1             ; no match
 
@@ -1170,8 +1148,7 @@ is_iigs:
         kSHRSize = $8000
 
         jsr     InitSHR
-        bit     packed_flag
-    IF NS
+    IF bit packed_flag : NS
         jsr     LoadPackedSHR
     ELSE
         jsr     LoadUnpackedSHR
@@ -1328,8 +1305,7 @@ ShowUnpackedSHR := ShowSHRImpl::unpacked
         ldy     #.sizeof(FileEntry)-1
     DO
         copy8   (ptr),y, entry,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; TODO: Keep this logic in sync with DeskTop's
         ;; `ICT_RECORD` definitions for graphics files.
@@ -1427,8 +1403,7 @@ yes:    RETURN  C=1
         bne     no              ; different - not a match
         dey
         beq     yes             ; out of suffix - it's a match
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
 no:     RETURN  C=1             ; no match
 
@@ -1484,8 +1459,7 @@ next_entry:
         add16_8 entry_ptr, #.sizeof(FileEntry)
 
         ;; Header?
-        bit     saw_header_flag
-    IF NC
+    IF bit saw_header_flag : NC
         SET_BIT7_FLAG saw_header_flag
         bmi     next_entry      ; always
     END_IF
@@ -1534,8 +1508,7 @@ saw_header_flag:                ; bit7
         beq     ChangeFile  ; always
 .endproc ; PreviousFile
 .proc FirstFile
-        lda     #$40
-        FALL_THROUGH_TO ChangeFile
+        FALL_THROUGH_TO ChangeFile, A=#$40
 .endproc ; FirstFile
 
 ;;; Input: A = flags, bit6 = modified, bit7 = advance
@@ -1578,8 +1551,7 @@ saw_header_flag:                ; bit7
         ;; `first_filename` and `last_filename` are now populated,
         ;; along with maybe `prev_filename` and `next_filename`.
         ;; Based on `flags`, pick the right file to show.
-        bit     flags
-    IF VS
+    IF bit flags : VS
       IF NS
         ldax    #last_filename
       ELSE
@@ -1643,8 +1615,7 @@ fail:   jmp     Init
         lda     (ptr),y
         jsr     ToUpperCase
         sta     last_filename,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; First seen? might need it
         lda     first_filename
@@ -1660,8 +1631,7 @@ fail:   jmp     Init
         lda     cur_filename,x
         cmp     last_filename,x
         bne     not_cur
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 
         SET_BIT7_FLAG seen_flag
         rts
@@ -1670,8 +1640,7 @@ not_cur:
         ;; No, might be prev or next though
 
         ;; Seen the current file yet? If not, save it as previous
-        bit     seen_flag
-    IF NC
+    IF bit seen_flag : NC
         COPY_STRING last_filename, prev_filename
         rts
     END_IF

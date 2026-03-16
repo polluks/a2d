@@ -19,9 +19,18 @@ io_buf := $0800
 
 selector_list := SELECTOR_FILE_BUF
 
+        .assert SELECTOR_FILE_BUF + kSelectorListBufSize = $1400, error, "constants"
+PARAM_BLOCK, $1400
+orig_prefix     .res    ::kSelectorListBufSize
+current_prefix  .res    ::kPathBufferSize
+
+;;; Table for 24 entries; index (0...23) if in use, $FF if empty
+entries_flag_table .res ::kSelectorListNumEntries
+END_PARAM_BLOCK
+
 Exec:
         sta     selector_action
-        ldx     #$FF
+        ldx     #$FF            ; `INC` to clear high bit
         stx     clean_flag      ; set "clean"
         cmp     #SelectorAction::add
         beq     DoAdd
@@ -30,24 +39,43 @@ Exec:
 ;;; ============================================================
 
 .proc Exit
-        pha
-        lda     clean_flag
-        bpl     check_about_saving ; dirty, check about saving
-
-finish: pla
-ret:    rts
-
-check_about_saving:
+        pha                     ; A = result
+    IF lda clean_flag : NC
+        ;; Update total count of entries (used for menu item states)
         lda     selector_list + kSelectorListNumPrimaryRunListOffset
         clc
         adc     selector_list + kSelectorListNumSecondaryRunListOffset
         sta     num_selector_list_items
-        jsr     main::GetCopiedToRAMCardFlag
-        cmp     #$80
-        bne     finish
 
-        jsr     WriteFileToOriginalPrefix
-        pla
+        ;; First time - ask if we should even try.
+        CLEAR_BIT7_FLAG retry_flag
+
+        ;; Write to desktop current prefix
+        jsr     _DoWrite
+        bcs     done
+
+        ;; Write to the original file location, if necessary.
+        jsr     main::GetCopiedToRAMCardFlag
+      IF ZC
+        CALL    main::CopyDeskTopOriginalPrefix, AX=#orig_prefix
+        MLI_CALL GET_PREFIX, current_prefix_params
+       DO
+        MLI_CALL SET_PREFIX, orig_prefix_params
+        IF CS
+        jsr     _CheckRetry
+        REDO_IF EQ
+        bne     done            ; always
+        END_IF
+       DONE
+        jsr     _DoWrite
+        MLI_CALL SET_PREFIX
+        JUMP_TABLE_MLI_CALL SET_PREFIX, current_prefix_params
+        ;; Assert: Succeeded (otherwise RAMCard was deleted out from under us)
+      END_IF
+    END_IF
+
+done:
+        pla                     ; A = result
         rts
 .endproc ; Exit
 
@@ -56,11 +84,13 @@ check_about_saving:
 DoAdd:  ldx     #kRunListPrimary
         lda     selector_menu
     IF A >= #kSelectorMenuFixedItems + 8
-        inx
+        inx                     ; `kRunListSecondary`
     END_IF
+
         lda     #$00
         sta     text_input_buf  ; clear name, but leave path alone
         ldy     #kCopyNever | $80 ; high bit set = Add
+
         ;; A = (obsolete, was dialog type)
         ;; Y = is_add_flag | copy_when
         ;; X = which_run_list
@@ -71,34 +101,26 @@ DoAdd:  ldx     #kRunListPrimary
         tya
         pha
         COPY_STRING text_input_buf, main::stashed_name
-        CALL    main::RestoreDynamicRoutine, A=#kDynamicRoutineRestoreFD
-        jsr     main::ClearUpdates ; Add File Dialog close
+        jsr     main::ClearUpdates ; File Dialog close
         pla
         tay
         pla
         tax
         pla
         bne     Exit
-        inc     clean_flag      ; mark as "dirty"
-        stx     which_run_list
-        sty     copy_when
 
-        lda     #$00
-:       dey
-        beq     :+
-        sec
-        ror     a
-        jmp     :-
-:
-        sta     copy_when
+        stx     which_run_list
+        ;; Map to `kCopyOnBoot` to `kSelectorEntryCopyOnBoot` etc
+        copy8   copy_when_conversion_table-1,y, copy_when
+
         jsr     ReadFile
-    IF NEG
-        jmp     Exit::ret
+    IF NS
+        jmp     Exit
     END_IF
 
         copy16  selector_list, num_primary_run_list_entries
-        lda     which_run_list
-    IF A = #kRunListPrimary
+
+    IF lda which_run_list : A = #kRunListPrimary
         lda     num_primary_run_list_entries
         cmp     #kSelectorListNumPrimaryRunListEntries
         beq     ShowFullAlert
@@ -106,10 +128,7 @@ DoAdd:  ldx     #kRunListPrimary
         lda     num_primary_run_list_entries
         inc     selector_list + kSelectorListNumPrimaryRunListOffset
         jsr     AssignEntryData
-        jsr     WriteFile
-      IF NEG
-        jmp     Exit::ret
-      END_IF
+        inc     clean_flag      ; mark as "dirty"
         jmp     Exit
     END_IF
 
@@ -119,19 +138,15 @@ DoAdd:  ldx     #kRunListPrimary
         lda     num_secondary_run_list_entries
         clc
         adc     #kSelectorListNumPrimaryRunListEntries
-        jsr     AssignSecondaryRunListEntryData
+        jsr     AssignEntryData
         inc     selector_list + kSelectorListNumSecondaryRunListOffset
-        jsr     WriteFile
-      IF NEG
-        jmp     Exit::ret
-      END_IF
+        inc     clean_flag      ; mark as "dirty"
         jmp     Exit
     END_IF
 
 ShowFullAlert:
         CALL    ShowAlertParams, Y=#AlertButtonOptions::OK, AX=#aux::str_warning_selector_list_full
-        dec     clean_flag      ; reset to "clean"
-        jmp     Exit::ret
+        jmp     Exit
 
 which_run_list:
         .byte   0
@@ -159,18 +174,20 @@ copy_when:
 
         OPTK_CALL OPTK::Draw, shortcut_picker_params
 
-        FALL_THROUGH_TO dialog_loop
+        FALL_THROUGH_TO DialogLoop
 .endproc ; Init
 
-dialog_loop:
+;;; ============================================================
+
+.proc DialogLoop
         jsr     EventLoop
-        bmi     dialog_loop     ; N set = nothing selected, re-enter loop
+        bmi     DialogLoop      ; N set = nothing selected, re-enter loop
 
         jne     DoCancel        ; Z set = OK selected
 
         ;; Which action are we?
         lda     shortcut_picker_record::selected_index
-        bmi     dialog_loop
+        bmi     DialogLoop
         lda     selector_action
         cmp     #SelectorAction::edit
         beq     DoEdit
@@ -179,23 +196,27 @@ dialog_loop:
         beq     DoDelete
 
         cmp     #SelectorAction::run
-        bne     dialog_loop
+        bne     DialogLoop
         jmp     DoRun
+.endproc ; DialogLoop
 
 ;;; ============================================================
 
 .proc DoDelete
+        jsr     CloseWindow
+        jsr     main::ClearUpdates ; Shortcut Picker dialog close
+
         CALL    RemoveEntry, A=shortcut_picker_record::selected_index
-    IF ZS                       ; Z set on success
         inc     clean_flag      ; mark as "dirty"
-    END_IF
-        jmp     DoCancel
+        jmp     Exit
 .endproc ; DoDelete
 
 ;;; ============================================================
 
 .proc DoEdit
         jsr     CloseWindow
+        ;; Could do `ClearUpdates` here, but not worth it since file
+        ;; dialog is larger than the shortcut picker dialog.
 
         CALL    GetFileEntryAddr, A=shortcut_picker_record::selected_index
         stax    $06
@@ -210,9 +231,8 @@ dialog_loop:
 
         ldx     #kRunListPrimary
         lda     shortcut_picker_record::selected_index
-        cmp     #kSelectorListNumPrimaryRunListEntries
-    IF GE
-        inx                     ; #kRunListSecondary
+    IF A >= #kSelectorListNumPrimaryRunListEntries
+        inx                     ; `kRunListSecondary`
     END_IF
 
         ;; Map to `kSelectorEntryCopyOnBoot` to `kCopyOnBoot` etc
@@ -237,8 +257,7 @@ dialog_loop:
         tya
         pha
         COPY_STRING text_input_buf, main::stashed_name
-        CALL    main::RestoreDynamicRoutine, A=#kDynamicRoutineRestoreFD
-        jsr     main::ClearUpdates ; Edit File Dialog close
+        jsr     main::ClearUpdates ; File Dialog close
         pla
         tay
         pla
@@ -246,15 +265,13 @@ dialog_loop:
         pla
         RTS_IF NOT_ZERO
 
-        inc     clean_flag      ; mark as "dirty"
         stx     which_run_list
-
         ;; Map to `kCopyOnBoot` to `kSelectorEntryCopyOnBoot` etc
-        lda     copy_when_conversion_table-1,y
-        sta     copy_when
+        copy8   copy_when_conversion_table-1,y, copy_when
+
         jsr     ReadFile
     IF NS
-        jmp     CloseWindow
+        jmp     Exit
     END_IF
 
         lda     shortcut_picker_record::selected_index
@@ -270,9 +287,6 @@ dialog_loop:
       END_IF
 
         CALL    RemoveEntry, A=shortcut_picker_record::selected_index
-      IF ZC
-        jmp     CloseWindow
-      END_IF
 
         ;; Compute new index
         ldx     num_primary_run_list_entries
@@ -291,9 +305,6 @@ dialog_loop:
       END_IF
 
         CALL    RemoveEntry, A=shortcut_picker_record::selected_index
-      IF ZC
-        jmp     CloseWindow
-      END_IF
 
         ;; Compute new index
         ldx     num_secondary_run_list_entries
@@ -310,28 +321,27 @@ reuse_same_index:
     END_IF
 
         CALL    AssignEntryData, Y=copy_when
-        jsr     WriteFile
-    IF ZC
-        jmp     CloseWindow
-    END_IF
-
+        inc     clean_flag      ; mark as "dirty"
         jmp     Exit
 
 flags:  .byte   0
-
-        ;; Index is kCopyXXX-1, value is kSelectorEntryCopyXXX
-copy_when_conversion_table:
-        .byte   kSelectorEntryCopyOnBoot
-        .byte   kSelectorEntryCopyOnUse
-        .byte   kSelectorEntryCopyNever
 
 .endproc ; DoEdit
 
 ;;; ============================================================
 
+        ;; Index is `kCopyXXX-1`, value is `kSelectorEntryCopyXXX`
+copy_when_conversion_table:
+        .byte   kSelectorEntryCopyOnBoot
+        .byte   kSelectorEntryCopyOnUse
+        .byte   kSelectorEntryCopyNever
+
+;;; ============================================================
+
 .proc DoRun
         jsr     CloseWindow
-        jsr     main::ClearUpdates       ; Run dialog OK
+        jsr     main::ClearUpdates ; Shortcut Picker dialog close
+
         RETURN  A=shortcut_picker_record::selected_index
 .endproc ; DoRun
 
@@ -340,13 +350,8 @@ copy_when_conversion_table:
 ;;; Also OK from Delete (since that closes immediately)
 
 .proc DoCancel
-        lda     selector_action
-    IF A = #SelectorAction::edit
-        CALL    main::RestoreDynamicRoutine, A=#kDynamicRoutineRestoreFD
-    END_IF
-
         jsr     CloseWindow
-        jsr     main::ClearUpdates
+        jsr     main::ClearUpdates ; Shortcut Picker dialog close
 
         TAIL_CALL Exit, A=#$FF
 .endproc ; DoCancel
@@ -355,6 +360,7 @@ copy_when_conversion_table:
 
 .proc CloseWindow
         MGTK_CALL MGTK::CloseWindow, winfo_entry_picker
+
         rts
 .endproc ; CloseWindow
 
@@ -369,7 +375,7 @@ selector_action:
         .byte   0
 
 clean_flag:                     ; high bit set if "clean", cleared if "dirty"
-        .byte   0               ; and should save to original prefix
+        .byte   0               ; and should write out file
 
 ;;; ============================================================
 
@@ -381,43 +387,24 @@ clean_flag:                     ; high bit set if "clean", cleared if "dirty"
         MGTK_CALL MGTK::FrameRect, entry_picker_frame_rect
         MGTK_CALL MGTK::SetPenSize, pensize_normal
 
-        MGTK_CALL MGTK::MoveTo, entry_picker_line1_start
-        MGTK_CALL MGTK::LineTo, entry_picker_line1_end
-        MGTK_CALL MGTK::MoveTo, entry_picker_line2_start
-        MGTK_CALL MGTK::LineTo, entry_picker_line2_end
+        MGTK_CALL MGTK::FrameRect, entry_picker_rect
 
         BTK_CALL BTK::Draw, entry_picker_ok_button
         BTK_CALL BTK::Draw, entry_picker_cancel_button
 
+        MGTK_CALL MGTK::MoveTo, entry_picker_title_pos
+
         lda     selector_action
     IF A = #SelectorAction::edit
-        TAIL_CALL DrawTitleCentered, AX=#label_edit
+        TAIL_CALL main::DrawStringCentered, AX=#label_edit
     END_IF
 
     IF A = #SelectorAction::delete
-        TAIL_CALL DrawTitleCentered, AX=#label_del
+        TAIL_CALL main::DrawStringCentered, AX=#label_del
     END_IF
 
-        TAIL_CALL DrawTitleCentered, AX=#label_run
+        TAIL_CALL main::DrawStringCentered, AX=#label_run
 .endproc ; OpenWindow
-
-;;; ============================================================
-
-.proc DrawTitleCentered
-        params := $06
-        str := params
-        width := params+2
-
-        stax    str
-        stax    @addr
-        MGTK_CALL MGTK::StringWidth, params
-
-        sub16   #winfo_entry_picker::kWidth, width, pos_dialog_title::xcoord
-        lsr16   pos_dialog_title::xcoord ; /= 2
-        MGTK_CALL MGTK::MoveTo, pos_dialog_title
-        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
-        rts
-.endproc ; DrawTitleCentered
 
 ;;; ============================================================
 ;;; When returning from event loop:
@@ -426,7 +413,7 @@ clean_flag:                     ; high bit set if "clean", cleared if "dirty"
 ;;; Otherwise: Cancel selected
 
 .proc EventLoop
-        jsr     SystemTask
+        jsr     ::main::SystemTask
         jsr     main::GetEvent
 
         cmp     #MGTK::EventKind::button_down
@@ -540,8 +527,7 @@ handle_button:
 
 .proc UpdateOKButton
         lda     #BTK::kButtonStateNormal
-        bit     shortcut_picker_record::selected_index
-    IF NS
+    IF bit shortcut_picker_record::selected_index : NS
         lda     #BTK::kButtonStateDisabled
     END_IF
 
@@ -559,33 +545,26 @@ handle_button:
         lda     #$FF
     DO
         sta     entries_flag_table,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         ldx     #0
     DO
         BREAK_IF X = num_primary_run_list_entries
         txa
         sta     entries_flag_table,x
-        inx
-    WHILE NOT_ZERO
+    WHILE inx : NOT_ZERO
 
         ldx     #0
     DO
         BREAK_IF X = num_secondary_run_list_entries
         txa
         clc
-        adc     #8
+        adc     #kSelectorListNumPrimaryRunListEntries
         sta     entries_flag_table+8,x
-        inx
-    WHILE NOT_ZERO
+    WHILE inx : NOT_ZERO
 
         rts
 .endproc ; PopulateEntriesFlagTable
-
-;;; Table for 24 entries; index (0...23) if in use, $FF if empty
-entries_flag_table:
-        .res    ::kSelectorListNumEntries, 0
 
 ;;; ============================================================
 ;;; Assigns name, flags, and path to an entry in the file buffer
@@ -595,14 +574,10 @@ entries_flag_table:
 ;;;         `main::stashed_name` is name, `path_buf0` is path
 
 .proc AssignEntryData
-        cmp     #8
-        bcs     AssignSecondaryRunListEntryData
+        ptr_file = $06          ; pointer into file buffer
 
         sta     index
-        tya                     ; flags
-        pha
-
-        ptr_file = $06          ; pointer into file buffer
+        sty     flags
 
         ;; Assign name in `main::stashed_name` to file
         CALL    GetFileEntryAddr, A=index
@@ -610,13 +585,11 @@ entries_flag_table:
         ldy     main::stashed_name
     DO
         copy8   main::stashed_name,y, (ptr_file),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; Assign flags to file
         ldy     #kSelectorEntryFlagsOffset
-        pla
-        sta     (ptr_file),y
+        copy8   flags, (ptr_file),y
 
         ;; Assign path in `path_buf0` to file
         CALL    GetFilePathAddr, A=index
@@ -624,61 +597,23 @@ entries_flag_table:
         ldy     path_buf0
     DO
         copy8   path_buf0,y, (ptr_file),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
+        ;; If primary run list, update the menu as well
+    IF lda index : A < #kSelectorListNumPrimaryRunListEntries
         jsr     UpdateMenuResources
+    END_IF
 
         rts
 
 index:  .byte   0
+flags:  .byte   0
 .endproc ; AssignEntryData
 
 ;;; ============================================================
-;;; Assigns name, flags, and path to an entry in the file buffer.
-;;; Inputs: A=entry index, Y=new flags
-;;;         `main::stashed_name` is name, `path_buf0` is path
-
-.proc AssignSecondaryRunListEntryData
-        ptr := $06
-
-        sta     index
-        tya                     ; Y = entry flags
-        pha
-
-        ;; Compute entry address
-        CALL    GetFileEntryAddr, A=index
-        stax    ptr
-
-        ;; Assign name
-        ldy     main::stashed_name
-    DO
-        copy8   main::stashed_name,y, (ptr),y
-        dey
-    WHILE POS
-
-        ;; Assign flags
-        ldy     #kSelectorEntryFlagsOffset
-        pla
-        sta     (ptr),y
-
-        ;; Assign path
-        CALL    GetFilePathAddr, A=index
-        stax    ptr
-        ldy     path_buf0
-    DO
-        copy8   path_buf0,y, (ptr),y
-        dey
-    WHILE POS
-        rts
-
-index:  .byte   0
-.endproc ; AssignSecondaryRunListEntryData
-
-;;; ============================================================
 ;;; Removes the specified entry, shifting later entries down as
-;;; needed. Writes the file when done. Handles both the file
-;;; buffer and resource data (used for menus, etc.)
+;;; needed. Handles both the file buffer and resource data (used for
+;;; menus, etc.)
 ;;; Inputs: Entry in A
 
 .proc RemoveEntry
@@ -686,60 +621,37 @@ index:  .byte   0
         ptr2 := $08
 
         sta     index
-        cmp     #8
-        jcs     secondary_run_list
+        cmp     #kSelectorListNumPrimaryRunListEntries
+        bcs     secondary_run_list
 
         ;; Primary run list
-.scope
-        tax
-        inx
-        cpx     num_primary_run_list_entries
-        bne     loop
-
-finish:
+    DO
+        lda     index
+      IF A = num_primary_run_list_entries
         dec     selector_list + kSelectorListNumPrimaryRunListOffset
         dec     num_primary_run_list_entries
-        jsr     UpdateMenuResources
-        jmp     WriteFile
-
-loop:   lda     index
-        cmp     num_primary_run_list_entries
-        beq     finish
+        TAIL_CALL UpdateMenuResources
+      END_IF
 
         jsr     MoveEntryDown
-
-        inc     index
-        jmp     loop
-.endscope
+    WHILE inc index : NOT ZERO  ; always
 
         ;; --------------------------------------------------
 
 secondary_run_list:
-.scope
-        sec
-        sbc     #ptr1+1
-        cmp     num_secondary_run_list_entries
-    IF ZERO
-        dec     selector_list + kSelectorListNumSecondaryRunListOffset
-        dec     num_secondary_run_list_entries
-        jmp     WriteFile
-    END_IF
-
-    REPEAT
+    DO
         lda     index
         sec
-        sbc     #ptr2
+        sbc     #kSelectorListNumPrimaryRunListEntries
       IF A = num_secondary_run_list_entries
         dec     selector_list + kSelectorListNumSecondaryRunListOffset
         dec     num_secondary_run_list_entries
-        jmp     WriteFile
+        rts
       END_IF
 
         CALL    MoveEntryDown, A=index
 
-        inc     index
-    FOREVER
-.endscope
+    WHILE inc index : NOT ZERO  ; always
 
 index:  .byte   0
 
@@ -756,8 +668,7 @@ index:  .byte   0
         tay
     DO
         copy8   (ptr2),y, (ptr1),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         ;; And flags
         ldy     #kSelectorEntryFlagsOffset
@@ -774,8 +685,7 @@ index:  .byte   0
         tay
     DO
         copy8   (ptr2),y, (ptr1),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         rts
 .endproc ; MoveEntryDown
@@ -845,8 +755,7 @@ finish:
         tay
     DO
         copy8   (ptr_file),y, (ptr_res),y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         rts
 .endproc ; _CopyString
@@ -927,92 +836,27 @@ index:  .byte   0
 .endproc ; GetResourcePathAddr
 
 ;;; ============================================================
-;;; Write out SELECTOR.LIST file, using original prefix.
-;;; Used if DeskTop was copied to RAMCard.
 
-filename_buffer := $1C00
-
-        DEFINE_CREATE_PARAMS create_origpfx_params, filename_buffer, ACCESS_DEFAULT, $F1
-        DEFINE_OPEN_PARAMS open_origpfx_params, filename_buffer, io_buf
-
-        DEFINE_CREATE_PARAMS create_curpfx_params, filename, ACCESS_DEFAULT, $F1
-        DEFINE_OPEN_PARAMS open_curpfx_params, filename, io_buf
+        DEFINE_DESTROY_PARAMS destroy_params, filename
+        DEFINE_CREATE_PARAMS create_params, filename, ACCESS_DEFAULT, $F1
+        DEFINE_OPEN_PARAMS open_params, filename, io_buf
+        DEFINE_READWRITE_PARAMS write_params, selector_list, kSelectorListBufSize
+        DEFINE_CLOSE_PARAMS close_params
 
 filename:
         PASCAL_STRING kPathnameSelectorList
 
-        DEFINE_READWRITE_PARAMS read_params, selector_list, kSelectorListBufSize
-        DEFINE_READWRITE_PARAMS write_params, selector_list, kSelectorListBufSize
-        DEFINE_CLOSE_PARAMS close_params
+        DEFINE_GET_PREFIX_PARAMS current_prefix_params, current_prefix
+        DEFINE_GET_PREFIX_PARAMS orig_prefix_params, orig_prefix
 
-.proc WriteFileToOriginalPrefix
-        jsr     main::SetCursorWatch ; before writing
-        jsr     rest
-        jmp     main::SetCursorPointer ; after writing
-rest:
-        ;; --------------------------------------------------
-
-
-        CALL    main::CopyDeskTopOriginalPrefix, AX=#filename_buffer
-
-        ldx     filename_buffer ; Append '/' separator
-        inx
-        lda     #'/'
-        sta     filename_buffer,x
-
-        ldy     #0              ; Append filename
-    DO
-        inx
-        iny
-        copy8   filename,y, filename_buffer,x
-    WHILE Y <> filename
-        stx     filename_buffer
-
-        copy8   #0, second_try_flag
-
-retry_create_and_open:
-        MLI_CALL CREATE, create_origpfx_params
-        MLI_CALL OPEN, open_origpfx_params
-    IF CS
-        ;; First time - ask if we should even try.
-        lda     second_try_flag
-      IF ZERO
-        inc     second_try_flag
-        CALL    ShowAlert, A=#kErrSaveChanges
-        cmp     #kAlertResultOK
-        beq     retry_create_and_open
-        bne     cancel          ; always
-      END_IF
-
-        ;; Second time - prompt to insert.
-        CALL    ShowAlert, A=#kErrInsertSystemDisk
-        cmp     #kAlertResultOK
-        beq     retry_create_and_open
-
-cancel: rts
-    END_IF
-
-        lda     open_origpfx_params::ref_num
-        sta     write_params::ref_num
-        sta     close_params::ref_num
-
-retry_write:
-        MLI_CALL WRITE, write_params
-    IF CS
-        jsr     ShowAlert
-        ASSERT_EQUALS ::kAlertResultTryAgain, 0
-        beq     retry_write     ; `kAlertResultTryAgain` = 0
-    END_IF
-
-        MLI_CALL CLOSE, close_params
-        rts
-
-second_try_flag:                ; 0 or 1, updated with INC
-        .byte   0
-.endproc ; WriteFileToOriginalPrefix
+local_dir:      PASCAL_STRING kFilenameLocalDir
+        DEFINE_CREATE_PARAMS create_localdir_params, local_dir, ACCESS_DEFAULT, FT_DIRECTORY,, ST_LINKED_DIRECTORY
 
 ;;; ============================================================
 ;;; Read SELECTOR.LIST file (using current prefix)
+
+        DEFINE_OPEN_PARAMS open_curpfx_params, filename, io_buf
+        DEFINE_READWRITE_PARAMS read_params, selector_list, kSelectorListBufSize
 
 .proc ReadFile
         jsr     main::SetCursorWatch ; before reading
@@ -1021,16 +865,17 @@ second_try_flag:                ; 0 or 1, updated with INC
 rest:
         ;; --------------------------------------------------
 
-retry:  MLI_CALL OPEN, open_curpfx_params
-        bcc     read
-        cmp     #ERR_FILE_NOT_FOUND
-        beq     not_found
+    DO
+        MLI_CALL OPEN, open_curpfx_params
+      IF CS
+        CONTINUE_IF A = #ERR_FILE_NOT_FOUND OR A = #ERR_PATH_NOT_FOUND
         CALL    ShowAlert, A=#kErrInsertSystemDisk
-        cmp     #kAlertResultOK
-        beq     retry
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
+        REDO_IF EQ
         RETURN  A=#$FF          ; failure
+      END_IF
 
-read:   lda     open_curpfx_params::ref_num
+        lda     open_curpfx_params::ref_num
         sta     read_params::ref_num
         sta     close_params::ref_num
         MLI_CALL READ, read_params
@@ -1040,8 +885,8 @@ read:   lda     open_curpfx_params::ref_num
         pla
         plp
         rts
+    DONE
 
-not_found:
         ;; Clear buffer
         ptr := $06
         copy16  #selector_list, ptr
@@ -1051,49 +896,98 @@ not_found:
         ldy     #0
       DO
         sta     (ptr),y
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
         inc     ptr+1
-        dex
-    WHILE NOT_ZERO
+    WHILE dex: NOT_ZERO
         RETURN  A=#0
 .endproc ; ReadFile
 
 ;;; ============================================================
-;;; Write SELECTOR.LIST file (using current prefix)
+;;; Write out SELECTOR.LIST file.
 
-.proc WriteFile
+.proc _DoWrite
         jsr     main::SetCursorWatch ; before writing
         jsr     rest
         jmp     main::SetCursorPointer ; after writing
 rest:
         ;; --------------------------------------------------
 
-retry_create_and_open:
-        MLI_CALL CREATE, create_curpfx_params
-        MLI_CALL OPEN, open_curpfx_params
-    IF CS
-        CALL    ShowAlert, A=#kErrInsertSystemDisk
-        cmp     #kAlertResultOK
-        beq     retry_create_and_open
-        RETURN  A=#$FF
-    END_IF
+        ldax    DATELO
+        stax    create_params::create_date
+        stax    create_localdir_params::create_date
+        ldax    TIMELO
+        stax    create_params::create_time
+        stax    create_localdir_params::create_time
 
-        lda     open_curpfx_params::ref_num
+        ;; Create local dir if necessary
+    DO
+        JUMP_TABLE_MLI_CALL CREATE, create_localdir_params
+      IF CS AND A <> #ERR_DUPLICATE_FILENAME
+        jsr     _CheckRetry
+        REDO_IF EQ
+        bne     failed          ; always
+      END_IF
+
+        ;; Destroy existing settings file if necessary
+        ;; This is to catch write failures before the file `OPEN`, as
+        ;; failure to `WRITE`/`FLUSH` will make the `CLOSE` fail,
+        ;; leaving the `io_buffer` in use.
+    DO
+        JUMP_TABLE_MLI_CALL DESTROY, destroy_params
+      IF CS AND A <> #ERR_FILE_NOT_FOUND
+        jsr     _CheckRetry
+        REDO_IF EQ
+        bne     failed          ; always
+      END_IF
+    DONE
+
+        ;; Create/write settings file if necessary
+    DO
+        JUMP_TABLE_MLI_CALL CREATE, create_params
+        JUMP_TABLE_MLI_CALL OPEN, open_params
+      IF CC
+        lda     open_params::ref_num
         sta     write_params::ref_num
         sta     close_params::ref_num
+        JUMP_TABLE_MLI_CALL WRITE, write_params
+        JUMP_TABLE_MLI_CALL CLOSE, close_params
+      END_IF
+      IF CS
+        jsr     _CheckRetry
+        REDO_IF EQ
+        bne     failed          ; always
+      END_IF
+    DONE
+        rts                     ; C=0
 
-retry_write:
-        MLI_CALL WRITE, write_params
-    IF CS
-        jsr     ShowAlert
-        ASSERT_EQUALS ::kAlertResultTryAgain, 0
-        beq     retry_write     ; `kAlertResultTryAgain` = 0
+failed:
+        sec
+        rts                     ; C=1
+.endproc ; _DoWrite
+
+;;; Before calling: ensure `retry_flag` was cleared at some point.
+;;; Input: A = ProDOS error code
+;;; Output: Z = 1 if retry was selected
+.proc _CheckRetry
+    IF bit retry_flag : NC
+        ;; First time - prompt see if we want to try saving.
+        SET_BIT7_FLAG retry_flag
+        CALL    JUMP_TABLE_SHOW_ALERT, A=#kErrSaveChanges ; OK/Cancel
+        cmp     #kAlertResultOK
+        rts                     ; Z=1 if OK selected (i.e. retry)
     END_IF
 
-        MLI_CALL CLOSE, close_params
+        ;; Special case
+    IF A = #ERR_VOL_NOT_FOUND
+        lda     #kErrInsertSystemDisk ; Try Again/Cancel
+    END_IF
+        jsr     JUMP_TABLE_SHOW_ALERT ; arbitrary ProDOS error
+        ;; Responses are either OK or Try Again/Cancel
+        cmp     #kAlertResultTryAgain
         rts
-.endproc ; WriteFile
+.endproc ; _CheckRetry
+
+retry_flag:        .byte   0 ; bit7
 
 ;;; ============================================================
 
@@ -1122,9 +1016,7 @@ retry_write:
         rts
 .endproc ; DrawEntryCallback
 
-.proc SelChangeCallback
-        jmp     UpdateOKButton
-.endproc ; SelChangeCallback
+SelChangeCallback := UpdateOKButton
 
 
 ;;; ============================================================

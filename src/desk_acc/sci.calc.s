@@ -109,7 +109,7 @@ reserved:       .byte   0
         REF_MAPINFO_MEMBERS
 
 label:          PASCAL_STRING labelstr, aux::kLabelStrSize
-pos:            .word   left + 6, top+kCalcButtonHeight
+pos:            .word   left + kCalcButtonWidth/2 + 1, top+kCalcButtonHeight
 port:           .word   left, top, left+kCalcButtonWidth, top+kCalcButtonHeight
         .refto label
         .refto pos
@@ -132,8 +132,6 @@ key:
 .endif
         .refto function
         .refto key
-        ;; Cheap centering
-        kLabelOff = (kSciButtonWidth - (6 * .strlen(labelstr))) / 2
         DEFINE_POINT viewloc, left - kBorderLeftTop, top - kBorderLeftTop
 mapbits:        .addr   sci_button_bitmap
 mapwidth:       .byte   kSciBitmapStride
@@ -142,7 +140,7 @@ reserved:       .byte   0
         REF_MAPINFO_MEMBERS
 
 label:          PASCAL_STRING labelstr, aux::kLabelStrSize
-pos:            .word   left + kLabelOff, top+kCalcButtonHeight
+pos:            .word   left + kSciButtonWidth/2, top+kCalcButtonHeight
 port:           .word   left, top, left+kSciButtonWidth-3, top+kCalcButtonHeight
         .refto label
         .refto pos
@@ -194,24 +192,24 @@ port:           .word   left, top, left+kSciButtonWidth-3, top+kCalcButtonHeight
 .endenum
 
         first_button := *
-        CALC_BUTTON btn_c,   Function::clear,       "c", kCol1Left, kRow1Top, 'C'
-        CALC_BUTTON btn_e,   Function::exp,         "e", kCol2Left, kRow1Top, 'E'
-        CALC_BUTTON btn_eq,  Function::equals,      "=", kCol3Left, kRow1Top, '='
-        CALC_BUTTON btn_mul, Function::op_multiply, "*", kCol4Left, kRow1Top, '*'
+        CALC_BUTTON btn_c,   Function::clear,       res_string_button_c,   kCol1Left, kRow1Top, 'C'
+        CALC_BUTTON btn_e,   Function::exp,         res_string_button_e,   kCol2Left, kRow1Top, 'E'
+        CALC_BUTTON btn_eq,  Function::equals,      res_string_button_eq,  kCol3Left, kRow1Top, '='
+        CALC_BUTTON btn_mul, Function::op_multiply, res_string_button_mul, kCol4Left, kRow1Top, '*'
 
-        CALC_BUTTON btn_7,   Function::digit7,      "7", kCol1Left, kRow2Top, '7'
-        CALC_BUTTON btn_8,   Function::digit8,      "8", kCol2Left, kRow2Top, '8'
-        CALC_BUTTON btn_9,   Function::digit9,      "9", kCol3Left, kRow2Top, '9'
-        CALC_BUTTON btn_div, Function::op_divide,   "/", kCol4Left, kRow2Top, '/'
+        CALC_BUTTON btn_7,   Function::digit7,      res_string_button_7,   kCol1Left, kRow2Top, '7'
+        CALC_BUTTON btn_8,   Function::digit8,      res_string_button_8,   kCol2Left, kRow2Top, '8'
+        CALC_BUTTON btn_9,   Function::digit9,      res_string_button_9,   kCol3Left, kRow2Top, '9'
+        CALC_BUTTON btn_div, Function::op_divide,   res_string_button_div, kCol4Left, kRow2Top, '/'
 
-        CALC_BUTTON btn_4,   Function::digit4,      "4", kCol1Left, kRow3Top, '4'
-        CALC_BUTTON btn_5,   Function::digit5,      "5", kCol2Left, kRow3Top, '5'
-        CALC_BUTTON btn_6,   Function::digit6,      "6", kCol3Left, kRow3Top, '6'
-        CALC_BUTTON btn_sub, Function::op_subtract, "-", kCol4Left, kRow3Top, '-'
+        CALC_BUTTON btn_4,   Function::digit4,      res_string_button_4,   kCol1Left, kRow3Top, '4'
+        CALC_BUTTON btn_5,   Function::digit5,      res_string_button_5,   kCol2Left, kRow3Top, '5'
+        CALC_BUTTON btn_6,   Function::digit6,      res_string_button_6,   kCol3Left, kRow3Top, '6'
+        CALC_BUTTON btn_sub, Function::op_subtract, res_string_button_sub, kCol4Left, kRow3Top, '-'
 
-        CALC_BUTTON btn_1,   Function::digit1,      "1", kCol1Left, kRow4Top, '1'
-        CALC_BUTTON btn_2,   Function::digit2,      "2", kCol2Left, kRow4Top, '2'
-        CALC_BUTTON btn_3,   Function::digit3,      "3", kCol3Left, kRow4Top, '3'
+        CALC_BUTTON btn_1,   Function::digit1,      res_string_button_1,   kCol1Left, kRow4Top, '1'
+        CALC_BUTTON btn_2,   Function::digit2,      res_string_button_2,   kCol2Left, kRow4Top, '2'
+        CALC_BUTTON btn_3,   Function::digit3,      res_string_button_3,   kCol3Left, kRow4Top, '3'
 
 .params btn_0
         left = kCol1Left
@@ -224,24 +222,24 @@ mapbits:        .addr   wide_button_bitmap
 mapwidth:       .byte   kWideBitmapStride
 reserved:       .byte   0
         DEFINE_RECT maprect, 0, 0, kWideButtonWidth, kCalcButtonHeight + kBorderLeftTop + kBorderBottomRight
-label:          PASCAL_STRING "0", aux::kLabelStrSize
-pos:            .word   left + 6, top+kCalcButtonHeight
+label:          PASCAL_STRING res_string_button_0, aux::kLabelStrSize
+pos:            .word   left + kCalcButtonWidth/2 + 1, top+kCalcButtonHeight
 port:           .word   left, top, left+kWideButtonWidth-3, top+kCalcButtonHeight
 .endparams
 
-        CALC_BUTTON_S btn_sin,  Function::fn_sin,    "sin",  kColALeft, kRow0Top
-        CALC_BUTTON_S btn_cos,  Function::fn_cos,    "cos",  kColALeft, kRow1Top
-        CALC_BUTTON_S btn_tan,  Function::fn_tan,    "tan",  kColALeft, kRow2Top
-        CALC_BUTTON_S btn_xy,   Function::op_power,  "x^y",  kColALeft, kRow3Top, '^'
-        CALC_BUTTON_S btn_sqrt, Function::fn_sqrt,   "sqrt", kColALeft, kRow4Top
-        CALC_BUTTON_S btn_pm,   Function::fn_neg,    "+/-",  kColALeft, kRow5Top
+        CALC_BUTTON_S btn_sin,  Function::fn_sin,    res_string_button_sin,  kColALeft, kRow0Top
+        CALC_BUTTON_S btn_cos,  Function::fn_cos,    res_string_button_cos,  kColALeft, kRow1Top
+        CALC_BUTTON_S btn_tan,  Function::fn_tan,    res_string_button_tan,  kColALeft, kRow2Top
+        CALC_BUTTON_S btn_xy,   Function::op_power,  res_string_button_xy,   kColALeft, kRow3Top, '^'
+        CALC_BUTTON_S btn_sqrt, Function::fn_sqrt,   res_string_button_sqrt, kColALeft, kRow4Top
+        CALC_BUTTON_S btn_pm,   Function::fn_neg,    res_string_button_pm,   kColALeft, kRow5Top
 
-        CALC_BUTTON_S btn_asin, Function::fn_asin,   "asin", kColBLeft, kRow0Top
-        CALC_BUTTON_S btn_acos, Function::fn_acos,   "acos", kColBLeft, kRow1Top
-        CALC_BUTTON_S btn_atan, Function::fn_atan,   "atan", kColBLeft, kRow2Top
-        CALC_BUTTON_S btn_ln,   Function::fn_ln,     "ln",   kColBLeft, kRow3Top
-        CALC_BUTTON_S btn_ex,   Function::fn_exp,    "e^x",  kColBLeft, kRow4Top
-        CALC_BUTTON_S btn_1x,   Function::fn_inv,    "1/x",  kColBLeft, kRow5Top
+        CALC_BUTTON_S btn_asin, Function::fn_asin,   res_string_button_asin, kColBLeft, kRow0Top
+        CALC_BUTTON_S btn_acos, Function::fn_acos,   res_string_button_acos, kColBLeft, kRow1Top
+        CALC_BUTTON_S btn_atan, Function::fn_atan,   res_string_button_atan, kColBLeft, kRow2Top
+        CALC_BUTTON_S btn_ln,   Function::fn_ln,     res_string_button_ln,   kColBLeft, kRow3Top
+        CALC_BUTTON_S btn_ex,   Function::fn_exp,    res_string_button_ex,   kColBLeft, kRow4Top
+        CALC_BUTTON_S btn_1x,   Function::fn_inv,    res_string_button_1x,   kColBLeft, kRow5Top
 
 .params btn_dec
 function:       .byte   Function::decimal
@@ -252,8 +250,8 @@ mapwidth:       .byte   kBitmapStride
 reserved:       .byte   0
         DEFINE_RECT maprect, 0, 0, kCalcButtonWidth + kBorderLeftTop + kBorderBottomRight, kCalcButtonHeight + kBorderLeftTop + kBorderBottomRight
         REF_MAPINFO_MEMBERS
-label:          PASCAL_STRING ".", aux::kLabelStrSize
-pos:            .word   kCol3Left + 6 + 2, kRow5Bot ; + 2 to center the label
+label:          PASCAL_STRING res_string_button_dec, aux::kLabelStrSize
+pos:            .word   kCol3Left + kCalcButtonWidth/2 + 1, kRow5Bot ; + 2 to center the label
 port:           .word   kCol3Left,kRow5Top,kCol3Right,kRow5Bot
         .refto label
         .refto pos
@@ -270,8 +268,8 @@ reserved:       .byte   0
         DEFINE_RECT maprect, 0, 0, kCalcButtonWidth + kBorderLeftTop + kBorderBottomRight, 27 ; + is extra tall
         REF_MAPINFO_MEMBERS
 
-label:          PASCAL_STRING '+', aux::kLabelStrSize
-pos:            .word   kCol4Left + 6, kRow5Bot
+label:          PASCAL_STRING res_string_button_add, aux::kLabelStrSize
+pos:            .word   kCol4Left + kCalcButtonWidth/2 + 1, kRow5Bot
 port:           .word   kCol4Left,kRow4Top,kCol4Right,kRow5Bot
         .refto label
         .refto pos
@@ -373,24 +371,19 @@ tall_button_bitmap:             ; bitmap for '+' button
 
 saved_stack:
         .byte   $00             ; restored after error
-calc_p: .byte   $00             ; high bit set if pending op?
+calc_p: .byte   $00             ; input since last clear?
 calc_op:.byte   $00
 calc_d: .byte   $00             ; decimal separator if present, 0 otherwise
-calc_e: .byte   $00             ; exponential?
+calc_e: .byte   $00             ; exponent?
 calc_n: .byte   $00             ; negative?
 calc_g: .byte   $00             ; high bit set if last input digit
-calc_f: .byte   $00             ; high bit set if last was function
 calc_l: .byte   $00             ; input length
+calc_r: .byte   $00             ; result? (i.e. last op was '=')
+
+kMaxEntryLength = 10
 
 ;;; ============================================================
 ;;; Miscellaneous param blocks
-
-.params background_box_params
-left:   .word   1
-top:    .word   0
-right:  .word   259
-bottom: .word   96
-.endparams
 
 background_pattern:
         .byte   $77,$DD,$77,$DD,$77,$DD,$77,$DD
@@ -482,11 +475,13 @@ base:   .word   16
 .endparams
 
 farg:   .byte   $00,$00,$00,$00,$00,$00
+ftmp:   .byte   $00,$00,$00,$00,$00,$00
 
 grafport:       .tag    MGTK::GrafPort
 
-penmode_normal: .byte   MGTK::pencopy
-penmode_xor:    .byte   MGTK::notpenXOR
+pencopy:        .byte   MGTK::pencopy
+notpenBIC:      .byte   MGTK::notpenBIC
+notpenXOR:      .byte   MGTK::notpenXOR
 
         kDAWidth = 130 + kBasicOffset
         kDAHeight = 96
@@ -572,15 +567,14 @@ init:
         sta     calc_e
         sta     calc_n
         sta     calc_g
-        sta     calc_f
         sta     calc_l
+        sta     calc_r
 
 .proc CopyToB1
         ldx     #sizeof_chrget_routine + 4 ; should be just + 1 ?
     DO
         copy8   chrget_routine-1,x, CHRGET-1,x
-        dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 .endproc ; CopyToB1
 
         lda     #0
@@ -589,20 +583,7 @@ init:
 
         copy16  #ErrorHook, COUT_HOOK ; set up FP error handler
 
-        lda     #1
-        ROM_CALL FLOAT
-        ldxy    #farg
-        ROM_CALL ROUND
-        lda     #0              ; set FAC to 0
-        ROM_CALL FLOAT
-        ROM_CALL FADD
-        ROM_CALL FOUT
-        lda     #$07
-        ROM_CALL FMULT
-        lda     #$00
-        ROM_CALL FLOAT
-        ldxy    #farg
-        ROM_CALL ROUND
+        ROM_CALL ZERO_FAC       ; FAC = 0
 
         tsx
         stx     saved_stack
@@ -774,16 +755,14 @@ ret:    rts
     REPEAT
         ldy     #0
         lda     (ptr),y
-        beq     ret
-
+      IF NOT ZERO
         ;; Button's "port" is the inner inversion rect; test against
         ;; 1px beyond that, to match BTK. Make a copy and inflate it.
         add16_8 ptr, #(btn_c::port - btn_c), rect_ptr
         ldy     #.sizeof(MGTK::Rect)-1
-      DO
+       DO
         copy8   (rect_ptr),y, inrect_rect,y
-        dey
-      WHILE POS
+       WHILE dey : POS
         MGTK_CALL MGTK::InflateRect, grow_rect
         MGTK_CALL MGTK::InRect, inrect_rect
         beq     next
@@ -796,7 +775,8 @@ ret:    rts
         CALL    DepressButton, AX=rect_ptr
         beq     ignore
         pla
-ret:    rts
+      END_IF
+        rts
 
 ignore: pla
         RETURN  A=#0
@@ -823,8 +803,7 @@ next:   add16_8 ptr, #.sizeof(btn_c)
     REPEAT
         ldy     #0
         lda     (ptr),y
-        beq     ret
-
+      IF NOT ZERO
         ldy     #(btn_c::key - btn_c)
         lda     (ptr),y
         key := *+1
@@ -839,8 +818,8 @@ next:   add16_8 ptr, #.sizeof(btn_c)
         add16_8 ptr, #btn_c::port - btn_c
         CALL    DepressButton, AX=ptr
         pla
-
-ret:    rts
+      END_IF
+        rts
 
 next:   add16_8 ptr, #.sizeof(btn_c)
     FOREVER
@@ -851,10 +830,7 @@ next:   add16_8 ptr, #.sizeof(btn_c)
 
 .proc ProcessFunction
     IF A = #Function::clear
-        lda     #0
-        ROM_CALL FLOAT
-        ldxy    #farg
-        ROM_CALL ROUND
+        ROM_CALL ZERO_FAC       ; FAC = 0
         copy8   #Function::equals, calc_op
         lda     #0
         sta     calc_p
@@ -862,23 +838,24 @@ next:   add16_8 ptr, #.sizeof(btn_c)
         sta     calc_d
         sta     calc_e
         sta     calc_n
+        sta     calc_r
         jmp     ResetBuffersAndDisplay
     END_IF
 
     IF A = #Function::exp
-        ldy     calc_e
-        bne     ret2
-        ldy     calc_l
+        ldy     calc_e          ; already exponent?
       IF ZERO
+        ldy     calc_l
+       IF ZERO                  ; if no entry, make it "1E"
         inc     calc_l
         lda     #'1'
         sta     text_buffer1 + kTextBufferSize
         sta     text_buffer2 + kTextBufferSize
-      END_IF
+       END_IF
         copy8   #'E', calc_e
-        jmp     Insert
-
-ret2:   rts
+        jmp     _Insert
+      END_IF
+        rts
     END_IF
 
     IF A = #Function::op_subtract
@@ -889,7 +866,7 @@ ret2:   rts
         SET_BIT7_FLAG calc_n
         pla
         pha
-        jmp     Insert
+        jmp     _Insert
        END_IF
       END_IF
 
@@ -897,27 +874,29 @@ ret2:   rts
     END_IF
 
     IF A = #Function::decimal
-        lda     calc_d
-        ora     calc_e
-        bne     ret3
-        lda     calc_l
+        lda     calc_d          ; already a decimal?
+        ora     calc_e          ; or exponent?
       IF ZERO
+        lda     calc_l
+       IF ZERO
         inc     calc_l
-      END_IF
+       END_IF
         copy8   intl_deci_sep, calc_d
-        jmp     Insert
-
-ret3:   rts
+        jmp     _Insert
+      END_IF
+        rts
     END_IF
 
         cmp     #Function::digit0
         bcc     DoOp
         cmp     #Function::digit9+1
         bcs     DoOp
+        FALL_THROUGH_TO _Insert
 
         .assert Function::digit0 = '0', error, "Enum values"
 
-Insert: SET_BIT7_FLAG calc_g
+.proc _Insert
+        SET_BIT7_FLAG calc_g
         ldy     calc_l
     IF ZERO
         pha
@@ -929,7 +908,7 @@ Insert: SET_BIT7_FLAG calc_g
     END_IF
 
         SET_BIT7_FLAG calc_p
-        cpy     #10
+        cpy     #kMaxEntryLength
         bcs     ret
         pha
         ldy     calc_l
@@ -943,8 +922,7 @@ Insert: SET_BIT7_FLAG calc_g
         sta     text_buffer1-1,x
         sta     text_buffer2-1,x
         inx
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
 empty:  inc     calc_l
         pla
@@ -953,6 +931,8 @@ empty:  inc     calc_l
         jmp     DisplayBuffer1
 
 ret:   rts
+.endproc ; _Insert
+
 .endproc ; ProcessFunction
 
 ;;; ============================================================
@@ -972,190 +952,137 @@ ret:   rts
         lda     #'.'
        END_IF
         sta     FBUFFR,x
-        dex
-      WHILE POS
+      WHILE dex : POS
         copy16  #FBUFFR, TXTPTR
         jsr     CHRGET
         ROM_CALL FIN
     END_IF
         pla
 
+        ;; Save for the end
+        pha                     ; A = `Function::*`
+
         ;; --------------------------------------------------
         ;; Function? These modify the FAC in place
+
     IF A = #Function::fn_sin
         jsr     DegToRad
         ROM_CALL SIN
-        jmp     PostFunc
-    END_IF
 
-    IF A = #Function::fn_cos
+    ELSE_IF A = #Function::fn_cos
         jsr     DegToRad
         ROM_CALL COS
-        jmp     PostFunc
-    END_IF
 
-    IF A = #Function::fn_tan
+    ELSE_IF A = #Function::fn_tan
         jsr     DegToRad
         ROM_CALL TAN
-        jmp     PostFunc
-    END_IF
 
-    IF A = #Function::fn_asin
+    ELSE_IF A = #Function::fn_asin
         ;; ASIN(x) = ATN(X/SQR(-X*X+1))
-        ROM_CALL FAC_TO_ARG_R   ; ARG = X
-        jsr     PushARG
-        jsr     FixSGNCPR
-        ROM_CALL FMULTT         ; FAC = X * X
-        ROM_CALL NEGOP          ; FAC = -X*X
-        lday    #CON_ONE
-        ROM_CALL FADD           ; FAC = -X*X+1
-        ROM_CALL SQR            ; FAC = SQR(-X*X+1)
-        jsr     PopARG          ; ARG = X
-        jsr     FixSGNCPR
-        ROM_CALL FDIVT          ; FAC = X/SQR(-X*X+1)
-        ROM_CALL ATN            ; FAC = ATN(X/SQR(-X*X+1))
+        jsr     ASin
         jsr     RadToDeg
-        jmp     PostFunc
-    END_IF
 
-    IF A = #Function::fn_acos
+    ELSE_IF A = #Function::fn_acos
         ;; ACOS(x) = -ATN(X/SQR(-X*X+l))+1.5708
-        ROM_CALL FAC_TO_ARG_R   ; ARG = X
-        jsr     PushARG
-        jsr     FixSGNCPR
-        ROM_CALL FMULTT         ; FAC = X * X
-        ROM_CALL NEGOP          ; FAC = -X*X
-        lday    #CON_ONE
-        ROM_CALL FADD           ; FAC = -X*X+1
-        ROM_CALL SQR            ; FAC = SQR(-X*X+1)
-        jsr     PopARG          ; ARG = X
-        jsr     FixSGNCPR
-        ROM_CALL FDIVT          ; FAC = X/SQR(-X*X+1)
-        ROM_CALL ATN            ; FAC = ATN(X/SQR(-X*X+1))
+        jsr     ASin
         ROM_CALL NEGOP          ; FAC = -ATN(X/SQR(-X*X+1))
         lday    #CON_HALF_PI    ;
         ROM_CALL FADD           ; FAC = -ATN(X/SQR(-X*X+1))+1.5708
         jsr     RadToDeg
-        jmp     PostFunc
-    END_IF
 
-    IF A = #Function::fn_atan
+    ELSE_IF A = #Function::fn_atan
         ROM_CALL ATN
         jsr     RadToDeg
-        jmp     PostFunc
-    END_IF
 
-    IF A = #Function::fn_sqrt
+    ELSE_IF A = #Function::fn_sqrt
         ROM_CALL SQR
-        jmp     PostFunc
-    END_IF
 
-    IF A = #Function::fn_neg
+    ELSE_IF A = #Function::fn_neg
         ROM_CALL NEGOP
-        jmp     PostFunc
-    END_IF
 
-    IF A = #Function::fn_ln
+    ELSE_IF A = #Function::fn_ln
         ROM_CALL LOG
-        jmp     PostFunc
-    END_IF
 
-    IF A = #Function::fn_exp
+    ELSE_IF A = #Function::fn_exp
         ROM_CALL EXP
-        jmp     PostOp
-    END_IF
 
-    IF A = #Function::fn_inv
+    ELSE_IF A = #Function::fn_inv
         lday    #CON_ONE
         ROM_CALL FDIV
-        jmp     PostFunc
-    END_IF
 
+    ELSE_IF A = #Function::equals
         ;; --------------------------------------------------
+        ;; Equals
 
-        pha
-
-        ;; Look at last operation
-        lda     calc_op
-
-    IF A = #Function::equals
-        lda     calc_g          ; last input was a digit insertion or func?
-        ora     calc_f
-        bne     do_op           ; reparsed above, proceed
-
-        lda     #0              ; otherwise, reset to 0
-        ROM_CALL FLOAT
-        jmp     do_op
-    END_IF
-
-        ;; Was last an input or function?
-        lda     calc_g
-        ora     calc_f
-    IF ZERO
-        ;; No, so last was an op, we're overriding it.
-        ;; e.g.: 2 * +
+        ldx     calc_op
+      IF X = #Function::equals
+        ;; no pending op
         pla
-        sta     calc_op
         jmp     ResetBuffer1AndState
-    END_IF
+      END_IF
 
-        ;; --------------------------------------------------
-        ;; Operators
+      IF bit calc_r : NC
+        ;; not repeating yet - save FAC
+        ldxy    #ftmp
+        ROM_CALL ROUND          ; `ftmp` = FAC
+      ELSE
+        ;; repeating - use previous FAC
+        lday    #ftmp
+        ROM_CALL LOAD_FAC       ; FAC = `ftmp`
+      END_IF
 
-do_op:
-        pla                     ; A = current op
-        ldx     calc_op         ; X = previous op
-        sta     calc_op         ; save for later
-        lday    #farg           ; A,Y = previous intermediate result
-
-    IF X = #Function::op_add
+        ;; perform pending op
+        lday    #farg
+        ldx     calc_op
+      IF X = #Function::op_add
         ROM_CALL FADD           ; FAC = (Y,A) + FAC
-        jmp     PostOp
-    END_IF
-
-    IF X = #Function::op_subtract
+      ELSE_IF X = #Function::op_subtract
         ROM_CALL FSUB           ; FAC = (Y,A) - FAC
-        jmp     PostOp
-    END_IF
-
-    IF X = #Function::op_multiply
+      ELSE_IF X = #Function::op_multiply
         ROM_CALL FMULT          ; FAC = (Y,A) * FAC
-        jmp     PostOp
-    END_IF
-
-    IF X = #Function::op_divide
+      ELSE_IF X = #Function::op_divide
         ROM_CALL FDIV           ; FAC = (Y,A) / FAC
-        jmp     PostOp
-    END_IF
-
-    IF X = #Function::op_power
+      ELSE_IF X = #Function::op_power
         ROM_CALL LOAD_ARG       ; ARG = (Y,A)
         ROM_CALL FPWRT          ; FAC = ARG ^ FAC
-        jmp     PostOp
-    END_IF
+      END_IF
 
-    IF X = #Function::equals
-        ldy     calc_f
-      IF ZERO
-        ldy     calc_g
-       IF ZERO
-        jmp     ResetBuffer1AndState
+        ;; store result
+        ldxy    #farg
+        ROM_CALL ROUND          ; `farg` = FAC
+
+    ELSE
+        ;; --------------------------------------------------
+        ;; Infix Operators
+
+        ldx     calc_op
+        sta     calc_op
+      IF bit calc_r : NC AND X <> #Function::equals
+        ;; perform pending op
+        lday    #farg
+       IF X = #Function::op_add
+        ROM_CALL FADD           ; FAC = (Y,A) + FAC
+       ELSE_IF X = #Function::op_subtract
+        ROM_CALL FSUB           ; FAC = (Y,A) - FAC
+       ELSE_IF X = #Function::op_multiply
+        ROM_CALL FMULT          ; FAC = (Y,A) * FAC
+       ELSE_IF X = #Function::op_divide
+        ROM_CALL FDIV           ; FAC = (Y,A) / FAC
+       ELSE_IF X = #Function::op_power
+        ROM_CALL LOAD_ARG       ; ARG = (Y,A)
+        ROM_CALL FPWRT          ; FAC = ARG ^ FAC
        END_IF
       END_IF
+
+        ;; store result
+        ldxy    #farg
+        ROM_CALL ROUND          ; `farg` = FAC
     END_IF
 
-        FALL_THROUGH_TO PostOp
-.endproc ; DoOp
+        ;; --------------------------------------------------
+        ;; Done with operation, result is in FAC
 
-;;; ============================================================
-
-.proc PostOp
-        copy8   #0, calc_f
-
-        ldxy    #farg           ; save intermediate result
-        ROM_CALL ROUND          ; (Y,A) = ROUND(FAC)
-
-ep2:    jsr     PushFAC
+        jsr     PushFAC
         ROM_CALL FOUT       ; output as null-terminated string to FBUFFR
         jsr     PopFAC
 
@@ -1163,8 +1090,7 @@ ep2:    jsr     PushFAC
     DO
         lda     FBUFFR,y
         BREAK_IF ZERO
-        iny
-    WHILE NOT_ZERO
+    WHILE iny : NOT_ZERO        ; always
 
         ldx     #kTextBufferSize ; copy to text buffers
     DO
@@ -1192,15 +1118,27 @@ ep2:    jsr     PushFAC
     END_IF
 
         cpx     #0              ; pad out with spaces if needed
-        bmi     end
-pad:    lda     #' '
+    IF POS
+      DO
+        lda     #' '
         sta     text_buffer1,x
         sta     text_buffer2,x
-        dex
-        bpl     pad
-end:    jsr     DisplayBuffer1
+      WHILE dex : POS
+    END_IF
+
+        jsr     DisplayBuffer1
+
+        ;; --------------------------------------------------
+
+        pla                     ; A = `Function::*`
+    IF A = #Function::equals
+        SET_BIT7_FLAG calc_r
+    ELSE
+        CLEAR_BIT7_FLAG calc_r
+    END_IF
+
         FALL_THROUGH_TO ResetBuffer1AndState
-.endproc ; PostOp
+.endproc ; DoOp
 
 .proc ResetBuffer1AndState
         jsr     ResetBuffer1
@@ -1210,7 +1148,6 @@ end:    jsr     DisplayBuffer1
         sta     calc_e
         sta     calc_n
         sta     calc_g
-        sta     calc_f
         rts
 .endproc ; ResetBuffer1AndState
 
@@ -1224,15 +1161,6 @@ end:    jsr     DisplayBuffer1
     END_IF
         rts
 .endproc ; MaybeAddLeadingZero
-
-;;; After a function (e.g. SIN, COS, etc) is done, we must leave
-;;; the FAC alone but we do need to update the display and set
-;;; a flag indicating we shouldn't override the pending op.
-.proc PostFunc
-        jsr     PostOp::ep2
-        SET_BIT7_FLAG calc_f
-        rts
-.endproc ; PostFunc
 
 ;;; ============================================================
 
@@ -1366,8 +1294,7 @@ kRegSize = 6
         ldy     #.sizeof(MGTK::Rect)-1
     DO
         copy8   (ptr),y, inrect_rect,y
-        dey
-    WHILE POS
+    WHILE dey : POS
         MGTK_CALL MGTK::InflateRect, grow_rect
 
         ;; --------------------------------------------------
@@ -1384,8 +1311,7 @@ kRegSize = 6
         MGTK_CALL MGTK::WaitVBL
         pla
         tax
-        dex
-      WHILE NOT ZERO
+      WHILE dex : NOT ZERO
         jmp     invert_rect
 
     END_IF
@@ -1436,7 +1362,7 @@ invert_rect:
         RTS_IF  A = #MGTK::Error::window_obscured
         MGTK_CALL MGTK::SetPort, grafport
         MGTK_CALL MGTK::SetPattern, black_pattern
-        MGTK_CALL MGTK::SetPenMode, penmode_xor
+        MGTK_CALL MGTK::SetPenMode, notpenXOR
         MGTK_CALL MGTK::PaintRect, SELF_MODIFIED, invert_addr
         rts
 
@@ -1454,8 +1380,7 @@ invert_rect:
         ldy     #kTextBufferSize
     DO
         copy8   #' ', text_buffer1-1,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
         copy8   #'0', text_buffer1 + kTextBufferSize
         rts
 .endproc ; ResetBuffer1
@@ -1464,8 +1389,7 @@ invert_rect:
         ldy     #kTextBufferSize
     DO
         copy8   #' ', text_buffer2-1,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
         copy8   #'0', text_buffer2 + kTextBufferSize
         rts
 .endproc ; ResetBuffer2
@@ -1522,7 +1446,7 @@ end:    rts
         ;; Frame
         MGTK_CALL MGTK::HideCursor
         MGTK_CALL MGTK::SetPattern, background_pattern
-        MGTK_CALL MGTK::PaintRect, background_box_params
+        MGTK_CALL MGTK::PaintRect, winfo::maprect
         MGTK_CALL MGTK::SetPattern, black_pattern
         MGTK_CALL MGTK::FrameRect, frame_display_params
         MGTK_CALL MGTK::SetPattern, white_pattern
@@ -1533,27 +1457,51 @@ end:    rts
         ptr := $06
 
         copy16  #first_button, ptr
-    REPEAT
+loop:
         ldy     #0
         lda     (ptr),y
-        BREAK_IF ZERO
+    IF ZERO
+        jmp     break
+    END_IF
 
         add16_8 ptr, #(btn_c::viewloc - btn_c), bitmap_addr
-        add16_8 ptr, #(btn_c::pos - btn_c), text_addr
+        add16_8 ptr, #(btn_c::pos - btn_c), pos
         add16_8 ptr, #(btn_c::label - btn_c), label
+        add16_8 ptr, #(btn_c::port - btn_c), rect_addr
 
-        MGTK_CALL MGTK::PaintBits, 0, bitmap_addr ; draw shadowed rect
-        MGTK_CALL MGTK::MoveTo, 0, text_addr         ; button label pos
+        MGTK_CALL MGTK::SetPenMode, notpenBIC
+        MGTK_CALL MGTK::PaintBits, 0, bitmap_addr ; draw drop shadow
+
+        MGTK_CALL MGTK::SetPenMode, pencopy
+        MGTK_CALL MGTK::PaintRect, SELF_MODIFIED, rect_addr ; draw button face
+
+        MGTK_CALL MGTK::MoveTo, 0, pos
+        copy16  label, params::string
+        MGTK_CALL MGTK::StringWidth, string_width_params
+        lsr16   params::width
+        sub16   #0, params::width, params::dx
+        MGTK_CALL MGTK::Move, move_by_params
+
         MGTK_CALL MGTK::DrawString, 0, label
 
         add16_8 ptr, #.sizeof(btn_c)
-    FOREVER
+        jmp     loop
 
+break:
         jsr     DisplayBuffer2
 
         MGTK_CALL MGTK::ShowCursor
 
         rts
+
+.params params
+string: .addr   0               ; used as string for `StringWidth`
+width:  .addr   0               ; used as width for `StringWidth`, X for `Move`
+dx := width
+dy:     .word   0               ; used as Y for `Move`
+.endparams
+string_width_params := params + 0
+move_by_params := params + 2
 
 .endproc ; DrawContent
 
@@ -1600,6 +1548,36 @@ PROC_AT chrget_routine, ::CHRGET
 end:    rts
 END_PROC_AT
         sizeof_chrget_routine = .sizeof(chrget_routine)
+
+;;; ============================================================
+
+;;; FAC = ASIN(FAC) - handles 1/-1
+;;; `ErrorHook` hook will be invoked if out of bounds
+.proc ASin
+        ROM_CALL FAC_TO_ARG_R   ; ARG = X
+        jsr     PushARG
+        jsr     FixSGNCPR
+        ROM_CALL FMULTT         ; FAC = X * X
+        ROM_CALL NEGOP          ; FAC = -X*X
+        lday    #CON_ONE
+        ROM_CALL FADD           ; FAC = -X*X+1
+   IF NOT ZERO
+        ROM_CALL SQR            ; FAC = SQR(-X*X+1)
+        jsr     PopARG          ; ARG = X
+        jsr     FixSGNCPR
+        ROM_CALL FDIVT          ; FAC = X/SQR(-X*X+1)
+        ROM_CALL ATN            ; FAC = ATN(X/SQR(-X*X+1))
+        rts
+   END_IF
+
+        ;; Handle 1/-1
+        jsr     PopARG
+        ROM_CALL ARG_TO_FAC     ; FAC = X
+        ROM_CALL SGN            ; FAC = SGN(X)
+        lday    #CON_HALF_PI
+        ROM_CALL FMULT          ; FAC = SGN(X) * HALF_PI
+        rts
+.endproc ; ASin
 
 ;;; ============================================================
 

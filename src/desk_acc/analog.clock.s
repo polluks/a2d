@@ -79,18 +79,15 @@ parsed: .tag    ParsedDateTime
 ;;; Main Input Loop
 
 .proc InputLoop
+    REPEAT
         jsr     MaybeUpdate
 
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params + MGTK::Event::kind
-        cmp     #MGTK::EventKind::button_down ; was clicked?
-        beq     exit
-        cmp     #MGTK::EventKind::key_down  ; any key?
-        beq     exit
+        BREAK_IF A = #MGTK::EventKind::button_down ; was clicked?
+        BREAK_IF A = #MGTK::EventKind::key_down  ; any key?
+    FOREVER
 
-        jmp     InputLoop
-
-exit:
         MGTK_CALL MGTK::RedrawDeskTop
 
         MGTK_CALL MGTK::DrawMenuBar
@@ -133,9 +130,7 @@ exit:
         MGTK_CALL MGTK::MoveTo, pt1
         MGTK_CALL MGTK::LineTo, pt2
 
-        inc     tindex
-        lda     tindex
-    WHILE A <> #60
+    WHILE inc tindex : lda tindex : A <> #60
 
         rts
 
@@ -156,8 +151,7 @@ tfives: .byte   0
         lda     datetime,x
         cmp     last,x
         bne     diff
-        dex
-    WHILE POS
+    WHILE dex : POS
         rts                     ; no change
 
         ;; Different! update

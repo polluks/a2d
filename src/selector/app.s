@@ -175,7 +175,7 @@ y_exponent:     .byte   0       ; ... doubled on IIc / IIc+
 .params winfo
         kDialogId = 1
         kWidth = 460
-        kHeight = 124
+        kHeight = 130
 window_id:      .byte   kDialogId
 options:        .byte   MGTK::Option::dialog_box
 title:          .addr   0
@@ -211,13 +211,17 @@ nextwinfo:      .addr   0
 
         DEFINE_RECT_FRAME rect_frame, winfo::kWidth, winfo::kHeight
 
-        DEFINE_BUTTON ok_button,      winfo::kDialogId, res_string_button_ok, kGlyphReturn, winfo::kWidth - kButtonWidth - 60, winfo::kHeight - 18
-        DEFINE_BUTTON desktop_button, winfo::kDialogId, res_string_button_desktop, res_char_button_desktop_shortcut,       60, winfo::kHeight - 18
+        kButtonMarginX = 42
+        kButtonLeft = kModalDialogInsetX + kButtonMarginX
+        kButtonRight = (winfo::kWidth + 1) - kButtonLeft
+        kButtonTop = (winfo::kHeight + 1) - kModalDialogInsetY - kButtonHeight
+        DEFINE_BUTTON ok_button,      winfo::kDialogId, res_string_button_ok, kGlyphReturn, kButtonRight - kButtonWidth, kButtonTop
+        DEFINE_BUTTON desktop_button, winfo::kDialogId, res_string_button_desktop, res_char_button_desktop_shortcut, kButtonLeft, kButtonTop
 
 pensize_normal: .byte   1, 1
 pensize_frame:  .byte   kBorderDX, kBorderDY
 
-        DEFINE_POINT pos_title_string, 0, 16
+        DEFINE_POINT pos_title_string, winfo::kWidth / 2, 17
 
 str_selector_title:
         PASCAL_STRING res_string_selector_name
@@ -226,17 +230,14 @@ str_selector_title:
         kEntryPickerCols = 3
         kEntryPickerRows = 8
         kEntryPickerLeft = (winfo::kWidth - kEntryPickerItemWidth * kEntryPickerCols + 1) / 2
-        kEntryPickerTop  = 21
+        kEntryPickerTop  = 23
         kEntryPickerItemWidth = 127
         kEntryPickerItemHeight = kListItemHeight
         kEntryPickerTextHOffset = 4
         kEntryPickerTextVOffset = kEntryPickerItemHeight-1
 
-        ;; Line endpoints
-        DEFINE_POINT line1_pt1, kBorderDX*2, 19
-        DEFINE_POINT line1_pt2, winfo::kWidth - kBorderDX*2, 19
-        DEFINE_POINT line2_pt1, kBorderDX*2, winfo::kHeight - 22
-        DEFINE_POINT line2_pt2, winfo::kWidth - kBorderDX*2, winfo::kHeight - 22
+        ;; Frame
+        DEFINE_RECT entry_picker_rect, kBorderDX*2 - 1, kEntryPickerTop - 2, winfo::kWidth - kBorderDX*2 + 1, kEntryPickerTop + kEntryPickerRows * kEntryPickerItemHeight + 1
 
         io_buf_sl = $BB00
 
@@ -332,19 +333,20 @@ entry:
         copy8   #BTK::kButtonStateDisabled, ok_button::state
         jsr     LoadSelectorList
         SET_BIT7_FLAG invoked_during_boot_flag
+
+        ;; Any shortcuts?
         lda     num_secondary_run_list_entries
         ora     num_primary_run_list_entries
-        bne     check_key_down
-
+   IF ZERO
 quick_run_desktop:
         CALL    GetFileInfo, AX=#str_desktop_2
         jcs     done_keys
         jmp     RunDesktop
+   END_IF
 
         ;; --------------------------------------------------
         ;; Check for key down
 
-check_key_down:
         copy8   #0, quick_boot_slot
 
         lda     KBD
@@ -418,18 +420,15 @@ done_keys:
 
         ldy     #$01            ; $Cn01 == $20 ?
         lda     (slot_ptr),y
-        cmp     #$20
-        bne     next
+        CONTINUE_IF A <> #$20
 
         ldy     #$03            ; $Cn03 == $00 ?
         lda     (slot_ptr),y
-        cmp     #$00
-        bne     next
+        CONTINUE_IF A <> #$00
 
         ldy     #$05            ; $Cn05 == $03 ?
         lda     (slot_ptr),y
-        cmp     #$03
-        bne     next
+        CONTINUE_IF A <> #$03
 
         ;; Match! Add to slot_table
         inc     slot_table
@@ -437,24 +436,21 @@ done_keys:
         txa
         sta     slot_table,y
 
-next:   dex
-    WHILE NOT_ZERO
+    WHILE dex : NOT_ZERO
 .endscope
 
         ;; --------------------------------------------------
         ;; Set up Startup menu
 
         lda     quick_boot_slot
-        beq     set_startup_menu_items
+    IF NOT ZERO
         ldy     slot_table
-    DO
+      DO
         cmp     slot_table,y
         jeq     StartupSlot
-        dey
-    WHILE NOT_ZERO
-        FALL_THROUGH_TO set_startup_menu_items
+      WHILE dey : NOT_ZERO
+    END_IF
 
-set_startup_menu_items:
         copy8   slot_table, startup_menu
 
         lda     slot_x1
@@ -505,8 +501,7 @@ set_startup_menu_items:
     DO
         jsr     ReadSetting
         sta     tmp_pattern - DeskTopSettings::pattern,x
-        dex
-    WHILE X <> #AS_BYTE(DeskTopSettings::pattern-1)
+    WHILE dex : X <> #AS_BYTE(DeskTopSettings::pattern-1)
 
         MGTK_CALL MGTK::SetDeskPat, tmp_pattern
 
@@ -584,8 +579,7 @@ quick_boot_slot:
     IF A = #MGTK::EventKind::key_down
         ;; --------------------------------------------------
         ;; Key Down
-        bit     desktop_available_flag
-      IF NC
+      IF bit desktop_available_flag : NC
         lda     event_params::key
         jsr     ToUpperCase
        IF A = #kShortcutRunDeskTop
@@ -629,10 +623,10 @@ CheckAndClearUpdates:
 
 ClearUpdates:
         lda     event_params::window_id
-        CONTINUE_IF A <> #winfo::kDialogId
+        REDO_IF A <> #winfo::kDialogId
 
         MGTK_CALL MGTK::BeginUpdate, beginupdate_params
-        CONTINUE_IF NOT_ZERO    ; obscured
+        REDO_IF NOT_ZERO        ; obscured
 
         CALL    DrawWindow, C=1 ; is update
         OPTK_CALL OPTK::Update, op_params
@@ -746,15 +740,16 @@ dispatch:
         jsr     ClearSelectedIndex
 
         jsr     SetCursorWatch  ; before loading overlay
-retry:
+    DO
         ;; Load file dialog overlay
         MLI_CALL OPEN, open_selector_params
-    IF CS
+      IF CS
         CALL    ShowAlert, A=#AlertID::insert_system_disk
         ASSERT_EQUALS ::kAlertResultTryAgain, 0
-        beq     retry           ; `kAlertResultTryAgain` = 0
+        REDO_IF ZERO             ; `kAlertResultTryAgain` = 0
         jmp     SetCursorPointer  ; after loading overlay (failure)
-    END_IF
+      END_IF
+    DONE
 
         lda     open_selector_params::ref_num
         sta     set_mark_overlay1_params::ref_num
@@ -768,15 +763,17 @@ retry:
         ;; Invoke file dialog
         jsr     file_dialog_init
         ;; Returns Z=1 on success, Y,X = path to launch
-        bne     cancel
-ok:     tya                     ; now A,X = path
+    IF ZS
+      DO
+        tya                     ; now A,X = path
         jsr     SaveFileDialogState
         jsr     LaunchPath
         jsr     RestoreFileDialogState
         jsr     file_dialog_loop ; ditto
-        beq     ok
+      WHILE ZS
+    END_IF
 
-cancel: jmp     LoadSelectorList
+        jmp     LoadSelectorList
 
 .endproc ; CmdRunAProgram
 
@@ -806,30 +803,31 @@ cancel: jmp     LoadSelectorList
         ;; OK button?
 
         MGTK_CALL MGTK::InRect, ok_button::rect
-        beq     check_desktop_btn
+    IF ZC
         BTK_CALL BTK::Track, ok_button
         bmi     done
         jsr     TryInvokeSelectedIndex
 done:   rts
+    END_IF
 
         ;; DeskTop button?
-
-check_desktop_btn:
-        bit     desktop_available_flag
-    IF NC
+    IF bit desktop_available_flag : NC
         MGTK_CALL MGTK::InRect, desktop_button::rect
       IF NOT_ZERO
         BTK_CALL BTK::Track, desktop_button
         bmi     done
 
-retry:  CALL    GetFileInfo, AX=#str_desktop_2
-       IF CS
+       DO
+        CALL    GetFileInfo, AX=#str_desktop_2
+        IF CS
         CALL    ShowAlert, A=#AlertID::insert_system_disk
         ASSERT_NOT_EQUALS kAlertResultCancel, 0
         bne     done            ; `kAlertResultCancel` = 1
-        beq     retry           ; `kAlertResultTryAgain` = 0
-       END_IF
+        REDO_IF ZERO            ; `kAlertResultTryAgain` = 0
+        END_IF
         jmp     RunDesktop
+       DONE
+
       END_IF
     END_IF
 
@@ -849,8 +847,7 @@ ret:    rts
 
 .proc UpdateOKButton
         lda     #BTK::kButtonStateNormal
-        bit     op_record::selected_index
-    IF NS
+    IF bit op_record::selected_index : NS
         lda     #BTK::kButtonStateDisabled
     END_IF
 
@@ -883,8 +880,7 @@ noop:   rts
 ;;; Assert: ROM banked in, ALTZP/LC is OFF
 
 .proc RestoreSystem
-        bit     desktop_started_flag
-    IF NS
+    IF bit desktop_started_flag : NS
         MGTK_CALL MGTK::StopDeskTop
     END_IF
         jsr     RestoreTextMode
@@ -978,16 +974,14 @@ control_char:
         lda     #$FF
     DO
         sta     entries_flag_table,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         ldx     #0
     DO
         BREAK_IF X = num_primary_run_list_entries
         txa
         sta     entries_flag_table,x
-        inx
-    WHILE NOT_ZERO
+    WHILE inx : NOT_ZERO
 
         ldx     #0
     DO
@@ -996,8 +990,7 @@ control_char:
         clc
         adc     #8
         sta     entries_flag_table+8,x
-        inx
-    WHILE NOT_ZERO
+    WHILE inx : NOT_ZERO
 
         rts
 .endproc ; PopulateEntriesFlagTable
@@ -1023,14 +1016,14 @@ entries_flag_table:
         sta     selector_list + kSelectorListNumSecondaryRunListOffset
 
         MLI_CALL OPEN, open_selector_list_params
-        bcs     cache
-
+    IF CC
         lda     open_selector_list_params::ref_num
         sta     read_selector_list_params::ref_num
         MLI_CALL READ, read_selector_list_params
         MLI_CALL CLOSE, close_desktop_params
+    END_IF
 
-cache:  copy8   selector_list + kSelectorListNumPrimaryRunListOffset, num_primary_run_list_entries
+        copy8   selector_list + kSelectorListNumPrimaryRunListOffset, num_primary_run_list_entries
         copy8   selector_list + kSelectorListNumSecondaryRunListOffset, num_secondary_run_list_entries
         rts
 .endproc ; LoadSelectorList
@@ -1038,8 +1031,9 @@ cache:  copy8   selector_list + kSelectorListNumPrimaryRunListOffset, num_primar
 ;;; ============================================================
 
 .proc LoadOverlayCopyDialog
-start:  MLI_CALL OPEN, open_selector_params
-        bcs     error
+    DO
+        MLI_CALL OPEN, open_selector_params
+      IF CC
         lda     open_selector_params::ref_num
         sta     set_mark_overlay2_params::ref_num
         sta     read_overlay2_params::ref_num
@@ -1047,11 +1041,13 @@ start:  MLI_CALL OPEN, open_selector_params
         MLI_CALL READ, read_overlay2_params
         MLI_CALL CLOSE, close_overlay_params
         rts
+      END_IF
 
-error:
         CALL    ShowAlert, A=#AlertID::insert_system_disk ; `kAlertResultCancel` = 1
         ASSERT_EQUALS ::kAlertResultTryAgain, 0
-        beq     start           ; `kAlertResultTryAgain` = 0
+        REDO_IF ZERO            ; `kAlertResultTryAgain` = 0
+    DONE
+
         rts
 .endproc ; LoadOverlayCopyDialog
 
@@ -1076,8 +1072,7 @@ error:
         inx                     ; include DEVCNT itself
     DO
         copy8   DEVCNT,x, backup_devlst,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         ;; Find the startup volume's unit number
         copy8   DEVNUM, target
@@ -1098,8 +1093,7 @@ error:
         target := *+1
         cmp     #SELF_MODIFIED_BYTE
         beq     found
-        inx
-    WHILE X < DEVCNT
+    WHILE inx : X < DEVCNT
         bcs     done            ; last one or not found
 
         ;; Save it
@@ -1108,8 +1102,7 @@ found:  ldy     DEVLST,x
         ;; Move everything up
     DO
         copy8   DEVLST+1,x, DEVLST,x
-        inx
-    WHILE X <> DEVCNT
+    WHILE inx : X <> DEVCNT
 
         ;; Place it at the end
         tya
@@ -1127,8 +1120,7 @@ done:   rts
         inx                     ; include DEVCNT itself
     DO
         copy8   backup_devlst,x, DEVCNT,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
 ret:    rts
 .endproc ; RestoreDeviceList
@@ -1141,8 +1133,7 @@ backup_devlst:
 
 .proc GetPortAndDrawWindow
         CALL    GetWindowPort, A=#winfo::kDialogId
-        clc                     ; not an update
-        FALL_THROUGH_TO DrawWindow
+        FALL_THROUGH_TO DrawWindow, C=0 ; not an update
 .endproc ; GetPortAndDrawWindow
 
 ;;; Inputs: C set if processing update event, clear otherwise
@@ -1153,53 +1144,53 @@ backup_devlst:
         MGTK_CALL MGTK::SetPenMode, notpencopy
         MGTK_CALL MGTK::SetPenSize, pensize_frame
         MGTK_CALL MGTK::FrameRect, rect_frame
-
         MGTK_CALL MGTK::SetPenSize, pensize_normal
-        CALL    DrawTitleString, AX=#str_selector_title
+
+        MGTK_CALL MGTK::MoveTo, pos_title_string
+        CALL    DrawStringCentered, AX=#str_selector_title
+
+        MGTK_CALL MGTK::FrameRect, entry_picker_rect
 
         plp
     IF CS
         ;; Processing update event
         BTK_CALL BTK::Update, ok_button
-        bit     desktop_available_flag
-      IF NC
+      IF bit desktop_available_flag : NC
         BTK_CALL BTK::Update, desktop_button
       END_IF
     ELSE
         ;; Non-update
         BTK_CALL BTK::Draw, ok_button
-        bit     desktop_available_flag
-      IF NC
+      IF bit desktop_available_flag : NC
         BTK_CALL BTK::Draw, desktop_button
       END_IF
     END_IF
 
-        MGTK_CALL MGTK::SetPenMode, penXOR
-        MGTK_CALL MGTK::MoveTo, line1_pt1
-        MGTK_CALL MGTK::LineTo, line1_pt2
-        MGTK_CALL MGTK::MoveTo, line2_pt1
-        MGTK_CALL MGTK::LineTo, line2_pt2
         rts
 .endproc ; DrawWindow
 
 ;;; ============================================================
-;;; Draw Title String (centered at top of port)
+;;; Draw Centered String
 ;;; Input: A,X = string address
+;;; Trashes $06...$09
 
-.proc DrawTitleString
+.proc DrawStringCentered
         params := $6
         str := params
         width := params+2
+        dx := params
+        dy := params+2
 
         stax    str
         stax    @addr
         MGTK_CALL MGTK::StringWidth, params
-        sub16   #winfo::kWidth, width, pos_title_string::xcoord
-        lsr16   pos_title_string::xcoord ; /= 2
-        MGTK_CALL MGTK::MoveTo, pos_title_string
+        lsr16   width           ; /= 2
+        sub16   #0, width, dx
+        copy16  #0, dy
+        MGTK_CALL MGTK::Move, params
         MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
-.endproc ; DrawTitleString
+.endproc ; DrawStringCentered
 
 ;;; ============================================================
 ;;; Set the active GrafPort to the selected window's port
@@ -1291,8 +1282,7 @@ hi:     .byte   0
         tay
     DO
         copy8   (ptr),y, entry_string_buf+3,y
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         ;; Increase length by 3
         ldy     #0
@@ -1318,7 +1308,7 @@ hi:     .byte   0
     END_IF
 
         ;; Draw the string
-common: MGTK_CALL MGTK::DrawText, text_params
+        MGTK_CALL MGTK::DrawText, text_params
         rts
 
 .params text_params
@@ -1361,8 +1351,7 @@ start:
         ;; --------------------------------------------------
         ;; Set cursor for duration of operation
 
-        bit     invoked_during_boot_flag
-    IF NC                       ; skip if there's no UI yet
+    IF bit invoked_during_boot_flag : NC ; skip if there's no UI yet
         jsr     SetCursorWatch  ; before invoking entry
         jsr     rest
         jmp     SetCursorPointer ; after invoking entry
@@ -1375,8 +1364,7 @@ rest:
 
         ;; --------------------------------------------------
         ;; Figure out entry path, given entry options and overrides
-        bit     invoked_during_boot_flag
-    IF NC
+    IF bit invoked_during_boot_flag : NC
         bit     BUTN0           ; if Open-Apple is down, skip RAMCard copy
         jmi     use_entry_path
 
@@ -1404,7 +1392,6 @@ rest:
         bmi     use_ramcard_path ; already copied
 
         ;; Need to copy to RAMCard
-        path_addr := $06
         CALL    GetSelectorListPathAddr, A=invoke_index
         jsr     CopyPathToInvokerPrefix
 
@@ -1424,8 +1411,7 @@ rest:
         ;; --------------------------------------------------
         ;; `kSelectorEntryCopyOnBoot`
 on_boot:
-        bit     invoked_during_boot_flag
-    IF NC                       ; skip if no UI
+    IF bit invoked_during_boot_flag : NC ; skip if no UI
         CALL    GetEntryCopiedToRAMCardFlag, X=invoke_index
         bpl     use_entry_path  ; wasn't copied!
         FALL_THROUGH_TO use_ramcard_path
@@ -1454,8 +1440,7 @@ InvokeEntry := InvokeEntryImpl::start
         ;; --------------------------------------------------
         ;; Set cursor for duration of operation
 
-        bit     invoked_during_boot_flag
-    IF NC                       ; skip if there's no UI yet
+    IF bit invoked_during_boot_flag : NC ; skip if there's no UI yet
         jsr     SetCursorWatch  ; before launching path
         jsr     rest
         jmp     SetCursorPointer ; after launching path
@@ -1466,12 +1451,11 @@ rest:
 
 retry:
         CALL    GetFileInfo, AX=#INVOKER_PREFIX
-        bcc     check_type
+    IF CS
 
         ;; Not present; maybe show a retry prompt
         tax
-        bit     invoked_during_boot_flag
-    IF NC
+      IF bit invoked_during_boot_flag : NC
         txa
         pha
         jsr     ShowAlert
@@ -1482,18 +1466,18 @@ retry:
         txa
         ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
         bne     fail            ; `kAlertResultCancel` = 1
-        jmp     retry           ; TODO: `BEQ`
-    END_IF
+        beq     retry           ; always
+      END_IF
 
 fail:
         jmp     ClearSelectedIndex
+    END_IF
 
         ;; --------------------------------------------------
         ;; Check file type
 
         ;; Ensure it's BIN, SYS, S16 or BAS (if BS is present)
 
-check_type:
         lda     #0
         sta     INVOKER_INTERPRETER
         sta     INVOKER_BITSY_COMPAT
@@ -1544,8 +1528,7 @@ check_type:
 
         ;; Don't know how to invoke
 err:
-        bit     invoked_during_boot_flag
-    IF NC
+    IF bit invoked_during_boot_flag : NC
         CALL    ShowAlert, A=#AlertID::selector_unable_to_run
     END_IF
         jmp     ClearSelectedIndex
@@ -1559,8 +1542,7 @@ check_path:
         lda     INVOKER_PREFIX,y
         cmp     #'/'
         beq     :+
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         CALL    ShowAlert, A=#AlertID::insert_source_disk
         ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
@@ -1601,8 +1583,7 @@ check_path:
         DEFINE_QUIT_PARAMS quit_params
 
 .proc ClearSelectedIndex
-        bit     invoked_during_boot_flag
-    IF NC
+    IF bit invoked_during_boot_flag : NC
         copy8   #$FF, op_params::new_selection
         OPTK_CALL OPTK::SetSelection, op_params
         jsr     UpdateOKButton
@@ -1624,8 +1605,7 @@ check_path:
         tay
     DO
         copy8   (ptr),y, INVOKER_PREFIX,y
-        dey
-    WHILE POS
+    WHILE dey : POS
 
         rts
 .endproc ; CopyPathToInvokerPrefix
@@ -1660,8 +1640,7 @@ check_path:
         lda     read_buf,x
         cmp     check_header,x
         bne     err
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         COPY_STRING read_buf + kLinkFilePathLengthOffset, INVOKER_PREFIX
         RETURN  C=0
@@ -1703,19 +1682,17 @@ str_basix_system:
         stx     path_length
     DO
         copy8   launch_path,x, interp_path,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         ;; Pop off a path segment.
-pop_segment:
+    DO
         path_length := *+1
         ldx     #SELF_MODIFIED_BYTE
-    DO
+      DO
         lda     interp_path,x
         cmp     #'/'
         beq     found_slash
-        dex
-    WHILE NOT_ZERO
+      WHILE dex : NOT_ZERO
 
 no_bs:  copy8   #0, interp_path ; null out the path
         RETURN  A=#$FF          ; non-zero is failure
@@ -1730,14 +1707,14 @@ found_slash:
         ;; Append BASI?.SYSTEM to path and check for file.
         ldx     interp_path
         ldy     #0
-    DO
+      DO
         inx
         iny
         copy8   str_basix_system,y, interp_path,x
-    WHILE Y <> str_basix_system
+      WHILE Y <> str_basix_system
         stx     interp_path
         CALL    GetFileInfo, AX=#interp_path
-        bcs     pop_segment
+    WHILE CS
 
         rts                     ; zero is success
 .endproc ; CheckBasixSystemImpl
@@ -1796,8 +1773,7 @@ CheckBasicSystem        := CheckBasixSystemImpl::basic
         lda     (ptr),y
         jsr     ToUpperCase
         sta     (ptr),y
-        dey
-      WHILE NOT_ZERO
+      WHILE dey : NOT_ZERO
     END_IF
         rts
 .endproc ; UpcaseString
@@ -1835,15 +1811,13 @@ str_extras_awlaunch:
     DO
         lda     (path_addr),y
         BREAK_IF A = #'/'
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         dey
     DO
         lda     (path_addr),y
         BREAK_IF A = #'/'
-        dey
-    WHILE NOT_ZERO
+    WHILE dey : NOT_ZERO
 
         dey
         ldx     buf

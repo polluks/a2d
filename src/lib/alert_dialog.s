@@ -73,14 +73,17 @@ exclamation_bitmap:
         PIXELS  ".########............................"
         PIXELS  "....................................."
 
-        kAlertXMargin = 20
+        kAlertMarginX = kModalDialogInsetX
+        kAlertMarginY = kModalDialogInsetY
+        kAlertBitmapWidth = 37
+        kAlertBitmapHeight = 24
 
 .params alert_bitmap_params
-        DEFINE_POINT viewloc, kAlertRectLeft + kAlertXMargin, kAlertRectTop + 8
+        DEFINE_POINT viewloc, kAlertRectLeft + kAlertMarginX, kAlertRectTop + kAlertMarginY
 mapbits:        .addr   SELF_MODIFIED
 mapwidth:       .byte   6
 reserved:       .byte   0
-        DEFINE_RECT maprect, 0, 0, 36, 23
+        DEFINE_RECT maprect, 0, 0, kAlertBitmapWidth-1, kAlertBitmapHeight-1
         REF_MAPINFO_MEMBERS
 .endparams
 
@@ -94,7 +97,7 @@ event_key       := event_params + MGTK::Event::key
 
 ;;; Bounds of the alert "window"
 kAlertRectWidth         = 420
-kAlertRectHeight        = 55
+kAlertRectHeight        = 58
 kAlertRectLeft          = (::kScreenWidth - kAlertRectWidth)/2
 kAlertRectTop           = (::kScreenHeight - kAlertRectHeight)/2
 
@@ -112,25 +115,28 @@ pensize_frame:  .byte   kBorderDX, kBorderDY
 
 ;;; --------------------------------------------------
 
-        kAlertButtonTop = kAlertRectTop + 37
+        kAlertButtonTop = kAlertRectTop + kAlertRectHeight - kButtonHeight - kModalDialogInsetY + 1
+        kAlertButtonRight = kAlertRectLeft + (kAlertRectWidth + 1) - kModalDialogInsetX
+        kAlertButtonLeft = kAlertRectLeft + kModalDialogInsetX
 
-        DEFINE_BUTTON ok_button,        0, res_string_button_ok, kGlyphReturn, kAlertRectLeft + 300, kAlertButtonTop
-        DEFINE_BUTTON try_again_button, 0, res_string_button_try_again, res_char_button_try_again_shortcut, kAlertRectLeft + 300, kAlertButtonTop
-        DEFINE_BUTTON cancel_button,    0, res_string_button_cancel, res_string_button_cancel_shortcut, kAlertRectLeft + 20, kAlertButtonTop
+        DEFINE_BUTTON ok_button,        0, res_string_button_ok, kGlyphReturn, kAlertButtonRight - kButtonWidth, kAlertButtonTop
+        DEFINE_BUTTON try_again_button, 0, res_string_button_try_again, res_char_button_try_again_shortcut, kAlertButtonRight - kButtonWidth, kAlertButtonTop
+        DEFINE_BUTTON cancel_button,    0, res_string_button_cancel, res_string_button_cancel_shortcut, kAlertButtonLeft, kAlertButtonTop
 
 .ifdef AD_YESNOALL
-        DEFINE_BUTTON yes_button,  0, res_string_button_yes, res_char_button_yes_shortcut, kAlertRectLeft + 175, kAlertButtonTop, 65
-        DEFINE_BUTTON no_button,   0, res_string_button_no,  res_char_button_no_shortcut,  kAlertRectLeft + 255, kAlertButtonTop, 65
-        DEFINE_BUTTON all_button,  0, res_string_button_all, res_char_button_all_shortcut, kAlertRectLeft + 335, kAlertButtonTop, 65
+        kYNAButtonWidth = 71
+        DEFINE_BUTTON yes_button,  0, res_string_button_yes, res_char_button_yes_shortcut, kAlertButtonRight - kYNAButtonWidth*3 - kControlMarginX*2, kAlertButtonTop, kYNAButtonWidth
+        DEFINE_BUTTON no_button,   0, res_string_button_no,  res_char_button_no_shortcut,  kAlertButtonRight - kYNAButtonWidth*2 - kControlMarginX*1, kAlertButtonTop, kYNAButtonWidth
+        DEFINE_BUTTON all_button,  0, res_string_button_all, res_char_button_all_shortcut, kAlertButtonRight - kYNAButtonWidth*1 - kControlMarginX*0, kAlertButtonTop, kYNAButtonWidth
 .endif ; AD_YESNOALL
 
-        kTextLeft = kAlertRectLeft + 75
-        kTextRight = kAlertRectLeft + kAlertRectWidth - kAlertXMargin
+        kTextLeft = kAlertRectLeft + kAlertMarginX + kAlertBitmapWidth + 15
+        kTextRight = kAlertRectLeft + kAlertRectWidth - kAlertMarginX
 
         kWrapWidth = kTextRight - kTextLeft
 
-        DEFINE_POINT pos_prompt1, kTextLeft, kAlertRectTop + 29-11
-        DEFINE_POINT pos_prompt2, kTextLeft, kAlertRectTop + 29
+        DEFINE_POINT pos_prompt1, kTextLeft, kAlertRectTop + kAlertMarginY + kSystemFontHeight*1
+        DEFINE_POINT pos_prompt2, kTextLeft, kAlertRectTop + kAlertMarginY + kSystemFontHeight*2 + 2
 
 .params textwidth_params        ; Used for spitting/drawing the text.
 data:   .addr   0
@@ -165,8 +171,7 @@ start:
         addr := *+1
         lda     SELF_MODIFIED,x
         sta     alert_params,x
-        dex
-    WHILE POS
+    WHILE dex : POS
 
         MGTK_CALL MGTK::GetCursorAdr, saved_cursor_addr
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
@@ -176,8 +181,7 @@ start:
 
 
 .ifdef AD_SAVEBG
-        bit     alert_params::options
-    IF VS                       ; V = use save area
+    IF bit alert_params::options : VS ; V = use save area
         MGTK_CALL MGTK::SaveScreenRect, alert_rect
     END_IF
 .endif ; AD_SAVEBG
@@ -308,8 +312,7 @@ done:
         ;; --------------------------------------------------
         ;; Play bell
 
-        bit     alert_params::options
-    IF NS                       ; N = play sound
+    IF bit alert_params::options : NS ; N = play sound
         jsr     Bell
     END_IF
 
@@ -318,8 +321,7 @@ done:
 
 event_loop:
 .ifdef AD_EJECTABLE
-        bit     ejectable_flag
-    IF NS
+    IF bit ejectable_flag : NS
         jsr     WaitForDiskOrEsc
         jeq     finish_ok
         jmp     finish_cancel
@@ -343,8 +345,7 @@ event_loop:
         bit     alert_params::buttons ; high bit clear = OK only
         bpl     check_only_ok
 
-        cmp     #CHAR_ESCAPE
-    IF EQ
+    IF A = #CHAR_ESCAPE
         ;; Cancel
         BTK_CALL BTK::Flash, cancel_button
 finish_cancel:
@@ -491,8 +492,7 @@ finish:
         pha
 
 .ifdef AD_SAVEBG
-        bit     alert_params::options
-    IF VS                       ; V = use save area
+    IF bit alert_params::options : VS ; V = use save area
         MGTK_CALL MGTK::RestoreScreenRect, alert_rect
     END_IF
 .else

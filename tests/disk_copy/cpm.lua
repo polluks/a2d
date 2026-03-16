@@ -29,16 +29,16 @@ test.Step(
     a2d.DialogOK()
 
     -- insert source
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the source disk"})
     a2d.DialogOK()
 
     -- insert destination
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the destination disk"})
 
     local ocr = a2dtest.OCRScreen()
-    test.Expect(not ocr:find("disk copy"),
+    test.ExpectNotMatch(ocr, "disk copy",
                 "should be no status line identifying disk type")
-    test.Expect(ocr:find("Source .* Slot 6 +Drive 1 +\n"),
+    test.ExpectMatch(ocr, "Source .* Slot 6 +Drive 1 +\n",
                 "should be no volume name after Source label")
 
     -- cleanup
@@ -69,18 +69,15 @@ test.Step(
     a2d.DialogOK()
 
     -- insert source
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the source disk"})
     a2d.DialogOK()
 
     -- insert destination
-    a2dtest.WaitForAlert()
+    a2dtest.WaitForAlert({match="Insert the destination disk"})
     a2d.DialogOK()
 
     -- confirmation
-    a2dtest.WaitForAlert()
-    test.Expect(a2dtest.OCRScreen():find(
-                  "Are you sure you want to erase the disk in slot"),
-                "prompt should give S6,D1 but no disk type and is not quoted")
+    a2dtest.WaitForAlert({match="Are you sure you want to erase the disk in slot"})
 
     -- cleanup
     a2d.DialogCancel()
