@@ -1058,7 +1058,7 @@ clicked_window_id := _ActivateClickedWindow::window_id
 .proc EraseWindowBackground
         MGTK_CALL MGTK::ShieldCursor, window_grafport+MGTK::GrafPort::maprect
         MGTK_CALL MGTK::PaintRect, window_grafport+MGTK::GrafPort::maprect
-        jmp     UnshieldCursor
+        TAIL_CALL UnshieldCursor
 .endproc ; EraseWindowBackground
 
 ;;; ============================================================
@@ -4519,8 +4519,7 @@ _PreamblePreCached:
         sty     tick_v
 
         ;; Compute effective viewport
-        lda     cached_window_id
-        jsr     ApplyWinfoToWindowGrafport
+        CALL    ApplyWinfoToWindowGrafport, A=cached_window_id
         add16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
         COPY_STRUCT MGTK::Point, viewport+MGTK::Rect::topleft, old
 
@@ -6184,8 +6183,7 @@ no_win:
     END_IF
 
         ;; Used cached window's details, which are correct now.
-        lda     cached_window_id
-        jsr     AssignWindowBlockCounts
+        CALL    AssignWindowBlockCounts, A=cached_window_id
 
         copy16  window_blocks_used_table-2,x, window_draw_blocks_used_table-2,x ; 1-based to 0-based
         copy16  window_blocks_free_table-2,x, window_draw_blocks_free_table-2,x
@@ -6611,8 +6609,7 @@ CachedIconsWindowToScreen := CachedIconsXToYImpl::w2s
         ldy     found_windows_count
       IF NOT_ZERO
        DO
-        lda     found_windows_list-1,y
-        jsr     AssignWindowBlockCounts
+        CALL    AssignWindowBlockCounts, A=found_windows_list-1,y
        WHILE dey : NOT_ZERO
       END_IF
     END_IF
@@ -8261,7 +8258,7 @@ in_range:
         CALL    set_pos, AX=#kColDate
         jsr     ComposeDateString
         MGTK_CALL MGTK::DrawString, text_buffer2
-        jmp     UnshieldCursor
+        TAIL_CALL UnshieldCursor
 
 set_pos:
         stax    pos_col::xcoord
@@ -9427,6 +9424,10 @@ table:
         copy8   rect_table,x, tmp_rect,y
     WHILE dex : dey : POS
 
+        MGTK_CALL MGTK::ShieldCursor, tmp_rect
+        jsr     FrameTmpRect
+        TAIL_CALL UnshieldCursor
+
         FALL_THROUGH_TO FrameTmpRect
 .endproc ; _FrameTableRect
 
@@ -9573,8 +9574,7 @@ FinishOperation:
         copy16  #operations::DoNothing, operation_complete_callback
         CLEAR_BIT7_FLAG do_op_flag
 
-        lda     selected_window_id
-        jsr     GetWindowPath
+        CALL    GetWindowPath, A=selected_window_id
         invert_flag := *+1
         ldy     #SELF_MODIFIED_BYTE
         jsr     CheckMoveOrCopy ; A,X = path, Y = invert flag
@@ -10306,7 +10306,7 @@ operation_traversal_callbacks_for_copy:
     END_IF
         jsr     DrawFileCountWithSuffix
 
-        jmp     UnshieldCursor
+        TAIL_CALL UnshieldCursor
 .endproc ; _CopyDialogEnumerationCallback
 
 ;;; Lifecycle callbacks for copy operation (`operation_lifecycle_callbacks`)
@@ -10625,7 +10625,7 @@ retry:  MLI_CALL DESTROY, destroy_src_params
 
         jsr     DrawProgressDialogFilesRemaining
 
-        jmp     UnshieldCursor
+        TAIL_CALL UnshieldCursor
 .endproc ; CopyUpdateProgress
 
 ;;; ============================================================
@@ -11233,7 +11233,7 @@ operation_traversal_callbacks_for_delete:
         CALL    DrawProgressDialogLabel, Y=#0, AX=#aux::str_delete_count
         jsr     DrawFileCountWithSuffix
 
-        jmp     UnshieldCursor
+        TAIL_CALL UnshieldCursor
 .endproc ; _DeleteDialogEnumerationCallback
 
 .proc _DeleteDialogConfirmCallback
@@ -11417,7 +11417,7 @@ next_file:
         jsr     DrawTargetFilePath
 
         jsr     DrawProgressDialogFilesRemaining
-        jmp     UnshieldCursor
+        TAIL_CALL UnshieldCursor
 .endproc ; DeleteRefreshProgress
 
 ;;; ============================================================
@@ -12478,8 +12478,8 @@ DoRename        := DoRenameImpl::start
 ;;; This uses a minimal dialog window to simulate modeless rename.
 
 .proc _DialogOpen
+        jsr     GetSelectionViewBy
         ldy     #LETK::kLineEditOptionsNormal
-        jsr     GetSelectionViewBy ; preserves Y
     IF A = #DeskTopSettings::kViewByIcon
         ldy     #LETK::kLineEditOptionsCentered
     END_IF
@@ -14202,13 +14202,6 @@ params:  .res    3
         sta     row
         tya
         and     #%11110000      ; A = flags
-        beq     calc_y          ; DDL_LEFT
-
-    IF A = #DDL_VALUE
-        copy16  #kDialogValueLeft, dialog_label_pos::xcoord
-        ASSERT_EQUALS .hibyte(::kDialogValueLeft), 0
-        beq     calc_y
-    END_IF
 
         ;; Compute string width
         pha                     ; A = flags
@@ -14216,20 +14209,17 @@ params:  .res    3
         MGTK_CALL MGTK::StringWidth, stringwidth_params
         pla                     ; A = flags
 
-    IF A = #DDL_CENTER
+    IF A = #DDL_VALUE
+        copy16  #kDialogValueLeft, dialog_label_pos::xcoord
+    ELSE_IF A = #DDL_CENTER
         sub16   #kPromptDialogWidth, result, dialog_label_pos::xcoord
         lsr16   dialog_label_pos::xcoord
-        jmp     calc_y
-    END_IF
-
-    IF A = #DDL_RIGHT
+    ELSE_IF A = #DDL_RIGHT
         sub16   #kPromptDialogWidth - kDialogLabelDefaultX, result, dialog_label_pos::xcoord
-    ELSE
-        ;; DDL_LRIGHT
+    ELSE_IF A = #DDL_LRIGHT
         sub16   #kDialogLabelRightX, result, dialog_label_pos::xcoord
     END_IF
 
-calc_y:
         ;; y = base + aux::kDialogLabelHeight * line
         row := *+1
         lda     #SELF_MODIFIED_BYTE ; low byte
@@ -14239,11 +14229,34 @@ calc_y:
         addax   #aux::kDialogLabelBaseY, dialog_label_pos::ycoord
         MGTK_CALL MGTK::MoveTo, dialog_label_pos
         copy16  ptr, @addr
-        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
+
+        ;; Compute shield rect
+        lda     dialog_label_pos::xcoord
+        sta     tmp_rect::x1
+        clc
+        adc     result
+        sta     tmp_rect::x2
+        lda     dialog_label_pos::xcoord+1
+        sta     tmp_rect::x1+1
+        adc     result+1
+        sta     tmp_rect::x2+1
+
+        lda     dialog_label_pos::ycoord
+        sta     tmp_rect::y2
+        sec
+        sbc     #<kSystemFontHeight
+        sta     tmp_rect::y1
+        lda     dialog_label_pos::ycoord+1
+        sta     tmp_rect::y2+2
+        sbc     #>kSystemFontHeight
+        sta     tmp_rect::y1+1
 
         ;; Restore default X position
         copy16  #kDialogLabelDefaultX, dialog_label_pos::xcoord
-        rts
+
+        MGTK_CALL MGTK::ShieldCursor, tmp_rect
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
+        TAIL_CALL UnshieldCursor
 .endproc ; DrawDialogLabel
 
 ;;; ============================================================
