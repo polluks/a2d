@@ -329,28 +329,29 @@ get_eof:
         JUMP_TABLE_MLI_CALL GET_EOF, get_eof_params
 
         ;; Maybe LR/DLR?
-        ecmp16  get_file_info_params::aux_type, #$400
-    IF EQ
-        ecmp24  get_eof_params::eof, #$400
-        jeq     ShowLRFile
+    IF ecmp16 get_file_info_params::aux_type, #$400 : EQ
+      IF ecmp24 get_eof_params::eof, #$400 : EQ
+        TAIL_CALL ShowLRFile
+      END_IF
 
-        ecmp24  get_eof_params::eof, #$800
-        jeq     ShowDLRFile
+      IF ecmp24 get_eof_params::eof, #$800 : EQ
+        TAIL_CALL ShowDLRFile
+      END_IF
     END_IF
 
         ;; If bigger than $2000, assume DHR
 
-        ucmp24  get_eof_params::eof, #(kHiresSize+1)
-        jcs     ShowDHRFile
+    IF ucmp24 get_eof_params::eof, #(kHiresSize+1) : GE
+        TAIL_CALL ShowDHRFile
+    END_IF
 
         ;; If bigger than 576, assume HR
-
-        cmp16   get_eof_params::eof, #kMinipixSrcSize+1
-        jcs     ShowHRFile
+    IF cmp16 get_eof_params::eof, #kMinipixSrcSize+1 : GE
+        TAIL_CALL ShowHRFile
+    END_IF
 
         ;; Otherwise, assume Minipix
-
-        jmp     ShowMinipixFile
+        TAIL_CALL ShowMinipixFile
 .endproc ; ShowFile
 
 ;;; ============================================================
@@ -529,12 +530,16 @@ fail:   RETURN  C=1             ; failure
 
 ;;; Assumes the image is loaded to MAIN $2000 and
 ;;; relies on the hr_to_dhr.inc table.
+;;;
+;;; See `docs/hr2dhr.md` for an explanation of the algorithm
 
 .proc HRToDHR
         ptr     := $06
         kRows   = 192
         kCols   = 40
-        spill   := $08          ; spill-over
+
+        spill    := $08          ; spill-over bit (right to left)
+        previous := $09          ; previously processed byte
 
         lda     #0              ; row
     DO
@@ -543,47 +548,55 @@ fail:   RETURN  C=1             ; failure
         copy8   hires_table_lo,x, ptr
         copy8   hires_table_hi,x, ptr+1
 
-        ldy     #kCols-1         ; col
+        ldy     #kCols-1        ; col
 
-        copy8   #0, spill       ; spill-over
+        lda     #0
+        sta     spill
+        sta     previous
 
+        ;; At a high level, we convert each HR byte to two DHR bytes.
+        ;; We work right to left, since we are combining a *possible*
+        ;; 1-bit shift to the right (c/o the HR palette bit) with a
+        ;; *definite* 1-bit shift to the left to realign the output
+        ;; bitmap with the NTSC color clock. That means we sometimes
+        ;; propagate a bit to the left as we process a line.
       DO
         lda     (ptr),y
         tax
 
-        bmi     hibitset
-
-        ;; spill bit in from previous column; main bit7 encodes bit to spill
-
-        lda     hr_to_dhr_aux,x
-        sta     PAGE2ON
-        sta     (ptr),y
-        lda     hr_to_dhr_main,x
-        ora     spill           ; apply previous spill bit (to bit 6)
-        sta     PAGE2OFF
-        sta     (ptr),y
-
-        jmp     next
-
-hibitset:
-        ;; no bit to spill in, but spill out leftmost pixel
-
-        lda     hr_to_dhr_aux,x
-        pha
-        sta     PAGE2ON
-        sta     (ptr),y
-        lda     hr_to_dhr_main,x
-        sta     PAGE2OFF
-        sta     (ptr),y
-
-        pla
-        ror
-        ror
-
-next:
-        ror
-        and     #(1 << 6)
+        ;; If the previously processed byte had its high bit set, then
+        ;; it doesn't contribute to this pair, instead the final bit
+        ;; comes from this byte.
+        bit     previous
+       IF NS
+        ;; X = `g` from current byte
+        and     #%01000000      ; A = `000000g0` (reversed)
         sta     spill
+       END_IF
+
+        ;; The table encodes this mapping, where `X` is populated with
+        ;; the "spill" bit:
+        ;; `abcdefg0` → `abbccdd_` `eeffggX_`
+        ;; `abcdefg1` → `aabbccd_` `deeffgX_`
+
+        lda     hr_to_dhr_aux,x
+        sta     PAGE2ON
+        sta     (ptr),y
+        lda     hr_to_dhr_main,x
+        ora     spill           ; slip `X` into place
+        sta     PAGE2OFF
+        sta     (ptr),y
+
+        ;; Save the leftmost bit in case the next byte pair needs it.
+        ;; It is shifted into place so it can be easily ORA'd in.
+        txa                     ; A = `abcdefg0`
+        ror                     ; A = `bcdefg0_` C=`a`
+        ror                     ; A = `cdefg0_a`
+        ror                     ; A = `defg0_a_`
+        and     #%01000000      ; A = `000000a0`
+        sta     spill           ; save for next
+
+        stx     previous        ; and remember our palette bit
 
       WHILE dey : POS
 
@@ -1344,36 +1357,31 @@ ShowUnpackedSHR := ShowSHRImpl::unpacked
         jne     no
 
         ;; Binary: Must match size/address
-        ecmp16  entry+FileEntry::blocks_used, #33 ; DHR
-    IF EQ
+    IF ecmp16 entry+FileEntry::blocks_used, #33 : EQ ; DHR
         ecmp16  entry+FileEntry::aux_type, #$2000
         jeq     yes
         ecmp16  entry+FileEntry::aux_type, #$4000
         jeq     yes
     END_IF
 
-        ecmp16  entry+FileEntry::blocks_used, #17 ; HR
-    IF EQ
+    IF ecmp16 entry+FileEntry::blocks_used, #17 : EQ ; HR
         ecmp16  entry+FileEntry::aux_type, #$2000
         beq     yes
         ecmp16  entry+FileEntry::aux_type, #$4000
         beq     yes
     END_IF
 
-        ecmp16  entry+FileEntry::blocks_used, #3 ; MiniPix
-    IF EQ
+    IF ecmp16 entry+FileEntry::blocks_used, #3 : EQ ; MiniPix
         ecmp16  entry+FileEntry::aux_type, #$5800
         beq     yes
     END_IF
 
-        ecmp16  entry+FileEntry::blocks_used, #3 ; LR
-    IF EQ
+    IF ecmp16 entry+FileEntry::blocks_used, #3 : EQ ; LR
         ecmp16  entry+FileEntry::aux_type, #$400
         beq     yes
     END_IF
 
-        ecmp16  entry+FileEntry::blocks_used, #5 ; DLR
-    IF EQ
+    IF ecmp16 entry+FileEntry::blocks_used, #5 : EQ ; DLR
         ecmp16  entry+FileEntry::aux_type, #$400
         beq     yes
     END_IF
@@ -1558,15 +1566,13 @@ saw_header_flag:                ; bit7
         ldax    #first_filename
       END_IF
     ELSE_IF NS
-        lda     next_filename
-      IF NOT_ZERO
+      IF lda next_filename : NOT_ZERO
         ldax    #next_filename
       ELSE
         ldax    #first_filename
       END_IF
     ELSE
-        lda     prev_filename
-      IF NOT_ZERO
+      IF lda prev_filename : NOT_ZERO
         ldax    #prev_filename
       ELSE
         ldax    #last_filename

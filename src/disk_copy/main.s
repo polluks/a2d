@@ -125,32 +125,32 @@ params:  .res    3
 
 ;;; Input: `auxlc::dest_drive_index` is target in `auxlc::drive_unitnum_table`
 .proc FormatDevice
-        sta     ALTZPOFF
-        jsr     format
-        sta     ALTZPON
-        rts
-
-format:
         ldx     auxlc::dest_drive_index
         lda     auxlc::drive_unitnum_table,x
         sta     unit_number
+
+        sta     ALTZPOFF        ; Main ZP/LCBANKs
+        jsr     format
+        sta     ALTZPON         ; Aux ZP/LCBANKs
+        rts
+
+format:
         jsr     IsDiskII        ; returns Z=1 if yes
-    IF ZC
+    IF ZS
+        ;; Format as Disk II
+        TAIL_CALL FormatDiskII, A=unit_number
+    END_IF
+
         ;; Get driver address
         CALL    DeviceDriverAddress, A=unit_number
         stax    $06
 
-        lda     #DRIVER_COMMAND_FORMAT
-        sta     DRIVER_COMMAND
-        lda     unit_number
-        sta     DRIVER_UNIT_NUMBER
-        jmp     ($06)
-    END_IF
-
-        ;; Use Disk II-specific code
+        copy8   #DRIVER_COMMAND_FORMAT, DRIVER_COMMAND
         unit_number := *+1
         lda     #SELF_MODIFIED_BYTE
-        jmp     FormatDiskII
+        sta     DRIVER_UNIT_NUMBER
+
+        jmp     ($06)
 .endproc ; FormatDevice
 
 ;;; ============================================================
@@ -397,8 +397,7 @@ fail:   RETURN  A=#auxlc::kSourceDiskFormatOther
 
         ;; Next block
         inc16   auxlc::block_num
-        cmp16   auxlc::block_num, auxlc::source_block_count
-    WHILE LT
+    WHILE cmp16 auxlc::block_num, auxlc::source_block_count : LT
 
         ;; That was last block so we're done
         RETURN  A=#$80
@@ -514,8 +513,7 @@ mem_block_addr:
       END_IF
 
         inc16   block
-        cmp16   block, auxlc::source_block_count
-      IF GE
+      IF cmp16 block, auxlc::source_block_count : GE
         RETURN  AX=count
       END_IF
     FOREVER
@@ -976,7 +974,7 @@ memory_bitmap:
         .byte   %00000000       ; $C0-$CF - I/O
         .byte   %00000000       ; $D0-$DF - Disk Copy code
         .byte   %00000000       ; $E0-$EF - Disk Copy code
-        .byte   %11111111       ; $F0-$FF - free $F0 and up
+        .byte   %11111110       ; $F0-$FF - free $F0-$FD, but preserve vectors at $FFFx
 
         ;; Aux memory - LCBANK2
         .byte   %11111111       ; $D0-$DF - free

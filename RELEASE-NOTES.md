@@ -51,7 +51,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Fix behavior after File > Duplicate failed due to space or storage type.
 * Set empty window maprect so that when restored with new file scrollbars are inactive.
 * Fix volume icon flicker after Check All Drives for removable disks.
-* Select volume icomn after Format/Erase.
+* Select volume icon after Format/Erase.
 * Fix display of long device names in Format/Erase volume picker.
 * Animate Apple > About Apple II DeskTop window open/closed.
 * Animate Apple > About This Apple II window open/closed.
@@ -73,6 +73,8 @@ Project Page: https://github.com/a2stuff/a2d
 * Fix label/border overlaps in Get Info and Format/Erase dialogs in some locales.
 * Reduce cursor flickering when animating windows open/closed.
 * File > Get Info: Reduce cursor flickering when computing volume/folder size.
+* Automatically select newly inserted disks.
+* Select disk (if present) after Special > Check Drive.
 
 ### Selector
 
@@ -89,6 +91,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Reduce cursor flickering during copy.
 * Fix copying all blocks on volumes with unusual sizes.
 * Fix overlapping labels during copy in some locales.
+* Fix crash on Apple IIc/IIc+ on mouse activity after some copies. ([https://github.com/a2stuff/a2d/issues/900](#900))
 
 ### Desk Accessories
 
@@ -96,6 +99,7 @@ Project Page: https://github.com/a2stuff/a2d
   * Add accessories to IIgs bitmap.
   * Show Aux slot separately from Slot 3; include aux-specific memory count
   * Don't case-adjust SmartPort device names that are already mixed-case.
+  * Identify Nuova Elettronica DELTA.
 * DOS 3.3 Import: Fix keyboard shortcut handling.
 * Sounds: Time "Silent" menu bar flash using VBL.
 * Screen Savers: improve animation for Flying Toasters, Hexix, Message and Melt.
@@ -109,6 +113,9 @@ Project Page: https://github.com/a2stuff/a2d
 * Control Panels: Handle write protected disk when modifying settings.
 * Control Panel: Fix overlapping button labels in some locales.
 * Map: Fix overlapping labels in some locales.
+* Image Preview: Improve single hires file preview quality.
+* Lights Out: Add keyboard support: A..Y toggle lights.
+* Eyes: Reduce cursor flickering.
 
 ### Misc
 

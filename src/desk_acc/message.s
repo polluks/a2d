@@ -203,15 +203,15 @@ maybe_init:
         ;; Clear before/after
         copy16  #0, rect::x1
         sub16   text_pos::xcoord, #1, rect::x2
-        scmp16  rect::x1, rect::x2
-      IF NEG
+
+      IF scmp16 rect::x1, rect::x2 : NEG
         MGTK_CALL MGTK::PaintRect, rect
       END_IF
 
         add16   text_pos::xcoord, text_params::width, rect::x1
         copy16  #kScreenWidth-1, rect::x2
-        scmp16  rect::x1, rect::x2
-      IF NEG
+
+      IF scmp16 rect::x1, rect::x2 : NEG
         MGTK_CALL MGTK::PaintRect, rect
       END_IF
 
@@ -219,19 +219,19 @@ maybe_init:
 
         add16   text_pos::xcoord, delta, text_pos::xcoord
 
-        lda     delta+1
-    IF NS
+    IF lda delta+1 : NEG
+        ;; Moving left
         tmp := $06
         add16   text_pos::xcoord, text_params::width, tmp
         lda     tmp+1
       IF NS
+        ;; Entirely offscreen to left, so wrap to right
         copy16  #kScreenWidth-1, text_pos::xcoord
       END_IF
-    ELSE
-        scmp16  text_pos::xcoord, #kScreenWidth
-      IF POS
+
+    ELSE_IF scmp16 text_pos::xcoord, #kScreenWidth : POS
+        ;; Moving right... and entirely offscreen to right, so wrap to left
         sub16   #0, text_params::width, text_pos::xcoord
-      END_IF
     END_IF
 
         rts

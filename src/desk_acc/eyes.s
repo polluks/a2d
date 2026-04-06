@@ -193,6 +193,9 @@ vert:   .word   0               ; [16.0]
 eye_rect:
         .tag    MGTK::Rect
 
+pupil_rect:
+        .tag    MGTK::Rect
+
 ;;; ============================================================
 
 .proc Init
@@ -341,12 +344,11 @@ common:
         copy16  event_params::xcoord, screentowindow_params::screen::xcoord
         copy16  event_params::ycoord, screentowindow_params::screen::ycoord
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
+
         sub16   winfo::maprect::x2, mx, tmpw
-        cmp16   #kGrowBoxWidth, tmpw
-        bcc     nope
+    IF cmp16 #kGrowBoxWidth, tmpw : GE
         sub16   winfo::maprect::y2, my, tmpw
-        cmp16   #kGrowBoxHeight, tmpw
-        bcc     nope
+      IF cmp16 #kGrowBoxHeight, tmpw : GE
 
         ;; Initiate the grow... re-using the drag logic
         copy8   #kDAWindowId, dragwindow_params::window_id
@@ -355,7 +357,10 @@ common:
         MGTK_CALL MGTK::GrowWindow, dragwindow_params
         jmp     HandleDrag::common
 
-nope:   jmp     InputLoop
+      END_IF
+    END_IF
+
+        jmp     InputLoop
 
 tmpw:   .word   0
 .endproc ; HandleGrow
@@ -363,17 +368,13 @@ tmpw:   .word   0
 ;;; ============================================================
 
 penXOR: .byte   MGTK::penXOR
+pencopy:        .byte   MGTK::pencopy
 notpencopy:     .byte   MGTK::notpencopy
 
 kPenW    = 8
 kPenH    = 4
 kPupilW  = kPenW * 2
 kPupilH  = kPenH * 2
-
-.params pupil_pensize
-penwidth:       .byte   kPupilW
-penheight:      .byte   kPupilH
-.endparams
 
 ;;; Flag set once we have coords from a move event
 has_last_coords:
@@ -384,7 +385,7 @@ has_drawn_outline:
         .byte   0
 
 ;;; Minimum threshold to move to trigger a redraw, to avoid flicker.
-kMoveThresholdX = 5
+kMoveThresholdX = 10
 kMoveThresholdY = 5
 
 ;;; Saved coords
@@ -403,7 +404,6 @@ kMoveThresholdY = 5
         RTS_IF ZERO
 
         MGTK_CALL MGTK::SetPort, grafport
-        MGTK_CALL MGTK::HideCursor
 
         lda     has_drawn_outline
         jne     erase_pupils
@@ -438,19 +438,15 @@ kMoveThresholdY = 5
         ;; Skip erasing pupils if we're redrawing
         jmp     draw_pupils
 
-erase_pupils:
-        MGTK_CALL MGTK::SetPenMode, penXOR
-        MGTK_CALL MGTK::SetPenSize, pupil_pensize
+        ;; TODO: Redo this to reduce flicker; compute new pos first,
+        ;; and only erase/redraw one at a time.
 
-        MGTK_CALL MGTK::MoveTo, pos_l
-        MGTK_CALL MGTK::LineTo, pos_l
-        MGTK_CALL MGTK::MoveTo, pos_r
-        MGTK_CALL MGTK::LineTo, pos_r
+erase_pupils:
+        MGTK_CALL MGTK::SetPenMode, pencopy
+        jsr     _DrawPupils
 
 draw_pupils:
-        MGTK_CALL MGTK::SetPenMode, penXOR
-        MGTK_CALL MGTK::SetPenSize, pupil_pensize
-
+        MGTK_CALL MGTK::SetPenMode, notpencopy
         add16 winfo::maprect::x2, #2, rx ; width / 4
         lsr16 rx
         lsr16 rx
@@ -462,19 +458,41 @@ draw_pupils:
         jsr     ComputePupilPos
         sub16  ppx, #kPupilW/2, pos_l::xcoord
         sub16  ppy, #kPupilH/2, pos_l::ycoord
-        MGTK_CALL MGTK::MoveTo, pos_l
-        MGTK_CALL MGTK::LineTo, pos_l
 
         add16   rx, cx, cx
         add16   rx, cx, cx
         jsr     ComputePupilPos
         sub16  ppx, #kPupilW/2, pos_r::xcoord
         sub16  ppy, #kPupilH/2, pos_r::ycoord
-        MGTK_CALL MGTK::MoveTo, pos_r
-        MGTK_CALL MGTK::LineTo, pos_r
 
-        MGTK_CALL MGTK::ShowCursor
+        FALL_THROUGH_TO _DrawPupils
+
+.proc _DrawPupils
+        ldax    pos_l::xcoord
+        stax    pupil_rect+MGTK::Rect::x1
+        addax   #kPupilW, pupil_rect+MGTK::Rect::x2
+        ldax    pos_l::ycoord
+        stax    pupil_rect+MGTK::Rect::y1
+        addax   #kPupilH, pupil_rect+MGTK::Rect::y2
+        MGTK_CALL MGTK::ShieldCursor, pupil_rect
+        MGTK_CALL MGTK::PaintRect, pupil_rect
+        MGTK_CALL MGTK::UnshieldCursor
+        MGTK_CALL MGTK::CheckEvents
+
+        ldax    pos_r::xcoord
+        stax    pupil_rect+MGTK::Rect::x1
+        addax   #kPupilW, pupil_rect+MGTK::Rect::x2
+        ldax    pos_r::ycoord
+        stax    pupil_rect+MGTK::Rect::y1
+        addax   #kPupilH, pupil_rect+MGTK::Rect::y2
+        MGTK_CALL MGTK::ShieldCursor, pupil_rect
+        MGTK_CALL MGTK::PaintRect, pupil_rect
+        MGTK_CALL MGTK::UnshieldCursor
+        MGTK_CALL MGTK::CheckEvents
+
         rts
+.endproc ; _DrawPupils
+
 .endproc ; DrawWindow
 
 ;;; ============================================================
@@ -482,6 +500,8 @@ draw_pupils:
 ;;; Inputs: `eye_rect` must be set up by the caller
 
 .proc DrawEyeball
+        MGTK_CALL MGTK::ShieldCursor, eye_rect
+
         COPY_STRUCT MGTK::Rect, eye_rect, io_params::rect
         copy16  #outer_oval, io_params::oval
         sub16   io_params::rect::right, io_params::rect::left, io_params::width
@@ -535,9 +555,9 @@ outer_only:
 
 next:
         inc16   yy
-        cmp16   yy, outer_oval+OvalRec::bottom
-    WHILE LT
+    WHILE cmp16 yy, outer_oval+OvalRec::bottom : LT
 
+        MGTK_CALL MGTK::UnshieldCursor
         rts
 
 yy:     .word   0
@@ -732,8 +752,7 @@ oval := $50
 
         ;; if (ovalWidth [16.0] > d0 [16.0])
         ;;   ovalWidth [16.0] = d0 [16.0]
-        cmp16   ovalWidth, d0
-    IF LT
+    IF cmp16 ovalWidth, d0 : LT
         copy16  d0, ovalWidth
     END_IF
 
@@ -742,8 +761,7 @@ oval := $50
 
         ;; if (ovalHeight [16.0] > d0 [16.0])
         ;;   ovalHeight [16.0] = rect.bottom [16.0] - rect.top [16.0]
-        cmp16   ovalHeight, d0
-    IF LT
+    IF cmp16 ovalHeight, d0 : LT
         copy16  d0, ovalHeight
     END_IF
 
@@ -933,13 +951,11 @@ rotate:
 
         ;; if (vert [16.0] < oval.top [16.0])
         ;;   return;
-        cmp16   vert, oval+OvalRec::top
-        RTS_IF LT
+        RTS_IF cmp16 vert, oval+OvalRec::top : LT
 
         ;; if (vert [16.0] >= oval.bottom [16.0])
         ;;   return;
-        cmp16   vert, oval+OvalRec::bottom
-        RTS_IF GE
+        RTS_IF cmp16 vert, oval+OvalRec::bottom : GE
 
         ;; d0 [16.0] = oval.y [16.0];
         copy16  oval+OvalRec::yy, d0

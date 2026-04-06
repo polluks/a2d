@@ -375,8 +375,7 @@ END_PARAM_BLOCK
         copy16  #buf, string_width_params::str
       DO
         MGTK_CALL MGTK::StringWidth, string_width_params
-        cmp16   string_width_params::width, #kVolPickerItemWidth
-        BREAK_IF LT
+        BREAK_IF cmp16 string_width_params::width, #kVolPickerItemWidth : LT
         ;; Shrink by one character, replace last 3 with "..."
         dec     buf
         ldy     buf
@@ -488,31 +487,30 @@ path:
 ;;; Input: A = unit number
 
 .proc FormatUnit
-        sta     unit_num
+        sta     unit_number
 
+        sta     ALTZPOFF        ; Main ZP/LCBANKs
+        jsr     format
+        sta     ALTZPON         ; Aux ZP/LCBANKs
+        rts
+
+format:
         jsr     main::IsDiskII  ; returns Z=1 if yes
     IF ZS
         ;; Format as Disk II
-        TAIL_CALL FormatDiskII, A=unit_num
+        TAIL_CALL FormatDiskII, A=unit_number
     END_IF
 
         ;; Format using driver
-        CALL    GetDriverAddress, A=unit_num
-        stax    driver_addr
-
-        sta     ALTZPOFF        ; Main ZP/LCBANKs
+        CALL    GetDriverAddress, A=unit_number
+        stax    $06
 
         copy8   #DRIVER_COMMAND_FORMAT, DRIVER_COMMAND
-        unit_num := *+1
+        unit_number := *+1
         lda     #SELF_MODIFIED_BYTE
         sta     DRIVER_UNIT_NUMBER
 
-        driver_addr := *+1
-        jsr     SELF_MODIFIED
-
-        sta     ALTZPON         ; Aux ZP/LCBANKs
-
-        rts
+        jmp     ($06)
 .endproc ; FormatUnit
 
 ;;; ============================================================

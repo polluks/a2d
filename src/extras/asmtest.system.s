@@ -849,76 +849,24 @@ table := *
         nop
     END_IF
 
-        ;; LDX
-    IF ldx var : NS
-        nop
-    END_IF
-    IF LDX var : NS
-        nop
-    END_IF
-
-        ;; LDY
-    IF ldy var : NS
-        nop
-    END_IF
-    IF LDY var : NS
-        nop
-    END_IF
-
-        ;; INC
+        ;; Arbitrary instructions
     DO
         nop
-    WHILE inc var : X < #10
+    WHILE jsr target : NS
     DO
         nop
-    WHILE INC var : X < #10
-
-        ;; INX
-    DO
-        nop
-    WHILE inx : X < #10
-    DO
-        nop
-    WHILE INX : X < #10
-
-        ;; INY
-    DO
-        nop
-    WHILE iny : X < #10
-    DO
-        nop
-    WHILE INY : X < #10
-
-        ;; DEC
-    DO
-        nop
-    WHILE dec var : X < #10
-    DO
-        nop
-    WHILE DEC var : X < #10
-
-        ;; DEX
-    DO
-        nop
-    WHILE dex : X < #10
-    DO
-        nop
-    WHILE DEX : X < #10
-
-        ;; DEY
-    DO
-        nop
-    WHILE dey : X < #10
-    DO
-        nop
-    WHILE DEY : X < #10
+    WHILE jsr target : NS
 
         ;; Multiple statements
     DO
         nop
     WHILE dex : dex : POS
 
-        ;; Staments in "gotos"
+    DO
+        nop
+    WHILE jsr target : jsr target : NS
+
+        ;; Statements in "gotos"
     DO
         nop
         REDO_IF bit var : NS
@@ -928,6 +876,20 @@ table := *
         BREAK_IF bit var : NS
         nop
     WHILE POS
+
+        ;; Macros in statements
+    IF scmp16 var, var : POS
+        nop
+    END_IF
+    IF scmp16 var, #kConstant : POS
+        nop
+    END_IF
+        ;; Note that AS_BYTE(-1) will result in an assembly error
+        ;; because ca65 passes the whole rest of the line as the arg,
+        ;; since commas are the delimiter.
+    IF scmp16 var, #AS_BYTE{-1} : POS
+        nop
+    END_IF
 
 ;;; ============================================================
 ;;; Control Flow Macros - Functions
