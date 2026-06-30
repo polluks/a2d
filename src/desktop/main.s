@@ -35,8 +35,8 @@ JT_SYSTEM_TASK:         jmp     SystemTask              ; *
 JT_ACTIVATE_WINDOW:     jmp     ActivateAndRefreshWindow ; *
 JT_SHOW_ALERT:          jmp     ShowAlert               ; *
 JT_SHOW_ALERT_PARAMS:   jmp     ShowAlertStruct         ; *
-JT_LAUNCH_FILE:         jmp     LaunchFileWithPath
-JT_SHOW_FILE:           jmp     ShowFileWithPath        ; *
+JT_LAUNCH_FILE:         jmp     LaunchFileByPath
+JT_SHOW_FILE:           jmp     ShowFileIconForPath     ; *
 JT_RESTORE_OVL:         jmp     RestoreDynamicRoutine   ; *
 JT_COLOR_MODE:          jmp     SetColorMode            ; *
 JT_MONO_MODE:           jmp     SetMonoMode             ; *
@@ -507,7 +507,7 @@ offset_table:
         jmp     _IconClick
       END_IF
 
-        TAIL_CALL DragSelect, A=#0
+        TAIL_CALL _DragSelect, A=#0
     END_IF
 
     IF A = #MGTK::Area::menubar ; menu?
@@ -609,7 +609,7 @@ window_click:
 
         ;; Not an icon - maybe a drag?
         jsr     _ActivateClickedWindow ; no-op if already active
-        TAIL_CALL DragSelect, A=active_window_id
+        TAIL_CALL _DragSelect, A=active_window_id
     END_IF
 
         ;; --------------------------------------------------
@@ -719,7 +719,9 @@ h_proc_hi:        .hibytes ScrollNoOp, ScrollLeft, ScrollRight, ScrollPageLeft, 
         and     #kExtendSelectionModifierMask
       IF NOT ZERO
         ;; Modifier down - remove from selection
-        CALL    UnhighlightAndDeselectIcon, A=findicon_params::which_icon
+        ITK_CALL IconTK::UnhighlightIcon, findicon_params::which_icon
+        ITK_CALL IconTK::DrawIcon, findicon_params::which_icon
+        CALL    RemoveFromSelectionList, A=findicon_params::which_icon
         CLEAR_BIT7_FLAG maybe_select_parent_flag
         jmp     _ActivateClickedWindow ; no-op if already active
       END_IF
@@ -1000,6 +1002,192 @@ prev_selected_icon:
 .endproc ; _MaybeUpdateDropTargetFromName
 
 ;;; --------------------------------------------------
+;;; Drag Selection
+;;; Inputs: A = window_id (0 for desktop)
+;;; Assert: `cached_window_id` == A
+
+.proc _DragSelect
+
+PARAM_BLOCK, $10
+window_id       .byte    ; 0 = desktop, assumed to be active otherwise
+delta           .tag    MGTK::Point
+initial_pos     .tag    MGTK::Point
+last_pos        .tag    MGTK::Point
+END_PARAM_BLOCK
+
+        sta     window_id
+        jsr     CacheWindowIconList
+
+        lda     window_id
+    IF NOT_ZERO
+        ;; Map initial event coordinates
+        jsr     PrepActiveWindowScreenMapping
+        jsr     _CoordsScreenToWindow
+    END_IF
+
+        ;; Stash initial coords
+        COPY_STRUCT MGTK::Point, event_params::coords, initial_pos
+
+        ;; Is this actually a drag?
+        jsr     PeekEvent
+        lda     event_params::kind
+    IF A <> #MGTK::EventKind::drag
+        ;; No, just a click; optionally clear selection
+        lda     MainLoop::modifiers
+        and     #kExtendSelectionModifierMask
+        jeq     ClearSelection  ; don't clear if mis-clicking
+        rts
+    END_IF
+
+        ;; --------------------------------------------------
+        ;; Prep selection
+        lda     window_id
+        cmp     selected_window_id
+        bne     clear
+
+        lda     MainLoop::modifiers
+        and     #kExtendSelectionModifierMask
+        bne     :+
+
+clear:  jsr     ClearSelection
+        CALL    CacheWindowIconList, A=window_id
+:
+
+        ;; --------------------------------------------------
+        ;; Set up drawing port, draw initial rect
+        lda     window_id
+    IF NOT_ZERO
+        jsr     UnsafeSetPortForWindowIdAndAdjustForEntries ; ASSERT: not obscured
+    ELSE
+        jsr     InitSetDesktopPort
+    END_IF
+
+        ;; Any `ClearSelection` calls above may modify `tmp_rect`
+        ldx     #.sizeof(MGTK::Point)-1
+    DO
+        lda     initial_pos,x
+        sta     tmp_rect::topleft,x
+        sta     tmp_rect::bottomright,x
+    WHILE dex : POS
+
+        jsr     FrameTmpRect
+
+        ;; --------------------------------------------------
+        ;; Event loop
+event_loop:
+
+        ;; Done the drag?
+        jsr     PeekEvent
+        lda     event_params::kind
+    IF A <> #MGTK::EventKind::drag
+
+        jsr     FrameTmpRect
+
+        jsr     CachedIconsScreenToWindow
+
+        ;; Process all icons in window
+        ldx     #0              ; X = index
+      DO
+       IF X = cached_window_icon_count
+        jmp     CachedIconsWindowToScreen
+       END_IF
+
+        txa
+        pha                     ; A = index
+
+        ;; Check if icon should be selected
+        copy8   cached_window_icon_list,x, icon_param
+        ITK_CALL IconTK::IconInRect, icon_param
+       IF NOT ZERO
+
+        ;; Already selected?
+        CALL    IsIconSelected, A=icon_param
+        IF NE
+        ;; Highlight and add to selection
+        ;; NOTE: Does not use `AddIconToSelection` because we perform
+        ;; a more optimized drawing below.
+        ITK_CALL IconTK::HighlightIcon, icon_param
+        CALL    AddToSelectionList, A=icon_param
+        copy8   window_id, selected_window_id
+        ELSE
+        ;; Unhighlight and remove from selection
+        ITK_CALL IconTK::UnhighlightIcon, icon_param
+        CALL    RemoveFromSelectionList, A=icon_param
+        END_IF
+
+        lda     window_id
+        IF ZERO
+        ITK_CALL IconTK::DrawIcon, icon_param
+        ELSE
+        ITK_CALL IconTK::DrawIconRaw, icon_param ; CHECKED (drag select)
+        END_IF
+       ELSE
+        jsr     CheckEvents
+       END_IF
+
+        pla                     ; A = index
+        tax                     ; X = index
+      WHILE inx : NOT_ZERO      ; always
+    END_IF
+
+        ;; --------------------------------------------------
+        ;; Check movement threshold
+        lda     window_id
+    IF NOT_ZERO
+        jsr     _CoordsScreenToWindow
+    END_IF
+
+        ldx     #2              ; loop over dimensions
+    DO
+        sub16   event_params::coords,x, last_pos,x, delta,x
+
+        lda     delta+1,x
+      IF NEG
+        lda     delta,x         ; negate
+        eor     #$FF
+        sta     delta,x
+        inc     delta,x
+      END_IF
+
+        ;; TODO: Experiment with making this lower.
+        kDragBoundThreshold = 5
+
+        lda     delta,x
+        cmp     #kDragBoundThreshold
+        bcs     beyond
+
+    WHILE dex : dex : POS       ; next dimension
+        jmp     event_loop
+
+        ;; Beyond threshold; erase rect
+beyond:
+        jsr     FrameTmpRect
+
+        COPY_STRUCT event_params::coords, last_pos
+
+        ;; --------------------------------------------------
+        ;; Figure out coords for rect's left/top/bottom/right
+
+        ldx     #2              ; loop over dimensions
+    DO
+      IF scmp16 event_params::coords,x, initial_pos,x : NEG
+        copy16  event_params::coords,x, tmp_rect::topleft,x
+        copy16  initial_pos,x, tmp_rect::bottomright,x
+      ELSE
+        copy16  initial_pos,x, tmp_rect::topleft,x
+        copy16  event_params::coords,x, tmp_rect::bottomright,x
+      END_IF
+    WHILE dex : dex : POS       ; next dimension
+
+        jsr     FrameTmpRect
+        jmp     event_loop
+
+.proc _CoordsScreenToWindow
+        TAIL_CALL MapCoordsScreenToWindow, AX=#event_params::coords
+.endproc ; _CoordsScreenToWindow
+.endproc ; _DragSelect
+
+;;; --------------------------------------------------
 
 .proc _ActivateClickedWindow
         window_id := *+1
@@ -1035,7 +1223,7 @@ clicked_window_id := _ActivateClickedWindow::window_id
 ;;; ============================================================
 
 .proc DrawCachedWindowHeaderAndEntries
-        CALL    UnsafeSetPortFromWindowId, A=cached_window_id ; CHECKED
+        CALL    UnsafeSetPortForWindowId, A=cached_window_id ; CHECKED
     IF ZERO
         jsr     DrawWindowHeader
         jsr     AdjustWindowPortForEntries
@@ -1048,7 +1236,7 @@ clicked_window_id := _ActivateClickedWindow::window_id
 ;;; Redraw the active window's entries. The header is not redrawn.
 
 .proc ClearAndDrawActiveWindowEntries
-        CALL    UnsafeSetPortFromWindowIdAndAdjustForEntries, A=active_window_id ; CHECKED
+        CALL    UnsafeSetPortForWindowIdAndAdjustForEntries, A=active_window_id ; CHECKED
     IF ZERO
         jsr     EraseWindowBackground
         jsr     DrawWindowEntries
@@ -1069,37 +1257,37 @@ clicked_window_id := _ActivateClickedWindow::window_id
 
 ;;; Used only for file windows; adjusts port to account for header.
 ;;; Returns 0 if ok, `MGTK::Error::window_obscured` if the window is obscured.
-.proc UnsafeSetPortFromWindowIdAndAdjustForEntries
+.proc UnsafeSetPortForWindowIdAndAdjustForEntries
         sta     getwinport_params::window_id
         MGTK_CALL MGTK::GetWinPort, getwinport_params
     IF ZERO                     ; not MGTK::Error::window_obscured
         jsr     AdjustWindowPortForEntries
     END_IF
         rts
-.endproc ; UnsafeSetPortFromWindowIdAndAdjustForEntries
+.endproc ; UnsafeSetPortForWindowIdAndAdjustForEntries
 
 ;;; Used for all sorts of windows, not just file windows.
 ;;; For file windows, used for drawing headers (sometimes);
 ;;; Returns 0 if ok, `MGTK::Error::window_obscured` if the window is obscured.
-.proc UnsafeSetPortFromWindowId
+.proc UnsafeSetPortForWindowId
         sta     getwinport_params::window_id
         MGTK_CALL MGTK::GetWinPort, getwinport_params
     IF ZERO                     ; not MGTK::Error::window_obscured
         MGTK_CALL MGTK::SetPort, window_grafport
     END_IF
         rts
-.endproc ; UnsafeSetPortFromWindowId
+.endproc ; UnsafeSetPortForWindowId
 
 ;;; Used for windows that can never be obscured (e.g. dialogs)
         PROC_USED_IN_OVERLAY
         PROC_USED_IN_FORMAT_ERASE_OVERLAY
-.proc SafeSetPortFromWindowId
+.proc SafeSetPortForWindowId
         sta     getwinport_params::window_id
         MGTK_CALL MGTK::GetWinPort, getwinport_params
         ;; ASSERT: Result is not MGTK::Error::window_obscured
         MGTK_CALL MGTK::SetPort, window_grafport
         rts
-.endproc ; SafeSetPortFromWindowId
+.endproc ; SafeSetPortForWindowId
 
 ;;; ============================================================
 ;;; Update table tracking disk-in-device status, determine if
@@ -1449,7 +1637,7 @@ tmp_path_buf:
 ;;; Launch file (File > Open, Selector menu, or double-click)
 ;;; Inputs: Path in `src_path_buf` (a.k.a. `INVOKER_PREFIX`)
 
-.proc LaunchFileWithPathImpl
+.proc LaunchFileByPathImpl
         ENTRY_POINTS_FOR_BIT7_FLAG sys_disk, normal_disk, sys_prompt_flag
 
         ;; --------------------------------------------------
@@ -1712,7 +1900,7 @@ _CheckBasisSystem        := _CheckBasixSystemImpl::basis
 .proc _InvokeLink
         jsr     ReadLinkFile
         RTS_IF CS
-        jmp     LaunchFileWithPath
+        jmp     LaunchFileByPath
 .endproc ; _InvokeLink
 
 ;;; --------------------------------------------------
@@ -1736,9 +1924,9 @@ _CheckBasisSystem        := _CheckBasixSystemImpl::basis
 
         DEFINE_GET_PREFIX_PARAMS get_prefix_params, INVOKER_INTERPRETER
 
-.endproc ; LaunchFileWithPathImpl
-LaunchFileWithPathOnSystemDisk := LaunchFileWithPathImpl::sys_disk
-LaunchFileWithPath := LaunchFileWithPathImpl::normal_disk
+.endproc ; LaunchFileByPathImpl
+LaunchFileByPathOnSystemDisk := LaunchFileByPathImpl::sys_disk
+LaunchFileByPath := LaunchFileByPathImpl::normal_disk
 
 ;;; ============================================================
 
@@ -2045,7 +2233,7 @@ use_entry_path:
         FALL_THROUGH_TO launch
 
 launch: CALL    CopyPtr1ToBuf, AX=#INVOKER_PREFIX
-        jmp     LaunchFileWithPath
+        jmp     LaunchFileByPath
 
 entry_num:
         .byte   0
@@ -2207,7 +2395,7 @@ CmdAbout := AboutDialogProc
 
 .proc LaunchPassedPathOnSystemDisk
         CALL    CopyToSrcPath
-        TAIL_CALL LaunchFileWithPathOnSystemDisk
+        TAIL_CALL LaunchFileByPathOnSystemDisk
 .endproc ; LaunchPassedPathOnSystemDisk
 
 ;;; ============================================================
@@ -2250,7 +2438,7 @@ skip:   iny
         stx     path
 
         ;; Allow arbitrary types in menu (e.g. folders)
-        jmp     LaunchFileWithPathOnSystemDisk
+        jmp     LaunchFileByPathOnSystemDisk
 .endproc ; CmdDeskAccImpl
 CmdDeskAcc      := CmdDeskAccImpl::start
 
@@ -2674,7 +2862,7 @@ maybe_open_file:
         jne     ShowAlert       ; `ERR_INVALID_PATHNAME`
         CALL    CopyToSrcPath, AX=#operation_src_path
 
-        jmp     LaunchFileWithPath
+        jmp     LaunchFileByPath
 .endproc ; CmdOpen
 CmdOpenThenCloseCurrent := CmdOpen::open_then_close_current
 CmdOpenFromDoubleClick := CmdOpen::from_double_click
@@ -4281,12 +4469,12 @@ ret:    rts
 ;;; Inputs: A = icon id
 
 .proc SelectIconAndEnsureVisible
-        ;; No-op if already single selected icon
+        ;; No need to twiddle selection if already the single selection
         ldy     selected_icon_count
         dey
     IF ZERO
         cmp     selected_icon_list
-        RTS_IF EQ
+        beq     make_visible
     END_IF
 
         pha
@@ -4298,6 +4486,7 @@ ret:    rts
         jsr     ActivateWindow  ; no-op if already active, or 0
         pla
 
+make_visible:
         FALL_THROUGH_TO AddIconToSelectionAndEnsureVisible
 .endproc ; SelectIconAndEnsureVisible
 
@@ -5279,7 +5468,7 @@ arbitrary_target:
 
         CALL    UpdateUsedFreeViaPath, AX=#dst_path_buf
 
-        jsr     ShowFileWithPath
+        jsr     ShowFileIconForPath
         RTS_IF CS
 
         ;; Select and rename the file
@@ -5306,7 +5495,7 @@ err:    TAIL_CALL ShowAlertOption, X=#AlertButtonOptions::OK
         ;; File or volume?
         CALL    FindLastPathSegment, AX=#src_path_buf ; point Y at last '/'
         cpy     src_path_buf
-        jne     ShowFileWithPath
+        jne     ShowFileIconForPath
 
         ;; Volume
         CALL    FindIconForPath, AX=#src_path_buf
@@ -5382,19 +5571,6 @@ alert:  jmp     ShowAlert       ; either `ERR_INVALID_PATHNAME` or `ERR_FILE_NOT
 .endproc ; AddToSelectionList
 
 ;;; ============================================================
-;;; Remove specified icon from selection list, and redraw.
-;;; Input: A = icon number
-;;; Assert: Must be in selection list.
-
-.proc UnhighlightAndDeselectIcon
-        sta     icon_param
-        ITK_CALL IconTK::UnhighlightIcon, icon_param
-        ITK_CALL IconTK::DrawIcon, icon_param
-
-        FALL_THROUGH_TO RemoveFromSelectionList, A=icon_param
-.endproc ; UnhighlightAndDeselectIcon
-
-;;; ============================================================
 ;;; Remove specified icon from `selected_icon_list`
 ;;; Inputs: A = icon_num
 ;;; Assert: icon is present in the list.
@@ -5467,7 +5643,7 @@ exception_flag:
     END_IF
 
         ;; Clear background
-        CALL    UnsafeSetPortFromWindowId, A=active_window_id ; CHECKED
+        CALL    UnsafeSetPortForWindowId, A=active_window_id ; CHECKED
         pha                     ; A = obscured?
     IF ZERO                     ; skip if obscured
         jsr     EraseWindowBackground
@@ -5504,192 +5680,6 @@ exception_flag:
         ;; Create icons and draw contents
         jmp     RefreshView
 .endproc ; ActivateAndRefreshWindow
-
-;;; ============================================================
-;;; Drag Selection
-;;; Inputs: A = window_id (0 for desktop)
-;;; Assert: `cached_window_id` == A
-
-.proc DragSelect
-
-PARAM_BLOCK, $10
-window_id       .byte    ; 0 = desktop, assumed to be active otherwise
-delta           .tag    MGTK::Point
-initial_pos     .tag    MGTK::Point
-last_pos        .tag    MGTK::Point
-END_PARAM_BLOCK
-
-        sta     window_id
-        jsr     CacheWindowIconList
-
-        lda     window_id
-    IF NOT_ZERO
-        ;; Map initial event coordinates
-        jsr     PrepActiveWindowScreenMapping
-        jsr     _CoordsScreenToWindow
-    END_IF
-
-        ;; Stash initial coords
-        COPY_STRUCT MGTK::Point, event_params::coords, initial_pos
-
-        ;; Is this actually a drag?
-        jsr     PeekEvent
-        lda     event_params::kind
-    IF A <> #MGTK::EventKind::drag
-        ;; No, just a click; optionally clear selection
-        lda     MainLoop::modifiers
-        and     #kExtendSelectionModifierMask
-        jeq     ClearSelection  ; don't clear if mis-clicking
-        rts
-    END_IF
-
-        ;; --------------------------------------------------
-        ;; Prep selection
-        lda     window_id
-        cmp     selected_window_id
-        bne     clear
-
-        lda     MainLoop::modifiers
-        and     #kExtendSelectionModifierMask
-        bne     :+
-
-clear:  jsr     ClearSelection
-        CALL    CacheWindowIconList, A=window_id
-:
-
-        ;; --------------------------------------------------
-        ;; Set up drawing port, draw initial rect
-        lda     window_id
-    IF NOT_ZERO
-        jsr     UnsafeSetPortFromWindowIdAndAdjustForEntries ; ASSERT: not obscured
-    ELSE
-        jsr     InitSetDesktopPort
-    END_IF
-
-        ;; Any `ClearSelection` calls above may modify `tmp_rect`
-        ldx     #.sizeof(MGTK::Point)-1
-    DO
-        lda     initial_pos,x
-        sta     tmp_rect::topleft,x
-        sta     tmp_rect::bottomright,x
-    WHILE dex : POS
-
-        jsr     FrameTmpRect
-
-        ;; --------------------------------------------------
-        ;; Event loop
-event_loop:
-
-        ;; Done the drag?
-        jsr     PeekEvent
-        lda     event_params::kind
-    IF A <> #MGTK::EventKind::drag
-
-        jsr     FrameTmpRect
-
-        jsr     CachedIconsScreenToWindow
-
-        ;; Process all icons in window
-        ldx     #0              ; X = index
-      DO
-       IF X = cached_window_icon_count
-        jmp     CachedIconsWindowToScreen
-       END_IF
-
-        txa
-        pha                     ; A = index
-
-        ;; Check if icon should be selected
-        copy8   cached_window_icon_list,x, icon_param
-        ITK_CALL IconTK::IconInRect, icon_param
-       IF NOT ZERO
-
-        ;; Already selected?
-        CALL    IsIconSelected, A=icon_param
-        IF NE
-        ;; Highlight and add to selection
-        ;; NOTE: Does not use `AddIconToSelection` because we perform
-        ;; a more optimized drawing below.
-        ITK_CALL IconTK::HighlightIcon, icon_param
-        CALL    AddToSelectionList, A=icon_param
-        copy8   window_id, selected_window_id
-        ELSE
-        ;; Unhighlight and remove from selection
-        ITK_CALL IconTK::UnhighlightIcon, icon_param
-        CALL    RemoveFromSelectionList, A=icon_param
-        END_IF
-
-        lda     window_id
-        IF ZERO
-        ITK_CALL IconTK::DrawIcon, icon_param
-        ELSE
-        ITK_CALL IconTK::DrawIconRaw, icon_param ; CHECKED (drag select)
-        END_IF
-       ELSE
-        jsr     CheckEvents
-       END_IF
-
-        pla                     ; A = index
-        tax                     ; X = index
-      WHILE inx : NOT_ZERO      ; always
-    END_IF
-
-        ;; --------------------------------------------------
-        ;; Check movement threshold
-        lda     window_id
-    IF NOT_ZERO
-        jsr     _CoordsScreenToWindow
-    END_IF
-
-        ldx     #2              ; loop over dimensions
-    DO
-        sub16   event_params::coords,x, last_pos,x, delta,x
-
-        lda     delta+1,x
-      IF NEG
-        lda     delta,x         ; negate
-        eor     #$FF
-        sta     delta,x
-        inc     delta,x
-      END_IF
-
-        ;; TODO: Experiment with making this lower.
-        kDragBoundThreshold = 5
-
-        lda     delta,x
-        cmp     #kDragBoundThreshold
-        bcs     beyond
-
-    WHILE dex : dex : POS       ; next dimension
-        jmp     event_loop
-
-        ;; Beyond threshold; erase rect
-beyond:
-        jsr     FrameTmpRect
-
-        COPY_STRUCT event_params::coords, last_pos
-
-        ;; --------------------------------------------------
-        ;; Figure out coords for rect's left/top/bottom/right
-
-        ldx     #2              ; loop over dimensions
-    DO
-      IF scmp16 event_params::coords,x, initial_pos,x : NEG
-        copy16  event_params::coords,x, tmp_rect::topleft,x
-        copy16  initial_pos,x, tmp_rect::bottomright,x
-      ELSE
-        copy16  initial_pos,x, tmp_rect::topleft,x
-        copy16  event_params::coords,x, tmp_rect::bottomright,x
-      END_IF
-    WHILE dex : dex : POS       ; next dimension
-
-        jsr     FrameTmpRect
-        jmp     event_loop
-
-.proc _CoordsScreenToWindow
-        TAIL_CALL MapCoordsScreenToWindow, AX=#event_params::coords
-.endproc ; _CoordsScreenToWindow
-.endproc ; DragSelect
 
 ;;; ============================================================
 ;;; Initiate keyboard-based window moving
@@ -5796,9 +5786,7 @@ beyond:
         dec     num_open_windows
 
         ldx     cached_window_id
-        ASSERT_EQUALS ::kWindowToDirIconFree, 0
-        ASSERT_EQUALS DeskTopSettings::kViewByIcon, 0
-        copy8   #0, window_to_dir_icon_table-1,x ; `kWindowToDirIconFree`
+        copy8   #kWindowToDirIconFree, window_to_dir_icon_table-1,x
 
         ;; Record the new active window
         MGTK_CALL MGTK::FrontWindow, active_window_id
@@ -6176,7 +6164,7 @@ no_win:
     END_IF
 
         ;; Used cached window's details, which are correct now.
-        CALL    AssignWindowBlockCounts, A=cached_window_id
+        CALL    AssignWindowUsedFree, A=cached_window_id
 
         copy16  window_blocks_used_table-2,x, window_draw_blocks_used_table-2,x ; 1-based to 0-based
         copy16  window_blocks_free_table-2,x, window_draw_blocks_free_table-2,x
@@ -6252,6 +6240,7 @@ OpenWindowForPath := OpenWindowImpl::for_path
 ;;; it, e.g. if they will subsequently select the icon.
 ;;; Input: A = `icon_id`
 ;;; Trashes $06
+;;; Note: Does not modify `window_to_dir_icon_table` entry
 
 .proc MarkIconNotDimmedNoDraw
         ptr := $06
@@ -6271,6 +6260,7 @@ OpenWindowForPath := OpenWindowImpl::for_path
 ;;; ============================================================
 ;;; Used when recovering from a failed open (bad path, too many icons, etc)
 ;;; Inputs: `icon_param` points at icon
+;;; Note: Marks `window_to_dir_icon_table` entry as `kWindowToDirIconFree` if appropriate
 
 .proc MarkIconNotDimmed
         ;; Find open window for the icon
@@ -6297,7 +6287,7 @@ OpenWindowForPath := OpenWindowImpl::for_path
 ;;; Output: C=0 on success
 ;;; Assert: Path is not a volume path
 
-.proc ShowFileWithPath
+.proc ShowFileIconForPath
         jsr     SplitInvokerPath
 
         copy8   num_open_windows, old
@@ -6319,7 +6309,7 @@ OpenWindowForPath := OpenWindowImpl::for_path
         RETURN  C=0
 
 err:    RETURN  C=1
-.endproc ; ShowFileWithPath
+.endproc ; ShowFileIconForPath
 
 ;;; ============================================================
 ;;; Find an icon for a given path. May be volume or in any window.
@@ -6467,7 +6457,7 @@ done:
         ;; drawing can be done using `IconTK::DrawIconRaw` in a
         ;; clipped port.
 
-        jsr     UnsafeSetPortFromWindowIdAndAdjustForEntries ; CHECKED
+        jsr     UnsafeSetPortForWindowIdAndAdjustForEntries ; CHECKED
         RTS_IF NOT_ZERO         ; obscured
 
         jsr     PushPointers
@@ -6602,7 +6592,7 @@ CachedIconsWindowToScreen := CachedIconsXToYImpl::w2s
         ldy     found_windows_count
       IF NOT_ZERO
        DO
-        CALL    AssignWindowBlockCounts, A=found_windows_list-1,y
+        CALL    AssignWindowUsedFree, A=found_windows_list-1,y
        WHILE dey : NOT_ZERO
       END_IF
     END_IF
@@ -6613,13 +6603,13 @@ CachedIconsWindowToScreen := CachedIconsXToYImpl::w2s
 ;;; Update `window_blocks_used_table`/`window_blocks_free_table`
 ;;; Input: A = window_id, `vol_blocks_used`/`vol_blocks_free` set
 ;;; Output: X = window_id*2, Y unchanged
-.proc AssignWindowBlockCounts
+.proc AssignWindowUsedFree
         asl     a
         tax
         copy16  vol_blocks_used, window_blocks_used_table-2,x ; 1-based to 0-based
         copy16  vol_blocks_free, window_blocks_free_table-2,x
         rts
-.endproc ; AssignWindowBlockCounts
+.endproc ; AssignWindowUsedFree
 
 ;;; ============================================================
 ;;; Find position of last segment of path at (A,X), return in Y.
@@ -12995,7 +12985,7 @@ ok:     RETURN  A=#0
         CALL    AnimateWindowOpen, X=#$FF ; desktop
 
         MGTK_CALL MGTK::OpenWindow, winfo_about_dialog
-        CALL    SafeSetPortFromWindowId, A=#winfo_about_dialog::kWindowId
+        CALL    SafeSetPortForWindowId, A=#winfo_about_dialog::kWindowId
         CALL    DrawDialogFrame, AX=#aux::about_dialog_frame_rect
 
         MGTK_CALL MGTK::MoveTo, prompt_dialog_title_pos
@@ -13055,7 +13045,7 @@ ok:     RETURN  A=#0
         ;; Construct path and execute it
         CALL    CopyToSrcPath, AX=#str_startup_items
         CALL    AppendFilenameToSrcPath, AX=#filename_buf
-        CALL    LaunchFileWithPathOnSystemDisk
+        CALL    LaunchFileByPathOnSystemDisk
 
         pla
         tax
@@ -13722,7 +13712,7 @@ ignore: RETURN  C=1
 ;;; ============================================================
 
 .proc SetPortForProgressDialog
-        TAIL_CALL SafeSetPortFromWindowId, A=#winfo_progress_dialog::kWindowId
+        TAIL_CALL SafeSetPortForWindowId, A=#winfo_progress_dialog::kWindowId
 .endproc ; SetPortForProgressDialog
 
 .proc SetPortForProgressDialogAndShieldCursor
@@ -14273,7 +14263,7 @@ params:  .res    3
 
         PROC_USED_IN_FORMAT_ERASE_OVERLAY
 .proc SetPortForPromptDialog
-        TAIL_CALL SafeSetPortFromWindowId, A=#winfo_prompt_dialog::kWindowId
+        TAIL_CALL SafeSetPortForWindowId, A=#winfo_prompt_dialog::kWindowId
 .endproc ; SetPortForPromptDialog
 
 ;;; ============================================================
