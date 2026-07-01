@@ -202,12 +202,32 @@ skip_get:
         ITK_CALL IconTK::DrawAll, event_params::window_id
       ELSE_IF A < #kMaxDeskTopWindows+1 ; 1...max are ours
         ;; Directory Window
-        jsr     UpdateWindow
+        jsr     _UpdateWindow
       END_IF
         MGTK_CALL MGTK::EndUpdate
     WHILE ZERO                  ; always
 
         rts
+
+;;; --------------------------------------------------
+
+;;; Inputs: A = `window_id` from `update` event
+.proc _UpdateWindow
+        sta     getwinport_params::window_id
+        jsr     CacheWindowIconList
+
+        ;; `AdjustUpdatePortForEntries` relies on `window_grafport`
+        ;; for dimensions
+        MGTK_CALL MGTK::GetWinPort, getwinport_params
+
+        ;; This correctly uses the clipped port provided by BeginUpdate.
+
+        jsr     DrawWindowHeader
+
+        jsr     AdjustUpdatePortForEntries
+        jmp     DrawWindowEntries
+.endproc ; _UpdateWindow
+
 .endproc ; ClearUpdates
 ClearUpdatesSkipGet := ClearUpdates::skip_get
 
@@ -241,26 +261,6 @@ ClearUpdatesSkipGet := ClearUpdates::skip_get
 
 tick_counter:
         .faraddr 0
-
-;;; ============================================================
-
-        PROC_USED_CLEARING_UPDATES
-;;; Inputs: A = `window_id` from `update` event
-.proc UpdateWindow
-        sta     getwinport_params::window_id
-        jsr     CacheWindowIconList
-
-        ;; `AdjustUpdatePortForEntries` relies on `window_grafport`
-        ;; for dimensions
-        MGTK_CALL MGTK::GetWinPort, getwinport_params
-
-        ;; This correctly uses the clipped port provided by BeginUpdate.
-
-        jsr     DrawWindowHeader
-
-        jsr     AdjustUpdatePortForEntries
-        jmp     DrawWindowEntries
-.endproc ; UpdateWindow
 
 ;;; ============================================================
 ;;; Menu Dispatch
@@ -6124,7 +6124,7 @@ no_win:
         iny
         copy8   #0, (winfo_ptr),y
 
-        ;; Map rect (initially empty, size assigned in `ComputeInitialWindowSize`)
+        ;; Map rect (initially empty, size assigned in `_ComputeInitialWindowSize`)
         lda     #0
         ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + .sizeof(MGTK::Rect)-1
         ldx     #.sizeof(MGTK::Rect)-1
@@ -6195,7 +6195,7 @@ no_win:
         jsr     InitWindowIcons
 
     IF bit copy_new_window_bounds_flag : NC
-        jsr     ComputeInitialWindowSize
+        jsr     _ComputeInitialWindowSize
         jsr     AdjustViewportForNewIcons
     END_IF
 
@@ -6208,6 +6208,99 @@ no_win:
 
         rts
 .endproc ; _PrepareNewWindow
+
+;;; --------------------------------------------------
+;;; Compute the window initial size for `cached_window_id`,
+;;; based on icons bounding box.
+;;; Output: Updates the Winfo record's maprect right/bottom.
+
+.proc _ComputeInitialWindowSize
+
+        jsr     PushPointers
+
+        ;; NOTE: Coordinates (screen vs. window) doesn't matter
+        ;; Results in `iconbb_rect` are ignored if window is empty
+        jsr     ComputeIconsBBox
+
+        winfo_ptr := $06
+
+        CALL    GetWindowPtr, A=cached_window_id
+        stax    winfo_ptr
+
+        ;; convert right/bottom to width/height
+        bbox_dx := iconbb_rect+MGTK::Rect::x2
+        bbox_dy := iconbb_rect+MGTK::Rect::y2
+
+        ldx     #2              ; loop over dimensions
+    DO
+        sub16   bbox_dx,x, iconbb_rect+MGTK::Rect::topleft,x, bbox_dx,x
+    WHILE dex : dex: POS
+
+        ;; Account for window header
+        add16_8 bbox_dy, #kWindowHeaderHeight
+
+        ;; --------------------------------------------------
+        ;; Width
+
+        lda     cached_window_icon_count
+        beq     use_minw        ; `iconbb_rect` is bogus if there are no icons
+
+        ;; Check if width is < min or > max
+        cmp16   bbox_dx, #kMinWindowWidth
+        bcc     use_minw
+        cmp16   bbox_dx, #kMaxWindowWidth
+        bcs     use_maxw
+        ldax    bbox_dx
+        bcc     assign_width    ; always
+
+use_minw:
+        ldax    #kMinWindowWidth
+        ASSERT_EQUALS .hibyte(::kMinWindowWidth), 0
+        beq     assign_width    ; always
+
+use_maxw:
+        ldax    #kMaxWindowWidth
+
+assign_width:
+        ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + MGTK::Rect::x2
+        sta     (winfo_ptr),y
+        txa
+        iny
+        sta     (winfo_ptr),y
+
+        ;; --------------------------------------------------
+        ;; Height
+
+        lda     cached_window_icon_count
+        beq     use_minh        ; `iconbb_rect` is bogus if there are no icons
+
+        ;; Check if height is < min or > max
+        cmp16   bbox_dy, #kMinWindowHeight
+        bcc     use_minh
+        cmp16   bbox_dy, #kMaxWindowHeight
+        bcs     use_maxh
+        ldax    bbox_dy
+        bcc     assign_height   ; always
+
+use_minh:
+        ldax    #kMinWindowHeight
+        ASSERT_EQUALS .hibyte(::kMinWindowHeight), 0
+        beq     assign_height   ; always
+
+use_maxh:
+        ldax    #kMaxWindowHeight
+
+assign_height:
+        ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + MGTK::Rect::y2
+        sta     (winfo_ptr),y
+        txa
+        iny
+        sta     (winfo_ptr),y
+
+        ;; Finished
+        jsr     PopPointers     ; do not tail-call optimise!
+        rts
+.endproc ; _ComputeInitialWindowSize
 
 .endproc ; OpenWindowImpl
 OpenWindowForIcon := OpenWindowImpl::for_icon
@@ -6388,7 +6481,7 @@ err:    RETURN  C=1
 
         ;; Look up file record number
         jsr     GetIconRecordNum
-        jsr     DrawListViewRow
+        jsr     _DrawListViewRow
 
         jsr     CheckEvents
 
@@ -6401,7 +6494,327 @@ err:    RETURN  C=1
         ;; --------------------------------------------------
 done:
         rts
+
+;;; --------------------------------------------------
+;;; A = entry number
+
+.proc _DrawListViewRow
+
+        ptr := $06
+
+        ASSERT_EQUALS .sizeof(FileRecord), 32
+        jsr     ATimes32        ; A,X = A * 32
+        addax   file_record_ptr, ptr
+
+        ;; Copy into more convenient location (LCBANK1)
+        bit     LCBANK2
+        bit     LCBANK2
+        ldy     #.sizeof(FileRecord)-1
+    DO
+        copy8   (ptr),y, list_view_filerecord,y
+    WHILE dey : POS
+        bit     LCBANK1
+        bit     LCBANK1
+
+        viewport := window_grafport+MGTK::GrafPort::maprect
+
+        ;; Below bottom?
+        scmp16  pos_col::ycoord, viewport+MGTK::Rect::y2
+        bpl     ret
+
+        copy16  pos_col::ycoord, list_view_shield_rect::y1
+        add16   pos_col::ycoord, #kListViewRowHeight, pos_col::ycoord
+
+        ;; Above top?
+        scmp16  pos_col::ycoord, viewport+MGTK::Rect::y1
+        bpl     in_range
+ret:    rts
+
+        ;; Draw it!
+in_range:
+        copy16  pos_col::ycoord, list_view_shield_rect::y2
+        MGTK_CALL MGTK::ShieldCursor, list_view_shield_rect
+
+        CALL    set_pos, AX=#kColLock
+        jsr     _PrepareColLock
+        lda     text_buffer2
+    IF NOT ZERO
+        MGTK_CALL MGTK::DrawString, text_buffer2
+    END_IF
+
+        CALL    set_pos, AX=#kColType
+        jsr     _PrepareColType
+        MGTK_CALL MGTK::DrawString, text_buffer2
+
+        CALL    set_pos, AX=#kColSize
+        jsr     _PrepareColSize
+        CALL    DrawStringRight, AX=#text_buffer2
+
+        CALL    set_pos, AX=#kColDate
+        jsr     ComposeDateString
+        MGTK_CALL MGTK::DrawString, text_buffer2
+        TAIL_CALL UnshieldCursor
+
+set_pos:
+        stax    pos_col::xcoord
+        MGTK_CALL MGTK::MoveTo, pos_col
+        rts
+
+;;; ============================================================
+
+.proc _PrepareColType
+        file_type := list_view_filerecord + FileRecord::file_type
+
+        CALL    ComposeFileTypeString, A=file_type
+
+        COPY_BYTES 4, str_file_type, text_buffer2 ; 3 characters + length
+
+        rts
+.endproc ; _PrepareColType
+
+.proc _PrepareColLock
+        copy8   #0, text_buffer2
+
+        access := list_view_filerecord + FileRecord::access
+        lda     access
+        and     #ACCESS_DEFAULT
+    IF A <> #ACCESS_DEFAULT
+        inc     text_buffer2
+        copy8   #kGlyphLock, text_buffer2+1
+    END_IF
+
+        rts
+.endproc ; _PrepareColLock
+
+.proc _PrepareColSize
+        file_type := list_view_filerecord + FileRecord::file_type
+
+    IF lda file_type : A = #FT_DIRECTORY
+        copy8   #1, text_buffer2
+        copy8   #'-', text_buffer2+1
+        rts
+    END_IF
+
+        blocks := list_view_filerecord + FileRecord::blocks
+
+        FALL_THROUGH_TO ComposeSizeString, AX=blocks
+.endproc ; _PrepareColSize
+
+.endproc ; _DrawListViewRow
+
 .endproc ; DrawWindowEntries
+
+;;; ============================================================
+;;; Populate `text_buffer2` with "12,345K"
+;;; Trashes: $06
+
+        PROC_USED_CLEARING_UPDATES
+.proc ComposeSizeString
+        value := $06
+
+        stax    value           ; size in 512-byte blocks
+
+        CALL    ReadSetting, X=#DeskTopSettings::intl_deci_sep
+        sta     deci_sep
+
+        CLEAR_BIT7_FLAG frac_flag
+
+    IF cmp16 value, #20 : LT
+        lsr16   value           ; Convert blocks to K, rounding up
+        ror     frac_flag       ; If < 10k and odd, show ".5" suffix"
+    ELSE
+        lsr16   value           ; Convert blocks to K, rounding up
+      IF CS                     ; NOTE: divide then maybe inc, rather than
+        inc16   value           ; always inc then divide, to handle $FFFF
+      END_IF
+    END_IF
+
+        CALL    IntToStringWithSeparators, AX=value
+        ldx     #0
+
+        ;; Append number
+        ldy     #0
+    DO
+        copy8   str_from_int+1,y, text_buffer2+1,x
+    WHILE iny : inx : Y <> str_from_int
+
+        ;; Append ".5" if needed
+        frac_flag := *+1
+        lda     #SELF_MODIFIED_BYTE ; bit7
+    IF NS
+        deci_sep := *+1
+        lda     #SELF_MODIFIED_BYTE
+        sta     text_buffer2+1,x
+        inx
+        copy8   #'5', text_buffer2+1,x
+        inx
+    END_IF
+
+        ;; Append suffix
+        ldy     #0
+    DO
+        copy8   str_kb_suffix+1, y, text_buffer2+1,x
+    WHILE iny : inx : Y <> str_kb_suffix
+
+        stx     text_buffer2
+        rts
+.endproc ; ComposeSizeString
+
+;;; ============================================================
+
+        PROC_USED_CLEARING_UPDATES
+.proc ComposeDateString
+        lda     datetime_for_conversion ; any bits set?
+        ora     datetime_for_conversion+1
+    IF ZERO
+        COPY_STRING str_no_date, text_buffer2
+        rts
+    END_IF
+
+        copy16  #parsed_date, $0A
+        CALL    ParseDatetime, AX=#datetime_for_conversion
+
+        ;; --------------------------------------------------
+        ;; Date
+
+
+    IF ecmp16 datetime_for_conversion, DATELO : EQ
+        TAIL_CALL finish_date, AX=#str_today
+    END_IF
+
+        tmp_date := $A
+
+        copy16  datetime_for_conversion, tmp_date
+        jsr     _DecP8Date
+    IF ecmp16 DATELO, tmp_date : EQ
+        TAIL_CALL finish_date, AX=#str_tomorrow
+    END_IF
+
+        copy16  DATELO, tmp_date
+        jsr     _DecP8Date
+    IF ecmp16 datetime_for_conversion, tmp_date : EQ
+        TAIL_CALL finish_date, AX=#str_yesterday
+    END_IF
+
+        ;; arg0 = day
+        lda     day
+        pha
+        lda     #0
+        pha
+
+        ;; arg1 = month
+        lda     month
+        asl     a
+        tay
+        lda     month_table,y
+        pha
+        lda     month_table+1,y
+        pha
+
+        ;; arg2 = year
+        push16  year
+
+        CALL    ReadSetting, X=#DeskTopSettings::intl_date_order
+        ASSERT_EQUALS DeskTopSettings::kDateOrderMDY, 0
+    IF ZERO
+        ;; Month Day, Year
+        FORMAT_MESSAGE 3, str_mdy_format
+    ELSE
+        ;; Day Month Year
+        FORMAT_MESSAGE 3, str_dmy_format
+    END_IF
+
+        COPY_STRING text_input_buf, text_buffer2
+        ldax    #text_buffer2
+
+finish_date:
+        ;; arg0 = date
+        phax
+
+        ;; --------------------------------------------------
+        ;; Time
+
+        ;; arg1 = time
+        CALL    MakeTimeString, AX=#parsed_date
+        push16  #str_time
+
+        FORMAT_MESSAGE 2, str_datetime_format
+        COPY_STRING text_input_buf, text_buffer2
+        rts
+
+year    := parsed_date + ParsedDateTime::year
+month   := parsed_date + ParsedDateTime::month
+day     := parsed_date + ParsedDateTime::day
+hour    := parsed_date + ParsedDateTime::hour
+min     := parsed_date + ParsedDateTime::minute
+
+.proc _DecP8Date
+        DATELO := tmp_date
+        DATEHI := tmp_date+1
+
+;;; ====================================================
+;;;  DecP8Date - Takes a 16-bit P8 date and
+;;;              calculates the previous day
+;;; ----------------------------------------------------
+;;;  Written 5/30/2025 by John Brooks as part of the
+;;;  open-source AppleII Desktop code-golf challenge
+;;;  64-bytes
+;;; ====================================================
+
+;;;        7 6 5 4 3 2 1 0   7 6 5 4 3 2 1 0
+;;;       +-+-+-+-+-+-+-+-+ +-+-+-+-+-+-+-+-+
+;;; DATE: |    year     |  month  |   day   |
+;;;       +-+-+-+-+-+-+-+-+ +-+-+-+-+-+-+-+-+
+
+        dec     DATELO          ; dec day
+        lda     DATELO
+        and     #%00011111      ; day
+        bne     done
+
+        lsr     DATEHI          ; C = month high bit, year in DATEHI
+        lda     DATELO
+        ror                     ; A = month * 16
+        sbc     #1*16-1         ; dec month * 16 (-1 for c=0)
+        bne     calc_days
+
+        dec     DATEHI          ; year - 1
+    IF NEG
+        copy8   #99, DATEHI     ; wrap to year 99 (not 127)
+    END_IF
+        lda     #12*16          ; month = december
+
+calc_days:
+        tax                     ; X = month * 16
+        sta     DATELO
+        bpl     pre_august
+        eor     #1*16           ; 31 days in odd months 1-7 and in even months 8-12
+pre_august:
+        and     #1*16
+        adc     #$f0            ; C=1 if 31-day month (except Feb)
+        lda     #30/2
+        rol                     ; A = days in new month, 30 or 31
+
+        cpx     #2*16           ; Is new month == feb?
+        bne     not_feb
+
+        lda     DATEHI          ; C=1 from cpx above
+        and     #3              ; is year divisible by 4?
+        beq     is_leap
+        clc                     ; 28 days if not a leap year
+is_leap:
+        lda     #28/2           ; if C=1, 29 day leap year
+        rol
+
+not_feb:
+        asl     DATELO          ; 3 month bits in LO, top bit in C
+        ora     DATELO          ; merge day in A with 3 month bits
+        sta     DATELO          ; save day & month
+        rol     DATEHI          ; save year and month high bit
+done:
+        rts
+.endproc ; _DecP8Date
+
+.endproc ; ComposeDateString
 
 ;;; ============================================================
 ;;; Retrieve the `IconEntry::record_num` for a given icon.
@@ -7135,99 +7548,6 @@ vol_blocks_used:  .word   0
 
 copy_new_window_bounds_flag:
         .byte   0
-
-;;; ============================================================
-;;; Compute the window initial size for `cached_window_id`,
-;;; based on icons bounding box.
-;;; Output: Updates the Winfo record's maprect right/bottom.
-
-.proc ComputeInitialWindowSize
-
-        jsr     PushPointers
-
-        ;; NOTE: Coordinates (screen vs. window) doesn't matter
-        ;; Results in `iconbb_rect` are ignored if window is empty
-        jsr     ComputeIconsBBox
-
-        winfo_ptr := $06
-
-        CALL    GetWindowPtr, A=cached_window_id
-        stax    winfo_ptr
-
-        ;; convert right/bottom to width/height
-        bbox_dx := iconbb_rect+MGTK::Rect::x2
-        bbox_dy := iconbb_rect+MGTK::Rect::y2
-
-        ldx     #2              ; loop over dimensions
-    DO
-        sub16   bbox_dx,x, iconbb_rect+MGTK::Rect::topleft,x, bbox_dx,x
-    WHILE dex : dex: POS
-
-        ;; Account for window header
-        add16_8 bbox_dy, #kWindowHeaderHeight
-
-        ;; --------------------------------------------------
-        ;; Width
-
-        lda     cached_window_icon_count
-        beq     use_minw        ; `iconbb_rect` is bogus if there are no icons
-
-        ;; Check if width is < min or > max
-        cmp16   bbox_dx, #kMinWindowWidth
-        bcc     use_minw
-        cmp16   bbox_dx, #kMaxWindowWidth
-        bcs     use_maxw
-        ldax    bbox_dx
-        bcc     assign_width    ; always
-
-use_minw:
-        ldax    #kMinWindowWidth
-        ASSERT_EQUALS .hibyte(::kMinWindowWidth), 0
-        beq     assign_width    ; always
-
-use_maxw:
-        ldax    #kMaxWindowWidth
-
-assign_width:
-        ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + MGTK::Rect::x2
-        sta     (winfo_ptr),y
-        txa
-        iny
-        sta     (winfo_ptr),y
-
-        ;; --------------------------------------------------
-        ;; Height
-
-        lda     cached_window_icon_count
-        beq     use_minh        ; `iconbb_rect` is bogus if there are no icons
-
-        ;; Check if height is < min or > max
-        cmp16   bbox_dy, #kMinWindowHeight
-        bcc     use_minh
-        cmp16   bbox_dy, #kMaxWindowHeight
-        bcs     use_maxh
-        ldax    bbox_dy
-        bcc     assign_height   ; always
-
-use_minh:
-        ldax    #kMinWindowHeight
-        ASSERT_EQUALS .hibyte(::kMinWindowHeight), 0
-        beq     assign_height   ; always
-
-use_maxh:
-        ldax    #kMaxWindowHeight
-
-assign_height:
-        ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + MGTK::Rect::y2
-        sta     (winfo_ptr),y
-        txa
-        iny
-        sta     (winfo_ptr),y
-
-        ;; Finished
-        jsr     PopPointers     ; do not tail-call optimise!
-        rts
-.endproc ; ComputeInitialWindowSize
 
 ;;; ============================================================
 ;;; For a newly populated window (new or refreshed), adjust the
@@ -8182,326 +8502,6 @@ records_base_ptr:
 .endproc ; GetFileRecordCountForWindow
 
 ;;; ============================================================
-;;; A = entry number
-
-        PROC_USED_CLEARING_UPDATES
-.proc DrawListViewRow
-
-        ptr := $06
-
-        ASSERT_EQUALS .sizeof(FileRecord), 32
-        jsr     ATimes32        ; A,X = A * 32
-        addax   file_record_ptr, ptr
-
-        ;; Copy into more convenient location (LCBANK1)
-        bit     LCBANK2
-        bit     LCBANK2
-        ldy     #.sizeof(FileRecord)-1
-    DO
-        copy8   (ptr),y, list_view_filerecord,y
-    WHILE dey : POS
-        bit     LCBANK1
-        bit     LCBANK1
-
-        viewport := window_grafport+MGTK::GrafPort::maprect
-
-        ;; Below bottom?
-        scmp16  pos_col::ycoord, viewport+MGTK::Rect::y2
-        bpl     ret
-
-        copy16  pos_col::ycoord, list_view_shield_rect::y1
-        add16   pos_col::ycoord, #kListViewRowHeight, pos_col::ycoord
-
-        ;; Above top?
-        scmp16  pos_col::ycoord, viewport+MGTK::Rect::y1
-        bpl     in_range
-ret:    rts
-
-        ;; Draw it!
-in_range:
-        copy16  pos_col::ycoord, list_view_shield_rect::y2
-        MGTK_CALL MGTK::ShieldCursor, list_view_shield_rect
-
-        CALL    set_pos, AX=#kColLock
-        jsr     _PrepareColLock
-        lda     text_buffer2
-    IF NOT ZERO
-        MGTK_CALL MGTK::DrawString, text_buffer2
-    END_IF
-
-        CALL    set_pos, AX=#kColType
-        jsr     _PrepareColType
-        MGTK_CALL MGTK::DrawString, text_buffer2
-
-        CALL    set_pos, AX=#kColSize
-        jsr     _PrepareColSize
-        CALL    DrawStringRight, AX=#text_buffer2
-
-        CALL    set_pos, AX=#kColDate
-        jsr     ComposeDateString
-        MGTK_CALL MGTK::DrawString, text_buffer2
-        TAIL_CALL UnshieldCursor
-
-set_pos:
-        stax    pos_col::xcoord
-        MGTK_CALL MGTK::MoveTo, pos_col
-        rts
-
-;;; ============================================================
-
-.proc _PrepareColType
-        file_type := list_view_filerecord + FileRecord::file_type
-
-        CALL    ComposeFileTypeString, A=file_type
-
-        COPY_BYTES 4, str_file_type, text_buffer2 ; 3 characters + length
-
-        rts
-.endproc ; _PrepareColType
-
-.proc _PrepareColLock
-        copy8   #0, text_buffer2
-
-        access := list_view_filerecord + FileRecord::access
-        lda     access
-        and     #ACCESS_DEFAULT
-    IF A <> #ACCESS_DEFAULT
-        inc     text_buffer2
-        copy8   #kGlyphLock, text_buffer2+1
-    END_IF
-
-        rts
-.endproc ; _PrepareColLock
-
-.proc _PrepareColSize
-        file_type := list_view_filerecord + FileRecord::file_type
-
-    IF lda file_type : A = #FT_DIRECTORY
-        copy8   #1, text_buffer2
-        copy8   #'-', text_buffer2+1
-        rts
-    END_IF
-
-        blocks := list_view_filerecord + FileRecord::blocks
-
-        FALL_THROUGH_TO ComposeSizeString, AX=blocks
-.endproc ; _PrepareColSize
-
-.endproc ; DrawListViewRow
-
-;;; ============================================================
-;;; Populate `text_buffer2` with "12,345K"
-;;; Trashes: $06
-
-        PROC_USED_CLEARING_UPDATES
-.proc ComposeSizeString
-        value := $06
-
-        stax    value           ; size in 512-byte blocks
-
-        CALL    ReadSetting, X=#DeskTopSettings::intl_deci_sep
-        sta     deci_sep
-
-        CLEAR_BIT7_FLAG frac_flag
-
-    IF cmp16 value, #20 : LT
-        lsr16   value           ; Convert blocks to K, rounding up
-        ror     frac_flag       ; If < 10k and odd, show ".5" suffix"
-    ELSE
-        lsr16   value           ; Convert blocks to K, rounding up
-      IF CS                     ; NOTE: divide then maybe inc, rather than
-        inc16   value           ; always inc then divide, to handle $FFFF
-      END_IF
-    END_IF
-
-        CALL    IntToStringWithSeparators, AX=value
-        ldx     #0
-
-        ;; Append number
-        ldy     #0
-    DO
-        copy8   str_from_int+1,y, text_buffer2+1,x
-    WHILE iny : inx : Y <> str_from_int
-
-        ;; Append ".5" if needed
-        frac_flag := *+1
-        lda     #SELF_MODIFIED_BYTE ; bit7
-    IF NS
-        deci_sep := *+1
-        lda     #SELF_MODIFIED_BYTE
-        sta     text_buffer2+1,x
-        inx
-        copy8   #'5', text_buffer2+1,x
-        inx
-    END_IF
-
-        ;; Append suffix
-        ldy     #0
-    DO
-        copy8   str_kb_suffix+1, y, text_buffer2+1,x
-    WHILE iny : inx : Y <> str_kb_suffix
-
-        stx     text_buffer2
-        rts
-.endproc ; ComposeSizeString
-
-;;; ============================================================
-
-        PROC_USED_CLEARING_UPDATES
-.proc ComposeDateString
-        lda     datetime_for_conversion ; any bits set?
-        ora     datetime_for_conversion+1
-    IF ZERO
-        COPY_STRING str_no_date, text_buffer2
-        rts
-    END_IF
-
-        copy16  #parsed_date, $0A
-        CALL    ParseDatetime, AX=#datetime_for_conversion
-
-        ;; --------------------------------------------------
-        ;; Date
-
-
-    IF ecmp16 datetime_for_conversion, DATELO : EQ
-        TAIL_CALL finish_date, AX=#str_today
-    END_IF
-
-        tmp_date := $A
-
-        copy16  datetime_for_conversion, tmp_date
-        jsr     _DecP8Date
-    IF ecmp16 DATELO, tmp_date : EQ
-        TAIL_CALL finish_date, AX=#str_tomorrow
-    END_IF
-
-        copy16  DATELO, tmp_date
-        jsr     _DecP8Date
-    IF ecmp16 datetime_for_conversion, tmp_date : EQ
-        TAIL_CALL finish_date, AX=#str_yesterday
-    END_IF
-
-        ;; arg0 = day
-        lda     day
-        pha
-        lda     #0
-        pha
-
-        ;; arg1 = month
-        lda     month
-        asl     a
-        tay
-        lda     month_table,y
-        pha
-        lda     month_table+1,y
-        pha
-
-        ;; arg2 = year
-        push16  year
-
-        CALL    ReadSetting, X=#DeskTopSettings::intl_date_order
-        ASSERT_EQUALS DeskTopSettings::kDateOrderMDY, 0
-    IF ZERO
-        ;; Month Day, Year
-        FORMAT_MESSAGE 3, str_mdy_format
-    ELSE
-        ;; Day Month Year
-        FORMAT_MESSAGE 3, str_dmy_format
-    END_IF
-
-        COPY_STRING text_input_buf, text_buffer2
-        ldax    #text_buffer2
-
-finish_date:
-        ;; arg0 = date
-        phax
-
-        ;; --------------------------------------------------
-        ;; Time
-
-        ;; arg1 = time
-        CALL    MakeTimeString, AX=#parsed_date
-        push16  #str_time
-
-        FORMAT_MESSAGE 2, str_datetime_format
-        COPY_STRING text_input_buf, text_buffer2
-        rts
-
-year    := parsed_date + ParsedDateTime::year
-month   := parsed_date + ParsedDateTime::month
-day     := parsed_date + ParsedDateTime::day
-hour    := parsed_date + ParsedDateTime::hour
-min     := parsed_date + ParsedDateTime::minute
-
-.proc _DecP8Date
-        DATELO := tmp_date
-        DATEHI := tmp_date+1
-
-;;; ====================================================
-;;;  DecP8Date - Takes a 16-bit P8 date and
-;;;              calculates the previous day
-;;; ----------------------------------------------------
-;;;  Written 5/30/2025 by John Brooks as part of the
-;;;  open-source AppleII Desktop code-golf challenge
-;;;  64-bytes
-;;; ====================================================
-
-;;;        7 6 5 4 3 2 1 0   7 6 5 4 3 2 1 0
-;;;       +-+-+-+-+-+-+-+-+ +-+-+-+-+-+-+-+-+
-;;; DATE: |    year     |  month  |   day   |
-;;;       +-+-+-+-+-+-+-+-+ +-+-+-+-+-+-+-+-+
-
-        dec     DATELO          ; dec day
-        lda     DATELO
-        and     #%00011111      ; day
-        bne     done
-
-        lsr     DATEHI          ; C = month high bit, year in DATEHI
-        lda     DATELO
-        ror                     ; A = month * 16
-        sbc     #1*16-1         ; dec month * 16 (-1 for c=0)
-        bne     calc_days
-
-        dec     DATEHI          ; year - 1
-    IF NEG
-        copy8   #99, DATEHI     ; wrap to year 99 (not 127)
-    END_IF
-        lda     #12*16          ; month = december
-
-calc_days:
-        tax                     ; X = month * 16
-        sta     DATELO
-        bpl     pre_august
-        eor     #1*16           ; 31 days in odd months 1-7 and in even months 8-12
-pre_august:
-        and     #1*16
-        adc     #$f0            ; C=1 if 31-day month (except Feb)
-        lda     #30/2
-        rol                     ; A = days in new month, 30 or 31
-
-        cpx     #2*16           ; Is new month == feb?
-        bne     not_feb
-
-        lda     DATEHI          ; C=1 from cpx above
-        and     #3              ; is year divisible by 4?
-        beq     is_leap
-        clc                     ; 28 days if not a leap year
-is_leap:
-        lda     #28/2           ; if C=1, 29 day leap year
-        rol
-
-not_feb:
-        asl     DATELO          ; 3 month bits in LO, top bit in C
-        ora     DATELO          ; merge day in A with 3 month bits
-        sta     DATELO          ; save day & month
-        rol     DATEHI          ; save year and month high bit
-done:
-        rts
-.endproc ; _DecP8Date
-
-.endproc ; ComposeDateString
-
-;;; ============================================================
 ;;; Look up an icon address.
 ;;; Inputs: A = icon number
 ;;; Output: A,X = IconEntry address
@@ -8752,6 +8752,7 @@ map_delta_y:    .word   0
 
         PROC_USED_CLEARING_UPDATES
 
+;;; Input: A = window id
 .proc PrepWindowScreenMapping
         .assert window_mapinfo_cache + .sizeof(MGTK::MapInfo) <= $50, error, "collision"
 
