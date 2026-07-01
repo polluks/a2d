@@ -69,7 +69,7 @@ function SaveSettingsTest(name, filename, toggle_func)
         emu.wait(5)
       end
 
-      a2d.OpenPath("/RAM4/DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. da)
+      a2d.OpenPath("/RAM4/DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. da, {no_validate=true})
       toggle_func()
       a2d.CloseWindow()
 
@@ -113,9 +113,9 @@ function SaveSettingsTest(name, filename, toggle_func)
 
       if rename then
         a2d.RenamePath("/A2.DESKTOP", "A2D")
-        a2d.OpenPath("/A2D/APPLE.MENU/CONTROL.PANELS/" .. da)
+        a2d.OpenPath("/A2D/APPLE.MENU/CONTROL.PANELS/" .. da, {no_validate=true})
       else
-        a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. da)
+        a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. da, {no_validate=true})
       end
 
       toggle_func()

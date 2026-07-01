@@ -36,7 +36,7 @@ test.Step(
 
     -- NOTE: NoiseTracker requires ROM3, otherwise on quit it gives a
     -- RESTART SYSTEM error
-    a2d.OpenPath("/NOISETRACKER/NOISE.SYSTEM")
+    a2d.OpenPath("/NOISETRACKER/NOISE.SYSTEM", {no_validate=true})
     emu.wait(10)
     apple2.SpaceKey()
     emu.wait(2)

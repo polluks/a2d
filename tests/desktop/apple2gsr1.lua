@@ -21,7 +21,7 @@ test.Step(
   "Mono in DeskTop, color outside",
   function()
     test.Expect(apple2.IsMono(), "DeskTop should run in monochrome")
-    a2d.OpenPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {no_validate=true})
     apple2.WaitForBasicSystem()
     apple2.TypeLine("10 HGR2")
     apple2.TypeLine("20 FOR C = 0 to 7")
@@ -44,7 +44,7 @@ end)
 test.Step(
   "RGB Color vs. IIgs Control Panel",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
     a2d.OAShortcut("1") -- check RGB Color
     a2d.CloseWindow()
     test.Expect(apple2.IsColor(), "desktop should be in color")
@@ -62,7 +62,7 @@ test.Step(
     emu.wait(5)
 
     test.Expect(apple2.IsColor(), "desktop should be in color")
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
     a2d.OAShortcut("1") -- uncheck RGB Color
     a2d.CloseWindow()
 end)

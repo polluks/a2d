@@ -65,7 +65,7 @@ test.Step(
     test.Snap("verify A2.DESKTOP volume is first")
     a2d.DialogCancel()
 
-    a2d.OpenPath("/RAM4/DESKTOP/EXTRAS/BASIC.SYSTEM")
+    a2d.OpenPath("/RAM4/DESKTOP/EXTRAS/BASIC.SYSTEM", {no_validate=true})
     local drive = s7d1
     local current = drive.filename
     drive:unload()

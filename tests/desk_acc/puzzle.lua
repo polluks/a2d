@@ -9,7 +9,7 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "Puzzle not initially scrambled, and scrambles differently",
   function()
-    a2d.SelectPath("/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE")
+    a2d.SelectPath("/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE", {no_validate=true})
     a2d.OpenSelection()
     a2dtest.ExpectNothingChanged(function()
         -- close without scrambling
@@ -55,7 +55,7 @@ end)
 test.Step(
   "Puzzle can be moved and closed with mouse without having to scramble first",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE", {no_validate=true})
 
     local id = mgtk.FrontWindow()
     local x1, y1 = a2dtest.GetFrontWindowDragCoords()
@@ -85,13 +85,13 @@ end)
 test.Step(
   "Puzzle can be closed with keyboard without having to scramble first",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE", {no_validate=true})
     local id = mgtk.FrontWindow()
     apple2.EscapeKey()
     a2d.WaitForRepaint()
     test.ExpectNotEquals(mgtk.FrontWindow(), id, "window should have closed")
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE", {no_validate=true})
     local id = mgtk.FrontWindow()
     a2d.OAShortcut("W")
     a2d.WaitForRepaint()
@@ -107,7 +107,7 @@ end)
 test.Step(
   "Obscured window does not mispaint",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE", {no_validate=true})
 
     -- scramble
     apple2.SpaceKey()

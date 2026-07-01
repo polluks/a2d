@@ -9,7 +9,7 @@ a2d.ConfigureRepaintTime(1)
 test.Step(
   "Key Caps - Quit",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/KEY.CAPS")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/KEY.CAPS", {no_validate=true})
     local count = a2dtest.GetWindowCount()
     a2d.OAShortcut("q")
     test.Expect(a2dtest.GetWindowCount(), count-1, "the desk accessory should have closed")
@@ -35,7 +35,7 @@ test.Step(
   "Key Caps - Semicolon",
   function()
     local field = find_field(";  :")
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/KEY.CAPS")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/KEY.CAPS", {no_validate=true})
     field:set_value(1)
     a2d.WaitForRepaint()
     test.Snap("verify that the semicolon key is correctly highlighted")

@@ -41,7 +41,7 @@ test.Step(
       " * IIgs Bonk\n" ..
       " * MouseKeys exit sound (hi-lo)\n")
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SOUNDS")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SOUNDS", {no_validate=true})
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
 
     a2d.InMouseKeysMode(function(m)

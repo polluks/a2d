@@ -13,7 +13,7 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "VEDRIVE",
   function()
-    a2d.OpenPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {no_validate=true})
     apple2.WaitForBasicSystem()
     apple2.TypeLine("PREFIX /TESTS/DRIVERS")
     emu.wait(10)

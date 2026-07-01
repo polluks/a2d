@@ -10,7 +10,7 @@ a2d.ConfigureRepaintTime(1)
 test.Step(
   "Normal + OK / Fast + OK doesn't crash",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED", {no_validate=true})
     apple2.Type("N") -- Normal Speed
     a2d.DialogOK()
     emu.wait(1) -- slow now
@@ -18,7 +18,7 @@ test.Step(
     emu.wait(1) -- slow now
     a2dtest.ExpectNotHanging()
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED", {no_validate=true})
     apple2.Type("F") -- Fast Speed
     a2d.DialogOK()
     a2d.CloseAllWindows()
@@ -33,7 +33,7 @@ end)
 test.Step(
   "Animation shields cursor correctly",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED", {no_validate=true})
 
     local dialog_x, dialog_y = a2dtest.GetFrontWindowContentRect()
 

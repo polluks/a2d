@@ -867,7 +867,7 @@ test.Step(
   "dimming effect",
   function()
     -- Disable ZIP Chip
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED", {no_validate=true})
     apple2.Type("N") -- Normal Speed
     a2d.CloseWindow()
 
@@ -888,7 +888,7 @@ test.Step(
     -- cleanup
     -- Enable ZIP Chip
     a2d.ConfigureRepaintTime(1)
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED", {no_validate=true})
     a2d.ConfigureRepaintTime(0.25)
     apple2.Type("F") -- Fast Speed
     a2d.CloseWindow()

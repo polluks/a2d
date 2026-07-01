@@ -8,7 +8,7 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "Map - Search",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP", {no_validate=true})
     emu.wait(1)
 
     apple2.Type("San Francisco")
@@ -31,7 +31,7 @@ end)
 test.Step(
   "Map - Indicator",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP", {no_validate=true})
     emu.wait(1)
 
     local x, y = a2dtest.GetFrontWindowDragCoords()

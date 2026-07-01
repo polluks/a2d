@@ -358,8 +358,8 @@ ListBoxTest(
   {
     first = "Apple.Menu",
     second = "Clock.system",
-    last = "Sample.Media",
-    second_last = "Read.Me",
+    last = "Startup.Items",
+    second_last = "Sample.Media",
 
     action = "Open",
   },
@@ -459,7 +459,7 @@ ListBoxTest(
     action = "OK",
   },
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SOUNDS")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SOUNDS", {no_validate=true})
   end,
   function()
     a2d.DialogCancel()
@@ -535,7 +535,7 @@ ListBoxTest(
     action = "OK",
   },
   function()
-    a2d.OpenPath("/A2.DESKTOP/EXTRAS/DOS33.IMPORT")
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/DOS33.IMPORT", {no_validate=true})
     emu.wait(5)
   end,
   function()
@@ -561,7 +561,7 @@ ListBoxTest(
     action = "Import",
   },
   function()
-    a2d.OpenPath("/A2.DESKTOP/EXTRAS/DOS33.IMPORT")
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/DOS33.IMPORT", {no_validate=true})
     emu.wait(5)
     apple2.DownArrowKey()
     a2d.DialogOK()

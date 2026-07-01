@@ -13,7 +13,7 @@ test.Step(
   function()
     apple2.SetMonitorType(apple2.MONITOR_TYPE_VIDEO7)
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
     a2d.OAShortcut("1") -- check RGB Color
     local x, y = a2dtest.GetFrontWindowDragCoords()
     a2d.InMouseKeysMode(function(m)

@@ -390,7 +390,7 @@ function a2d.OpenPath(path, options)
     a2d.SelectAndOpen(segment, options)
     emu.wait(1)
 
-    if not options.no_validate then
+    if index ~= #segments or not options.no_validate then
       local top = mgtk.GetWindowName(assert(mgtk.FrontWindow()))
       if top:lower() ~= segment:lower() then
         error(string.format("%s: failed to open %q, top window is %q",
@@ -696,37 +696,37 @@ function a2d.RemoveClockDriverAndReboot()
 end
 
 function a2d.ToggleOptionCopyToRAMCard()
-  a2d.OpenPath(a2d.GetLocalizedPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS"))
+  a2d.OpenPath(a2d.GetLocalizedPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS"), {no_validate=true})
   a2d.OAShortcut("1") -- Toggle "Copy to RAMCard"
   a2d.CloseWindow()
   a2d.CloseAllWindows()
 end
 function a2d.ToggleOptionShowShortcutsOnStartup()
-  a2d.OpenPath(a2d.GetLocalizedPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS"))
+  a2d.OpenPath(a2d.GetLocalizedPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS"), {no_validate=true})
   a2d.OAShortcut("2") -- Toggle "Show shortcuts on startup"
   a2d.CloseWindow()
   a2d.CloseAllWindows()
 end
 function a2d.ToggleOptionShowKeyboardShortcuts()
-  a2d.OpenPath(a2d.GetLocalizedPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS"))
+  a2d.OpenPath(a2d.GetLocalizedPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS"), {no_validate=true})
   a2d.OAShortcut("3") -- Toggle "Show keyboard shortcuts in dialogs"
   a2d.CloseWindow()
   a2d.CloseAllWindows()
 end
 function a2d.ToggleOptionPreserveCase()
-  a2d.OpenPath(a2d.GetLocalizedPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS"))
+  a2d.OpenPath(a2d.GetLocalizedPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS"), {no_validate=true})
   a2d.OAShortcut("4") -- Toggle "Preserve uppercase and lowercase in names"
   a2d.CloseWindow()
   a2d.CloseAllWindows()
 end
 function a2d.ToggleOptionShowInvisible()
-  a2d.OpenPath(a2d.GetLocalizedPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS"))
+  a2d.OpenPath(a2d.GetLocalizedPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS"), {no_validate=true})
   a2d.OAShortcut("5") -- Toggle "Show invisible files"
   a2d.CloseWindow()
   a2d.CloseAllWindows()
 end
 function a2d.ToggleOptionSkipChecking525Drives()
-  a2d.OpenPath(a2d.GetLocalizedPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS"))
+  a2d.OpenPath(a2d.GetLocalizedPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS"), {no_validate=true})
   a2d.OAShortcut("6") -- Toggle "Check 5.25" drives on startup"
   a2d.CloseWindow()
   a2d.CloseAllWindows()

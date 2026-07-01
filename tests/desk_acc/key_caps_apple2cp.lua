@@ -15,7 +15,7 @@ a2d.ConfigureRepaintTime(1)
 test.Step(
   "Key Caps - Apple IIc+",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/KEY.CAPS")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/KEY.CAPS", {no_validate=true})
     emu.wait(5) -- IIc emulation is very slow
     test.Snap("verify the keyboard layout is \"extended\"")
 end)

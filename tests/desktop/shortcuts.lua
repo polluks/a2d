@@ -13,7 +13,7 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "Starting without SELECTOR.LIST present",
   function()
-    a2d.OpenPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {no_validate=true})
     apple2.WaitForBasicSystem()
     apple2.TypeLine("DELETE /A2.DESKTOP/EXTRAS/SELECTOR.LIST")
     apple2.TypeLine("PR#7")
@@ -281,7 +281,7 @@ end)
 test.Step(
   "editing list vs. menu",
   function()
-    a2d.OpenPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {no_validate=true})
     apple2.WaitForBasicSystem()
     apple2.TypeLine("DELETE /A2.DESKTOP/EXTRAS/SELECTOR.LIST")
     apple2.TypeLine("PR#7")

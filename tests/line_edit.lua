@@ -607,7 +607,7 @@ LineEditTest(
     chars = printable_chars,
   },
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP", {no_validate=true})
   end,
   function()
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
@@ -626,7 +626,7 @@ LineEditTest(
     chars = printable_chars,
   },
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP", {no_validate=true})
     local x, y = a2dtest.GetFrontWindowDragCoords()
     a2d.Drag(x, y, x, apple2.SCREEN_HEIGHT - 80)
   end,
@@ -647,7 +647,7 @@ LineEditTest(
     chars = printable_chars,
   },
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP", {no_validate=true})
     local x, y = a2dtest.GetFrontWindowDragCoords()
     a2d.Drag(x, y, x, apple2.SCREEN_HEIGHT - 50)
   end,
@@ -668,7 +668,7 @@ LineEditTest(
     chars = printable_chars,
   },
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP", {no_validate=true})
     local x, y = a2dtest.GetFrontWindowDragCoords()
     a2d.Drag(x, y, x, apple2.SCREEN_HEIGHT)
   end,

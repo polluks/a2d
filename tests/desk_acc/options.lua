@@ -16,7 +16,7 @@ test.Step(
   "No prompt if no change",
   function()
     local drive = s6d1
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS", {no_validate=true})
 
     local current = drive.filename
     drive:unload()
@@ -38,7 +38,7 @@ test.Step(
   "Prompt if changed",
   function()
     local drive = s6d1
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS", {no_validate=true})
     a2d.OAShortcut("5") -- show invisible files (something harmless)
 
     local current = drive.filename
@@ -62,7 +62,7 @@ end)
 test.Step(
   "Repaints when obscured",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS", {no_validate=true})
     local x, y = a2dtest.GetFrontWindowDragCoords()
 
     a2d.InMouseKeysMode(function(m)
@@ -88,7 +88,7 @@ end)
 test.Step(
   "No crash after running",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/OPTIONS", {no_validate=true})
     a2d.CloseWindow()
     a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.RUN_BASIC_HERE)
     apple2.WaitForBasicSystem()

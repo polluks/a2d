@@ -46,7 +46,7 @@ test.Step(
     a2d.CopyDisk()
     a2d.OAShortcut("Q")
     a2d.WaitForDesktopReady()
-    a2d.OpenPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {no_validate=true})
     apple2.WaitForBasicSystem()
     apple2.TypeLine("CAT /RAM")
     util.WaitFor(
@@ -64,7 +64,7 @@ end)
 test.Step(
   "text screen not truncated launching BINSCII",
   function()
-    a2d.OpenPath("/A2.DESKTOP/EXTRAS/BINSCII")
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/BINSCII", {no_validate=true})
 
     util.WaitFor(
       "BINSCII", function()
@@ -85,12 +85,12 @@ end)
 test.Step(
   "Invoking files after previewing",
   function()
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/ROOM")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/ROOM", {no_validate=true})
     apple2.RightArrowKey()
     emu.wait(5)
     apple2.EscapeKey()
     emu.wait(5)
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/KARATEKA.YELL")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/KARATEKA.YELL", {no_validate=true})
     a2d.WaitForDesktopReady()
     a2dtest.ExpectNotHanging()
 end)
@@ -104,7 +104,7 @@ end)
 test.Step(
   "Invoking PT3PLR",
   function()
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/AUTUMN.PT3")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/AUTUMN.PT3", {no_validate=true})
     util.WaitFor(
       "Song title", function()
         return apple2.GrabTextScreen():match("AuTumn")

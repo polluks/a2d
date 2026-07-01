@@ -57,13 +57,13 @@ RAMCardTest(
   function()
     a2d.DeletePath("/A2.DESKTOP/LOCAL/DESKTOP.CONFIG")
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
     apple2.LeftArrowKey()
     apple2.ControlKey("D") -- Set Desktop Pattern
     a2d.WaitForRepaint()
     a2d.CloseWindow()
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
     apple2.RightArrowKey()
     apple2.ControlKey("D") -- Set Desktop Pattern
     a2d.WaitForRepaint()

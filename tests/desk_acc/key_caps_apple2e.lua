@@ -15,7 +15,7 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "Key Caps - Apple IIe",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/KEY.CAPS")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/KEY.CAPS", {no_validate=true})
     emu.wait(1)
     test.Snap("verify the keyboard layout is \"original\"")
 end)

@@ -589,7 +589,7 @@ end)
 test.Step(
   "DA launches after image preview",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES/ROOM.A2FC")
+    a2d.OpenPath("/TESTS/FILE.TYPES/ROOM.A2FC", {no_validate=true})
     emu.wait(5)
     apple2.EscapeKey()
 

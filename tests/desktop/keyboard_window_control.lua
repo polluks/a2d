@@ -9,7 +9,7 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "Move window with keyboard - cancelled",
   function()
-    a2d.OpenPath("A2.DESKTOP")
+    a2d.OpenPath("/A2.DESKTOP")
     a2d.WaitForRepaint()
 
     local bx, by, bw, bh = a2dtest.GetFrontWindowContentRect()
@@ -35,7 +35,7 @@ end)
 test.Step(
   "Move window with keyboard",
   function()
-    a2d.OpenPath("A2.DESKTOP")
+    a2d.OpenPath("/A2.DESKTOP")
     a2d.WaitForRepaint()
 
     local bx, by, bw, bh = a2dtest.GetFrontWindowContentRect()
@@ -62,7 +62,7 @@ end)
 test.Step(
   "Resize window with keyboard - cancelled",
   function()
-    a2d.OpenPath("A2.DESKTOP")
+    a2d.OpenPath("/A2.DESKTOP")
     a2d.WaitForRepaint()
 
     local bx, by, bw, bh = a2dtest.GetFrontWindowContentRect()
@@ -88,7 +88,7 @@ end)
 test.Step(
   "Resize window with keyboard",
   function()
-    a2d.OpenPath("A2.DESKTOP")
+    a2d.OpenPath("/A2.DESKTOP")
     a2d.WaitForRepaint()
 
     local bx, by, bw, bh = a2dtest.GetFrontWindowContentRect()
