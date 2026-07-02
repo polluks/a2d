@@ -32,7 +32,7 @@ JT_MGTK_CALL:           jmp     ::MGTKRelayImpl         ; *
 JT_MLI_CALL:            jmp     MLIRelayImpl            ; *
 JT_CLEAR_UPDATES:       jmp     ClearUpdates            ; *
 JT_SYSTEM_TASK:         jmp     SystemTask              ; *
-JT_ACTIVATE_WINDOW:     jmp     ActivateReloadAndRefreshWindowOrClose ; *
+JT_ACTIVATE_WINDOW:     jmp     ActivateReloadAndRefreshWindow ; *
 JT_SHOW_ALERT:          jmp     ShowAlert               ; *
 JT_SHOW_ALERT_PARAMS:   jmp     ShowAlertStruct         ; *
 JT_LAUNCH_FILE:         jmp     LaunchFileByPath
@@ -943,7 +943,7 @@ prev_selected_icon:
       IF EQ
         inx
         txa
-        jmp     ActivateReloadAndRefreshWindowOrClose
+        jmp     ActivateReloadAndRefreshWindow
       END_IF
         rts
     END_IF
@@ -2666,7 +2666,7 @@ main_length:    .word   0
 
         ;; Select/refresh window if there was one
         pla
-        jne     ActivateReloadAndRefreshWindowOrClose
+        jne     ActivateReloadAndRefreshWindow
 
         rts
 .endproc ; UpdateActivateReloadAndRefreshWindowForOperationDstPath
@@ -5512,7 +5512,7 @@ alert:  jmp     ShowAlert       ; either `ERR_INVALID_PATHNAME` or `ERR_FILE_NOT
 ;;; Given a window, update used/free data for all same-volume windows,
 ;;; then activate the window (if needed) and refresh the contents
 ;;; (closing on error).
-;;; Same inputs/outputs as `ActivateReloadAndRefreshWindowOrClose`
+;;; Same inputs/outputs as `ActivateReloadAndRefreshWindow`
 
 .proc UpdateActivateAndRefreshSelectedWindow
         FALL_THROUGH_TO UpdateActivateReloadAndRefreshWindow, A=selected_window_id
@@ -5523,7 +5523,7 @@ alert:  jmp     ShowAlert       ; either `ERR_INVALID_PATHNAME` or `ERR_FILE_NOT
         jsr     GetWindowPath   ; into A,X
         jsr     UpdateUsedFreeViaPath
         pla
-        jmp     ActivateReloadAndRefreshWindowOrClose
+        jmp     ActivateReloadAndRefreshWindow
 .endproc ; UpdateActivateReloadAndRefreshWindow
 
 ;;; ============================================================
@@ -5599,12 +5599,13 @@ alert:  jmp     ShowAlert       ; either `ERR_INVALID_PATHNAME` or `ERR_FILE_NOT
 
 ;;; ============================================================
 
-;;; Calls `ActivateReloadAndRefreshWindow` - on failure (e.g. too
-;;; many files) the window is closed.
+;;; Activate the passed window and reload the directory, recreating
+;;; `FileRecord`s and eventually icons. On failure (e.g. too many
+;;; files for the number of free icons) the window is closed.
 ;;; Input: A = window id
 ;;; Output: A=0/Z=1/N=0 on success, A=$FF/Z=0/N=1 on failure
 
-.proc ActivateReloadAndRefreshWindowOrClose
+.proc ActivateReloadAndRefreshWindow
         pha                     ; A = window id
         jsr     _TryActivateReloadAndRefreshWindow
         pla                     ; A = window id
@@ -5620,18 +5621,17 @@ alert:  jmp     ShowAlert       ; either `ERR_INVALID_PATHNAME` or `ERR_FILE_NOT
         SET_BIT7_FLAG exception_flag ; set bit7, preserving A
         tsx
         stx     saved_stack
-        jsr     ActivateReloadAndRefreshWindow
+        jsr     _ActivateReloadAndRefreshWindow
         CLEAR_BIT7_FLAG exception_flag ; clear bit7, preserving A
         rts
 .endproc ; _TryActivateReloadAndRefreshWindow
 
 exception_flag:
         .byte   0
-.endproc ; ActivateReloadAndRefreshWindowOrClose
 
-;;; ============================================================
+;;; --------------------------------------------------
 
-.proc ActivateReloadAndRefreshWindow
+.proc _ActivateReloadAndRefreshWindow
         pha                     ; A = window_id
 
         ;; Clear selection
@@ -5682,6 +5682,8 @@ exception_flag:
 
         ;; Create icons and draw contents
         jmp     RefreshActiveWindow
+.endproc ; _ActivateReloadAndRefreshWindow
+
 .endproc ; ActivateReloadAndRefreshWindow
 
 ;;; ============================================================
@@ -6397,7 +6399,7 @@ OpenWindowForPath := OpenWindowImpl::for_path
         old := *+1
         cmp     #SELF_MODIFIED_BYTE
     IF ZERO
-        CALL    ActivateReloadAndRefreshWindowOrClose, A=active_window_id
+        CALL    ActivateReloadAndRefreshWindow, A=active_window_id
         bne     err
     END_IF
 
