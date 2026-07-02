@@ -32,7 +32,7 @@ JT_MGTK_CALL:           jmp     ::MGTKRelayImpl         ; *
 JT_MLI_CALL:            jmp     MLIRelayImpl            ; *
 JT_CLEAR_UPDATES:       jmp     ClearUpdates            ; *
 JT_SYSTEM_TASK:         jmp     SystemTask              ; *
-JT_ACTIVATE_WINDOW:     jmp     ActivateReloadAndRefreshWindow ; *
+JT_ACTIVATE_WINDOW:     jmp     ActivateReloadAndRefreshWindowOrClose ; *
 JT_SHOW_ALERT:          jmp     ShowAlert               ; *
 JT_SHOW_ALERT_PARAMS:   jmp     ShowAlertStruct         ; *
 JT_LAUNCH_FILE:         jmp     LaunchFileByPath

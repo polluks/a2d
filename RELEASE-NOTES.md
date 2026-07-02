@@ -110,7 +110,9 @@ Project Page: https://github.com/a2stuff/a2d
   * Identify Nuova Elettronica DELTA.
   * Detect Oxen Super Expander E memory expansion.
   * Detect Phasor sound card.
-* DOS 3.3 Import: Fix keyboard shortcut handling.
+* DOS 3.3 Import
+  * Fix keyboard shortcut handling.
+  * Close window if too many icons present after import.
 * Sounds: Time "Silent" menu bar flash using VBL.
 * Screen Savers: improve animation for Flying Toasters, Hexix, Message and Melt.
 * Calculator & Sci.Calc
