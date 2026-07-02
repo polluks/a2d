@@ -2116,7 +2116,7 @@ devlst_backup:
         CALL    GetIconPath, A=selected_icon_list ; `operation_src_path` set to path; A=0 on success
         jne     ShowAlert       ; `ERR_INVALID_PATHNAME`
 
-        CALL    CopyToBuf0, AX=#operation_src_path
+        CALL    CopyToPathBuf0, AX=#operation_src_path
       END_IF
     END_IF
 
@@ -10600,13 +10600,11 @@ retry:  MLI_CALL DESTROY, destroy_src_params
         jsr     DecrementFileCount
         jsr     SetPortForProgressDialogAndShieldCursor
 
-        CALL    CopyToBuf0, AX=#src_path_buf
         CALL    DrawProgressDialogLabel, Y=#1, AX=#aux::str_copy_from
-        jsr     DrawTargetFilePath
+        CALL    DrawTargetFilePath, AX=#src_path_buf
 
-        CALL    CopyToBuf0, AX=#dst_path_buf
         CALL    DrawProgressDialogLabel, Y=#2, AX=#aux::str_copy_to
-        jsr     DrawDestFilePath
+        CALL    DrawDestFilePath, AX=#dst_path_buf
 
         jsr     DrawProgressDialogFilesRemaining
 
@@ -11397,9 +11395,8 @@ next_file:
 .proc DeleteRefreshProgress
         jsr     SetPortForProgressDialogAndShieldCursor
 
-        CALL    CopyToBuf0, AX=#src_path_buf
         CALL    DrawProgressDialogLabel, Y=#1, AX=#aux::str_file_colon
-        jsr     DrawTargetFilePath
+        CALL    DrawTargetFilePath, AX=#src_path_buf
 
         jsr     DrawProgressDialogFilesRemaining
         TAIL_CALL UnshieldCursor
@@ -11535,14 +11532,18 @@ src_path_slash_index:
 
 ;;; ============================================================
 
+;;; Input: A,X = path
 .proc DrawTargetFilePath
+        jsr     CopyToPathBuf0  ; string must be visible to MGTK
         jsr     SetPenModeCopy
         MGTK_CALL MGTK::PaintRect, aux::current_target_file_rect
         MGTK_CALL MGTK::MoveTo,  aux::current_target_file_pos
         jmp     DrawDialogPathBuf0
 .endproc ; DrawTargetFilePath
 
+;;; Input: A,X = path
 .proc DrawDestFilePath
+        jsr     CopyToPathBuf0  ; string must be visible to MGTK
         jsr     SetPenModeCopy
         MGTK_CALL MGTK::PaintRect, aux::current_dest_file_rect
         MGTK_CALL MGTK::MoveTo,  aux::current_dest_file_pos
@@ -14438,11 +14439,11 @@ ret:    rts
 ;;; Input: A,X = string to copy
 ;;; Trashes: $06
         PROC_USED_IN_OVERLAY
-.proc CopyToBuf0
+.proc CopyToPathBuf0
         ptr1 := $06
         stax    ptr1
         TAIL_CALL CopyPtr1ToBuf, AX=#path_buf0
-.endproc ; CopyToBuf0
+.endproc ; CopyToPathBuf0
 
 ;;; ============================================================
 

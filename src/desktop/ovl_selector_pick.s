@@ -227,7 +227,7 @@ copy_when:
         sta     flags
 
         CALL    GetFilePathAddr, A=shortcut_picker_record::selected_index
-        jsr     main::CopyToBuf0
+        jsr     main::CopyToPathBuf0
 
         ldx     #kRunListPrimary
         lda     shortcut_picker_record::selected_index
