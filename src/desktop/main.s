@@ -32,7 +32,7 @@ JT_MGTK_CALL:           jmp     ::MGTKRelayImpl         ; *
 JT_MLI_CALL:            jmp     MLIRelayImpl            ; *
 JT_CLEAR_UPDATES:       jmp     ClearUpdates            ; *
 JT_SYSTEM_TASK:         jmp     SystemTask              ; *
-JT_ACTIVATE_WINDOW:     jmp     ActivateAndRefreshWindow ; *
+JT_ACTIVATE_WINDOW:     jmp     ActivateReloadAndRefreshWindow ; *
 JT_SHOW_ALERT:          jmp     ShowAlert               ; *
 JT_SHOW_ALERT_PARAMS:   jmp     ShowAlertStruct         ; *
 JT_LAUNCH_FILE:         jmp     LaunchFileByPath
@@ -554,7 +554,7 @@ offset_table:
         lda     active_window_id
        IF NOT_ZERO
         jsr     GetWindowPath
-        jsr     IconToAnimate
+        jsr     GetIconToAnimate
         jmp     SelectIcon
        END_IF
       END_IF
@@ -943,7 +943,7 @@ prev_selected_icon:
       IF EQ
         inx
         txa
-        jmp     ActivateAndRefreshWindowOrClose
+        jmp     ActivateReloadAndRefreshWindowOrClose
       END_IF
         rts
     END_IF
@@ -952,7 +952,7 @@ prev_selected_icon:
         ;; (4/4) Dropped on window!
 
         and     #$7F            ; mask off window number
-        jmp     UpdateActivateAndRefreshWindow
+        jmp     UpdateActivateReloadAndRefreshWindow
 .endproc ; _PerformPostDropUpdates
 
 ;;; --------------------------------------------------
@@ -1721,7 +1721,7 @@ interpreter:
         ;; --------------------------------------------------
         ;; Generic launch
 launch:
-        CALL    IconToAnimate, AX=#src_path_buf
+        CALL    GetIconToAnimate, AX=#src_path_buf
         CALL    AnimateWindowOpen, X=#$FF ; desktop
 
         CALL    UpcaseString, AX=#INVOKER_PREFIX
@@ -1889,7 +1889,7 @@ _CheckBasisSystem        := _CheckBasixSystemImpl::basis
 
 .proc _InvokePreview
         phax
-        CALL    IconToAnimate, AX=#src_path_buf
+        CALL    GetIconToAnimate, AX=#src_path_buf
         tay
         plax
         jmp     InvokeDeskAccWithIcon
@@ -2205,7 +2205,7 @@ done:   rts
 
     IF A = #kOperationFailed
         CALL    CopyRAMCardPrefix, AX=#operation_dst_path
-        jmp     RefreshWindowForOperationDstPath
+        jmp     UpdateActivateReloadAndRefreshWindowForOperationDstPath
     END_IF
 
         ;; Success!
@@ -2463,7 +2463,7 @@ CmdDeskAcc      := CmdDeskAccImpl::start
         CALL    CopyToSrcPath, AX=#operation_src_path
       END_IF
     END_IF
-        CALL    IconToAnimate, AX=#tmp_path_buf
+        CALL    GetIconToAnimate, AX=#tmp_path_buf
         tay
         FALL_THROUGH_TO InvokeDeskAccWithIcon, AX=#tmp_path_buf
 .endproc ; InvokeDeskAccByPath
@@ -2556,7 +2556,7 @@ main_length:    .word   0
 ;;; Inputs: A,X = absolute path
 ;;; Outputs: A = icon to animate (path or volume)
 
-.proc IconToAnimate
+.proc GetIconToAnimate
         jsr     PushPointers
 
         ptr := $06
@@ -2585,7 +2585,7 @@ main_length:    .word   0
     END_IF
         jsr     PopPointers     ; do not tail-call optimize!
         rts
-.endproc ; IconToAnimate
+.endproc ; GetIconToAnimate
 
 ;;; ============================================================
 
@@ -2647,13 +2647,16 @@ main_length:    .word   0
 
         RTS_IF A = #kOperationCanceled
 
-        FALL_THROUGH_TO RefreshWindowForOperationDstPath
+        FALL_THROUGH_TO UpdateActivateReloadAndRefreshWindowForOperationDstPath
 
 .endproc ; CmdCopySelection
 
 ;;; ============================================================
 
-.proc RefreshWindowForOperationDstPath
+;;; Input: `operation_dst_path` is path to consider
+;;; NOTE: Updates all same-volume window used/free values, even if there is no
+;;; matching window to activate/reload/refresh.
+.proc UpdateActivateReloadAndRefreshWindowForOperationDstPath
         ;; See if there's a window we should activate later.
         CALL    FindWindowForPath, AX=#operation_dst_path
         pha                     ; save for later
@@ -2663,10 +2666,10 @@ main_length:    .word   0
 
         ;; Select/refresh window if there was one
         pla
-        jne     ActivateAndRefreshWindowOrClose
+        jne     ActivateReloadAndRefreshWindowOrClose
 
         rts
-.endproc ; RefreshWindowForOperationDstPath
+.endproc ; UpdateActivateReloadAndRefreshWindowForOperationDstPath
 
 ;;; ============================================================
 ;;; Copy string at ($6) to `operation_src_path`, string at ($8) to `operation_dst_path`,
@@ -2876,7 +2879,7 @@ CmdOpenFromKeyboard := CmdOpen::from_keyboard
 .proc MaybeCloseWindowAfterOpen
         lda     window_id_to_close
     IF NOT_ZERO
-        jsr     CloseSpecifiedWindow
+        jsr     CloseWindow
     END_IF
         rts
 .endproc ; MaybeCloseWindowAfterOpen
@@ -3073,7 +3076,7 @@ start:
         bcs     error
 
         ;; Update cached used/free for all same-volume windows and refresh
-        CALL    UpdateActivateAndRefreshWindow, A=active_window_id
+        CALL    UpdateActivateReloadAndRefreshWindow, A=active_window_id
         RTS_IF NE
 
         ;; Select and rename the file
@@ -3493,12 +3496,12 @@ menu_item_to_view_by:
         ldx     active_window_id
         sta     win_view_by_table-1,x
 
-        FALL_THROUGH_TO RefreshViewPreserveSelection
+        FALL_THROUGH_TO RefreshActiveWindowPreserveSelection
 .endproc ; CmdViewBy
 
 ;;; ============================================================
 
-.proc RefreshViewImpl
+.proc RefreshActiveWindowImpl
 
 ;;; Entry point when view needs refreshing, e.g. rename when sorted.
 entry2:
@@ -3605,9 +3608,9 @@ entry3:
 
 selection_preserved_count:
         .byte   0
-.endproc ; RefreshViewImpl
-RefreshViewPreserveSelection := RefreshViewImpl::entry2
-RefreshView := RefreshViewImpl::entry3
+.endproc ; RefreshActiveWindowImpl
+RefreshActiveWindowPreserveSelection := RefreshActiveWindowImpl::entry2
+RefreshActiveWindow := RefreshActiveWindowImpl::entry3
 
 
 ;;; ============================================================
@@ -3824,7 +3827,7 @@ ep2:
         jsr     GetSelectionViewBy
       IF A = #DeskTopSettings::kViewByName
         txa                     ; X = window id
-        jsr     RefreshViewPreserveSelection
+        jsr     RefreshActiveWindowPreserveSelection
 
         CALL    ScrollIconIntoView, A=selected_icon_list
       ELSE
@@ -3890,7 +3893,7 @@ CmdRenameWithDefaultNameGiven := CmdRename::ep2 ; A,X = name
         jsr     ApplyCaseBits   ; applies `stashed_name` to `src_path_buf`
 
         ;; Update cached used/free for all same-volume windows, and refresh
-        CALL    UpdateActivateAndRefreshWindow, A=selected_window_id
+        CALL    UpdateActivateReloadAndRefreshWindow, A=selected_window_id
         RTS_IF NE
 
         ;; If operation failed, then just leave the default name.
@@ -3922,7 +3925,7 @@ END_PARAM_BLOCK
         ;; Next/prev in sorted order
 
         ;; Tab / Shift+Tab
-alpha:  jsr     ShiftDown
+alpha:  jsr     IsShiftDown
         bpl     a_next
         FALL_THROUGH_TO a_prev
 
@@ -3943,7 +3946,7 @@ alpha:  jsr     ShiftDown
         sta     delta
         jsr     GetKeyboardSelectableIcons
 
-        jsr     ShiftDown
+        jsr     IsShiftDown
         sta     extend_selection_flag
 
         FALL_THROUGH_TO common
@@ -4056,7 +4059,7 @@ END_PARAM_BLOCK
 ;;; --------------------------------------------------
 ;;; Identify a starting icon
 
-        jsr     ShiftDown
+        jsr     IsShiftDown
         sta     shift_flag
 
         jsr     CacheFocusedWindowIconList
@@ -4213,7 +4216,7 @@ fallback:
         jmp     SelectIconAndEnsureVisible
 
 select:
-        jsr     ShiftDown
+        jsr     IsShiftDown
     IF NS
         TAIL_CALL AddIconToSelectionAndEnsureVisible, A=best_icon
     END_IF
@@ -4562,7 +4565,7 @@ make_visible:
         cpy     #'~'
         beq     reverse
 
-        jsr     ShiftDown
+        jsr     IsShiftDown
         bmi     reverse
 
         ;; TODO: Using this table as the source is a little odd.
@@ -5217,7 +5220,7 @@ close_loop:
         CALL    FindWindowsForPrefix, AX=#path_buf
         ldx     found_windows_count
       IF NOT_ZERO
-        CALL    CloseSpecifiedWindow, A=found_windows_list-1,x
+        CALL    CloseWindow, A=found_windows_list-1,x
         jmp     close_loop
       END_IF
     END_IF
@@ -5509,19 +5512,19 @@ alert:  jmp     ShowAlert       ; either `ERR_INVALID_PATHNAME` or `ERR_FILE_NOT
 ;;; Given a window, update used/free data for all same-volume windows,
 ;;; then activate the window (if needed) and refresh the contents
 ;;; (closing on error).
-;;; Same inputs/outputs as `ActivateAndRefreshWindowOrClose`
+;;; Same inputs/outputs as `ActivateReloadAndRefreshWindowOrClose`
 
 .proc UpdateActivateAndRefreshSelectedWindow
-        FALL_THROUGH_TO UpdateActivateAndRefreshWindow, A=selected_window_id
+        FALL_THROUGH_TO UpdateActivateReloadAndRefreshWindow, A=selected_window_id
 .endproc ; UpdateActivateAndRefreshSelectedWindow
 
-.proc UpdateActivateAndRefreshWindow
+.proc UpdateActivateReloadAndRefreshWindow
         pha
         jsr     GetWindowPath   ; into A,X
         jsr     UpdateUsedFreeViaPath
         pla
-        jmp     ActivateAndRefreshWindowOrClose
-.endproc ; UpdateActivateAndRefreshWindow
+        jmp     ActivateReloadAndRefreshWindowOrClose
+.endproc ; UpdateActivateReloadAndRefreshWindow
 
 ;;; ============================================================
 ;;; Input: A = icon id
@@ -5596,39 +5599,39 @@ alert:  jmp     ShowAlert       ; either `ERR_INVALID_PATHNAME` or `ERR_FILE_NOT
 
 ;;; ============================================================
 
-;;; Calls `ActivateAndRefreshWindow` - on failure (e.g. too
+;;; Calls `ActivateReloadAndRefreshWindow` - on failure (e.g. too
 ;;; many files) the window is closed.
 ;;; Input: A = window id
 ;;; Output: A=0/Z=1/N=0 on success, A=$FF/Z=0/N=1 on failure
 
-.proc ActivateAndRefreshWindowOrClose
+.proc ActivateReloadAndRefreshWindowOrClose
         pha                     ; A = window id
-        jsr     _TryActivateAndRefreshWindow
+        jsr     _TryActivateReloadAndRefreshWindow
         pla                     ; A = window id
 
     IF bit exception_flag : NC
         RETURN  A=#0
     END_IF
 
-        jsr     CloseSpecifiedWindow ; A = window id
+        jsr     CloseWindow ; A = window id
         RETURN  A=#$FF
 
-.proc _TryActivateAndRefreshWindow
+.proc _TryActivateReloadAndRefreshWindow
         SET_BIT7_FLAG exception_flag ; set bit7, preserving A
         tsx
         stx     saved_stack
-        jsr     ActivateAndRefreshWindow
+        jsr     ActivateReloadAndRefreshWindow
         CLEAR_BIT7_FLAG exception_flag ; clear bit7, preserving A
         rts
-.endproc ; _TryActivateAndRefreshWindow
+.endproc ; _TryActivateReloadAndRefreshWindow
 
 exception_flag:
         .byte   0
-.endproc ; ActivateAndRefreshWindowOrClose
+.endproc ; ActivateReloadAndRefreshWindowOrClose
 
 ;;; ============================================================
 
-.proc ActivateAndRefreshWindow
+.proc ActivateReloadAndRefreshWindow
         pha                     ; A = window_id
 
         ;; Clear selection
@@ -5657,7 +5660,7 @@ exception_flag:
         ;; Remove old icons
         jsr     CacheActiveWindowIconList
         jsr     RemoveAndFreeCachedWindowIcons
-        jsr     ClearActiveWindowEntryCount
+        jsr     ClearAndStoreActiveWindowIconList
 
         ;; Copy window path to `src_path_buf`
         pla                     ; A = `active_window_id`
@@ -5678,8 +5681,8 @@ exception_flag:
     END_IF
 
         ;; Create icons and draw contents
-        jmp     RefreshView
-.endproc ; ActivateAndRefreshWindow
+        jmp     RefreshActiveWindow
+.endproc ; ActivateReloadAndRefreshWindow
 
 ;;; ============================================================
 ;;; Initiate keyboard-based window moving
@@ -5743,11 +5746,11 @@ exception_flag:
 
 ;;; Close the active window
 .proc CloseActiveWindow
-        FALL_THROUGH_TO CloseSpecifiedWindow, A=active_window_id
+        FALL_THROUGH_TO CloseWindow, A=active_window_id
 .endproc ; CloseActiveWindow
 
 ;;; Inputs: A = window_id
-.proc CloseSpecifiedWindow
+.proc CloseWindow
         jsr     CacheWindowIconList
 
         ;; --------------------------------------------------
@@ -5765,7 +5768,7 @@ exception_flag:
         ;; Prep for animation
 
         CALL    GetWindowPath, A=cached_window_id
-        jsr     IconToAnimate
+        jsr     GetIconToAnimate
         pha                     ; A = animation icon
         lda     cached_window_id
         pha                     ; A = animation window
@@ -5819,7 +5822,7 @@ exception_flag:
         pla                     ; A = animation icon
         jmp     SelectIcon
 
-.endproc ; CloseSpecifiedWindow
+.endproc ; CloseWindow
 
 ;;; ============================================================
 ;;; Check windows and close any where the backing volume/file no
@@ -5849,7 +5852,7 @@ validate_windows_flag:
         jsr     GetSrcFileInfo
         IF CS
         ;; Nope - close the window
-        CALL    CloseSpecifiedWindow, A=window_id
+        CALL    CloseWindow, A=window_id
         END_IF
        END_IF
 
@@ -6203,7 +6206,7 @@ no_win:
         ;; Animate the window being opened
 
         CALL    GetWindowPath, A=cached_window_id
-        jsr     IconToAnimate
+        jsr     GetIconToAnimate
         CALL    AnimateWindowOpen, X=cached_window_id
 
         rts
@@ -6394,7 +6397,7 @@ OpenWindowForPath := OpenWindowImpl::for_path
         old := *+1
         cmp     #SELF_MODIFIED_BYTE
     IF ZERO
-        CALL    ActivateAndRefreshWindowOrClose, A=active_window_id
+        CALL    ActivateReloadAndRefreshWindowOrClose, A=active_window_id
         bne     err
     END_IF
 
@@ -12981,7 +12984,7 @@ ok:     RETURN  A=#0
         ;; Use system disk as animation source
         MLI_CALL GET_PREFIX, get_prefix_params
         dec     src_path_buf    ; remove trailing '/'
-        CALL    IconToAnimate, AX=#src_path_buf
+        CALL    GetIconToAnimate, AX=#src_path_buf
         pha
         CALL    AnimateWindowOpen, X=#$FF ; desktop
 
@@ -14626,7 +14629,7 @@ kExtendSelectionModifierMask    = %10000001 ; OA or Shift
         and     #DeskTopSettings::kSysCapIsIIgs
         bne     iigs
 
-        jsr     TestShiftMod    ; bit7 = shift down, if detectable
+        jsr     _TestShiftMod   ; bit7 = shift down, if detectable
         rol                     ; C = shift (s)
         php
         lda     BUTN0           ; A = %Oxxxxxxx
@@ -14648,23 +14651,23 @@ iigs:   lda     KEYMODREG       ; bits match our return value
 ;;; Test if shift is down (if it can be detected).
 ;;; Output: A=high bit/N flag set if down.
 
-.proc ShiftDown
+.proc IsShiftDown
         CALL    ReadSetting, X=#DeskTopSettings::system_capabilities
         and     #DeskTopSettings::kSysCapIsIIgs
-        beq     TestShiftMod    ; no, rely on shift key mod
+        beq     _TestShiftMod    ; no, rely on shift key mod
 
         lda     KEYMODREG       ; On IIgs, use register instead
         and     #%00000001      ; bit 7 = Command (OA), bit 0 = Shift
         beq     ret
         lda     #$80
 ret:    rts
-.endproc ; ShiftDown
+.endproc ; IsShiftDown
 
 ;;; Compare the shift key mod state. Returns high bit set if
 ;;; not the initial state (i.e. Shift key is likely down), if
 ;;; detectable.
 
-.proc TestShiftMod
+.proc _TestShiftMod
         CALL    ReadSetting, X=#DeskTopSettings::system_capabilities
 
         ;; If a IIe, maybe use shift key mod
@@ -14677,7 +14680,7 @@ ret:    rts
     END_IF
 
         rts
-.endproc ; TestShiftMod
+.endproc ; _TestShiftMod
 
 ;;; ============================================================
 ;;; Window Entry Tables
@@ -14706,10 +14709,10 @@ ret:    rts
         rts
 .endproc ; CacheWindowIconList
 
-.proc ClearActiveWindowEntryCount
+.proc ClearAndStoreActiveWindowIconList
         jsr     CacheActiveWindowIconList
         FALL_THROUGH_TO ClearAndStoreCachedWindowIconList
-.endproc ; ClearActiveWindowEntryCount
+.endproc ; ClearAndStoreActiveWindowIconList
 
 .proc ClearAndStoreCachedWindowIconList
         copy8   #0, cached_window_icon_count
