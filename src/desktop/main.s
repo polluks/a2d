@@ -9435,7 +9435,7 @@ AnimateWindowOpen       := AnimateWindowImpl::open
     WHILE dex : dex : POS
 
         MGTK_CALL MGTK::SetPattern, checkerboard_pattern
-        jsr     SetPenModeXOR
+        MGTK_CALL MGTK::SetPenMode, penXOR
         MGTK_CALL MGTK::FrameRect, tmp_rect
 
 ret:    rts
@@ -14469,12 +14469,6 @@ ret:    rts
         MGTK_CALL MGTK::PeekEvent, event_params
         rts
 .endproc ; PeekEvent
-
-        PROC_USED_CLEARING_UPDATES
-.proc SetPenModeXOR
-        MGTK_CALL MGTK::SetPenMode, penXOR
-        rts
-.endproc ; SetPenModeXOR
 
 .proc SetPenModeCopy
         MGTK_CALL MGTK::SetPenMode, pencopy
