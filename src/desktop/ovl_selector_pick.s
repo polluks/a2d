@@ -382,10 +382,7 @@ clean_flag:                     ; high bit set if "clean", cleared if "dirty"
 .proc OpenWindow
         MGTK_CALL MGTK::OpenWindow, winfo_entry_picker
         CALL    main::SafeSetPortForWindowId, A=#winfo_entry_picker::kWindowId
-        jsr     main::SetPenModeNotCopy
-        MGTK_CALL MGTK::SetPenSize, pensize_frame
-        MGTK_CALL MGTK::FrameRect, entry_picker_frame_rect
-        MGTK_CALL MGTK::SetPenSize, pensize_normal
+        CALL    main::DrawDialogFrame, AX=#entry_picker_frame_rect
 
         MGTK_CALL MGTK::FrameRect, entry_picker_rect
 
