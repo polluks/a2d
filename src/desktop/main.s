@@ -3267,7 +3267,7 @@ concatenate:
 
         ;; Get the viewport, and adjust for header
         jsr     ApplyActiveWinfoToWindowGrafport
-        add16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
+        jsr     RemoveHeaderFromWindowGrafport
 
         ;; Padding
         MGTK_CALL MGTK::InflateRect, bbox_pad_tmp_rect
@@ -3302,10 +3302,7 @@ adjust:
 
         lda     dirty
     IF NOT_ZERO
-        ;; Apply the viewport (accounting for header)
-        sub16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
-        jsr     AssignActiveWindowCliprectAndUpdateCachedIcons
-        jsr     ClearAndDrawActiveWindowEntries
+        jsr     UpdateViewportAndRedrawActiveWindowEntriesAfterScroll
         jsr     ScrollUpdate
     END_IF
 
@@ -4710,7 +4707,7 @@ _PreamblePreCached:
 
         ;; Compute effective viewport
         CALL    ApplyWinfoToWindowGrafport, A=cached_window_id
-        add16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
+        jsr     RemoveHeaderFromWindowGrafport
         COPY_STRUCT MGTK::Point, viewport+MGTK::Rect::topleft, old
 
         ldx     #2              ; loop over dimensions
@@ -4914,8 +4911,7 @@ _PreamblePreCached:
 .proc _MaybeUpdateHThumb
     IF ecmp16 viewport+MGTK::Rect::x1, old+MGTK::Point::xcoord : NE
         jsr     _SetHThumbFromViewport
-        jsr     _UpdateViewport
-        jsr     ClearAndDrawActiveWindowEntries
+        jsr     UpdateViewportAndRedrawActiveWindowEntriesAfterScroll
 
         ;; Handle offset case - may be able to deactivate scrollbar now
       IF cmp16 width, bbox_w : GE
@@ -4932,8 +4928,7 @@ _PreamblePreCached:
 .proc _MaybeUpdateVThumb
     IF ecmp16 viewport+MGTK::Rect::y1, old+MGTK::Point::ycoord : NE
         jsr     _SetVThumbFromViewport
-        jsr     _UpdateViewport
-        jsr     ClearAndDrawActiveWindowEntries
+        jsr     UpdateViewportAndRedrawActiveWindowEntriesAfterScroll
 
         ;; Handle offset case - may be able to deactivate scrollbar now
       IF cmp16 height, bbox_h : GE
@@ -4977,16 +4972,6 @@ _PreamblePreCached:
         MGTK_CALL MGTK::MulDiv, setthumb_muldiv_params
         rts
 .endproc ; _CalcThumbFromViewport
-
-;;; --------------------------------------------------
-;;; Apply `maprect` back to active window's GrafPort
-
-.proc _UpdateViewport
-        ;; Restore header to viewport
-        sub16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
-
-        jmp     AssignActiveWindowCliprectAndUpdateCachedIcons
-.endproc ; _UpdateViewport
 
 ;;; --------------------------------------------------
 ;;; Check contents against window size, and activate/deactivate
@@ -5882,6 +5867,15 @@ validate_windows_flag:
         rts
 .endproc ; ApplyWinfoToWindowGrafport
 
+;;; Used after calling `ApplyWinfoToWindowGrafport` to exclude the
+;;; header before computing viewport updates, etc.
+.proc RemoveHeaderFromWindowGrafport
+        viewport := window_grafport+MGTK::GrafPort::maprect
+
+        add16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
+        rts
+.endproc ; RemoveHeaderFromWindowGrafport
+
 ;;; NOTE: Does not update icon positions, so only use in empty windows.
 .proc ResetActiveWindowViewport
         jsr     ApplyActiveWinfoToWindowGrafport
@@ -5908,11 +5902,27 @@ validate_windows_flag:
         rts
 .endproc ; AssignActiveWindowCliprect
 
-.proc AssignActiveWindowCliprectAndUpdateCachedIcons
+;;; ============================================================
+;;; After an operation has adjusted the active window's viewport (e.g.
+;;; scrolling via the scrollbars, or bringing an icon into view) by
+;;; modifying `window_grafport`, apply it back to the winfo, update
+;;; the icon positions in window space and clear/redraw the window's
+;;; entries.
+
+;;; NOTE: Callers are assumed to have removed the header from the
+;;; viewport; this will restore the header.
+.proc UpdateViewportAndRedrawActiveWindowEntriesAfterScroll
+        viewport := window_grafport+MGTK::GrafPort::maprect
+
+        ;; Restore header to viewport
+        sub16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
+
         jsr     CachedIconsScreenToWindow
         jsr     AssignActiveWindowCliprect
-        jmp     CachedIconsWindowToScreen
-.endproc ; AssignActiveWindowCliprectAndUpdateCachedIcons
+        jsr     CachedIconsWindowToScreen
+
+        jmp     ClearAndDrawActiveWindowEntries
+.endproc ; UpdateViewportAndRedrawActiveWindowEntriesAfterScroll
 
 ;;; ============================================================
 
