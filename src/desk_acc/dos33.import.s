@@ -977,6 +977,9 @@ index:  .byte   0
        DO
         lda     RWTS_SECTOR_BUF,y
         and     #$7F            ; strip high bit
+        IF A < #' ' OR A = #CHAR_DELETE
+        lda     #' '
+        END_IF
         sta     entry_buf+aux::CatalogEntry::Name+1,x
         iny
        WHILE inx : X <> #dos33::MaxFilenameLen
@@ -986,6 +989,9 @@ index:  .byte   0
         lda     entry_buf+aux::CatalogEntry::Name+1,x
        WHILE A = #' '
         inx
+       IF ZERO
+        inx
+       END_IF
         stx     entry_buf+aux::CatalogEntry::Name
 
         lda     cur_cat_sector_offset
