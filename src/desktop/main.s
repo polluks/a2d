@@ -1981,6 +1981,156 @@ check_header:
 .endproc ; ReadLinkFile
 
 ;;; ============================================================
+;;; Invoke a DA, with path set to first file selection
+;;; Input: `src_path_buf` has DA absolute path
+
+.proc InvokeDeskAccByPath
+        ;; * Can't use `dst_path_buf` as it is within DA_IO_BUFFER
+        ;; * Can't use `src_path_buf` as it holds file selection
+        COPY_STRING src_path_buf, tmp_path_buf ; Use this to launch the DA
+
+        copy8   #0, src_path_buf ; Signal no file selection
+
+        ;; As a convenience for DAs, pass path to first selected icon.
+        lda     selected_icon_count
+    IF NOT_ZERO
+        lda     selected_icon_list ; first selected icon
+      IF A <> trash_icon_num    ; ignore trash
+        jsr     GetIconPath     ; `operation_src_path` set to path; A=0 on success
+        jne     ShowAlert       ; `ERR_INVALID_PATHNAME`
+        CALL    CopyToSrcPath, AX=#operation_src_path
+      END_IF
+    END_IF
+        CALL    GetIconToAnimate, AX=#tmp_path_buf
+        tay
+        FALL_THROUGH_TO InvokeDeskAccWithIcon, AX=#tmp_path_buf
+.endproc ; InvokeDeskAccByPath
+
+;;; ============================================================
+;;; Invoke Desk Accessory
+;;; Input: A,X = DA pathname (relative is OK)
+;;;        Y = icon id to animate ($FF for none)
+
+        PROC_USED_IN_OVERLAY    ; Prevent DA overlay from trashing SMC
+.proc InvokeDeskAccWithIcon
+        stax    open_params::pathname
+
+        tya
+        sta     icon            ; can't use stack, as DAs can modify
+    IF NC
+        CALL    AnimateWindowOpen, X=#$FF ; desktop
+    END_IF
+
+        ;; --------------------------------------------------
+        ;; Load the DA
+
+    DO
+        MLI_CALL OPEN, open_params
+      IF CS
+        CALL    ShowAlert, A=#kErrInsertSystemDisk
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
+        REDO_IF ZERO
+        rts                     ; cancel, so fail
+      END_IF
+
+        lda     open_params::ref_num
+        sta     read_header_params::ref_num
+        sta     read_params::ref_num
+        sta     close_params::ref_num
+        MLI_CALL READ, read_header_params
+
+        lda     DAHeader::aux_length
+        ora     DAHeader::aux_length+1
+      IF NOT ZERO
+        ;; Aux memory segment
+        copy16  DAHeader::aux_length, read_params::request_count
+        MLI_CALL READ, read_params
+        copy16  #DA_LOAD_ADDRESS, STARTLO
+        copy16  #DA_LOAD_ADDRESS, DESTINATIONLO
+        add16   #DA_LOAD_ADDRESS-1, DAHeader::aux_length, ENDLO
+        CALL    AUXMOVE, C=1    ; main>aux
+      END_IF
+
+        ;; Main memory segment
+        copy16  DAHeader::main_length, read_params::request_count
+        MLI_CALL READ, read_params
+        MLI_CALL CLOSE, close_params
+    DONE
+
+        ;; --------------------------------------------------
+        ;; Invoke it
+
+        jsr     SetCursorPointer ; before invoking DA
+        jsr     DA_LOAD_ADDRESS
+
+        ;; --------------------------------------------------
+        ;; Restore state
+
+        jsr     InitSetDesktopPort ; DA's port destroyed, set something real as current
+        jsr     ShowClockForceUpdate
+        jsr     ClearUpdates    ; following DA close (just in case)
+
+        icon := *+1
+        lda     #SELF_MODIFIED_BYTE
+    IF NC
+        CALL    AnimateWindowClose, X=#$FF ; desktop
+    END_IF
+
+        jmp     SetCursorPointer ; after invoking DA
+
+.params DAHeader
+aux_length:     .word   0
+main_length:    .word   0
+.endparams
+
+        DEFINE_OPEN_PARAMS open_params, 0, DA_IO_BUFFER
+        DEFINE_READWRITE_PARAMS read_header_params, DAHeader, .sizeof(DAHeader)
+        DEFINE_READWRITE_PARAMS read_params, DA_LOAD_ADDRESS, kDAMaxSize
+        DEFINE_CLOSE_PARAMS close_params
+
+.endproc ; InvokeDeskAccWithIcon
+
+;;; ============================================================
+;;; Copy the string at $06 to target at A,X
+;;; Inputs: Source string at $06, target buffer at A,X
+;;; Output: String length in A
+
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
+        PROC_USED_IN_OVERLAY
+.proc CopyPtr1ToBuf
+        ptr1 := $06
+
+        stax    addr
+        ldy     #0
+        lda     (ptr1),y
+        tay
+    DO
+        lda     (ptr1),y
+        addr := *+1
+        sta     SELF_MODIFIED,y
+    WHILE dey : POS
+        rts
+.endproc ; CopyPtr1ToBuf
+
+;;; Copy the string at $08 to target at A,X
+;;; Inputs: Source string at $08, target buffer at A,X
+;;; Output: String length in A
+.proc CopyPtr2ToBuf
+        ptr2 := $08
+
+        stax    addr
+        ldy     #0
+        lda     (ptr2),y
+        tay
+    DO
+        lda     (ptr2),y
+        addr := *+1
+        sta     SELF_MODIFIED,y
+    WHILE dey : POS
+        rts
+.endproc ; CopyPtr2ToBuf
+
+;;; ============================================================
 ;;; Uppercase a string
 ;;; Input: A,X = Address
 ;;; Trashes $06
@@ -2342,46 +2492,6 @@ entry_num:
 .endproc ; InvokeSelectorEntry
 
 ;;; ============================================================
-;;; Copy the string at $06 to target at A,X
-;;; Inputs: Source string at $06, target buffer at A,X
-;;; Output: String length in A
-
-        PROC_USED_IN_FORMAT_ERASE_OVERLAY
-        PROC_USED_IN_OVERLAY
-.proc CopyPtr1ToBuf
-        ptr1 := $06
-
-        stax    addr
-        ldy     #0
-        lda     (ptr1),y
-        tay
-    DO
-        lda     (ptr1),y
-        addr := *+1
-        sta     SELF_MODIFIED,y
-    WHILE dey : POS
-        rts
-.endproc ; CopyPtr1ToBuf
-
-;;; Copy the string at $08 to target at A,X
-;;; Inputs: Source string at $08, target buffer at A,X
-;;; Output: String length in A
-.proc CopyPtr2ToBuf
-        ptr2 := $08
-
-        stax    addr
-        ldy     #0
-        lda     (ptr2),y
-        tay
-    DO
-        lda     (ptr2),y
-        addr := *+1
-        sta     SELF_MODIFIED,y
-    WHILE dey : POS
-        rts
-.endproc ; CopyPtr2ToBuf
-
-;;; ============================================================
 
 CmdAbout := AboutDialogProc
 
@@ -2441,115 +2551,6 @@ skip:   iny
         jmp     LaunchFileByPathOnSystemDisk
 .endproc ; CmdDeskAccImpl
 CmdDeskAcc      := CmdDeskAccImpl::start
-
-;;; ============================================================
-;;; Invoke a DA, with path set to first file selection
-;;; Input: `src_path_buf` has DA absolute path
-
-.proc InvokeDeskAccByPath
-        ;; * Can't use `dst_path_buf` as it is within DA_IO_BUFFER
-        ;; * Can't use `src_path_buf` as it holds file selection
-        COPY_STRING src_path_buf, tmp_path_buf ; Use this to launch the DA
-
-        copy8   #0, src_path_buf ; Signal no file selection
-
-        ;; As a convenience for DAs, pass path to first selected icon.
-        lda     selected_icon_count
-    IF NOT_ZERO
-        lda     selected_icon_list ; first selected icon
-      IF A <> trash_icon_num    ; ignore trash
-        jsr     GetIconPath     ; `operation_src_path` set to path; A=0 on success
-        jne     ShowAlert       ; `ERR_INVALID_PATHNAME`
-        CALL    CopyToSrcPath, AX=#operation_src_path
-      END_IF
-    END_IF
-        CALL    GetIconToAnimate, AX=#tmp_path_buf
-        tay
-        FALL_THROUGH_TO InvokeDeskAccWithIcon, AX=#tmp_path_buf
-.endproc ; InvokeDeskAccByPath
-
-;;; ============================================================
-;;; Invoke Desk Accessory
-;;; Input: A,X = DA pathname (relative is OK)
-;;;        Y = icon id to animate ($FF for none)
-
-.proc InvokeDeskAccWithIcon
-        stax    open_params::pathname
-
-        tya
-        sta     icon            ; can't use stack, as DAs can modify
-    IF NC
-        CALL    AnimateWindowOpen, X=#$FF ; desktop
-    END_IF
-
-        ;; --------------------------------------------------
-        ;; Load the DA
-
-    DO
-        MLI_CALL OPEN, open_params
-      IF CS
-        CALL    ShowAlert, A=#kErrInsertSystemDisk
-        ASSERT_EQUALS ::kAlertResultTryAgain, 0
-        REDO_IF ZERO
-        rts                     ; cancel, so fail
-      END_IF
-
-        lda     open_params::ref_num
-        sta     read_header_params::ref_num
-        sta     read_params::ref_num
-        sta     close_params::ref_num
-        MLI_CALL READ, read_header_params
-
-        lda     DAHeader::aux_length
-        ora     DAHeader::aux_length+1
-      IF NOT ZERO
-        ;; Aux memory segment
-        copy16  DAHeader::aux_length, read_params::request_count
-        MLI_CALL READ, read_params
-        copy16  #DA_LOAD_ADDRESS, STARTLO
-        copy16  #DA_LOAD_ADDRESS, DESTINATIONLO
-        add16   #DA_LOAD_ADDRESS-1, DAHeader::aux_length, ENDLO
-        CALL    AUXMOVE, C=1    ; main>aux
-      END_IF
-
-        ;; Main memory segment
-        copy16  DAHeader::main_length, read_params::request_count
-        MLI_CALL READ, read_params
-        MLI_CALL CLOSE, close_params
-    DONE
-
-        ;; --------------------------------------------------
-        ;; Invoke it
-
-        jsr     SetCursorPointer ; before invoking DA
-        jsr     DA_LOAD_ADDRESS
-
-        ;; --------------------------------------------------
-        ;; Restore state
-
-        jsr     InitSetDesktopPort ; DA's port destroyed, set something real as current
-        jsr     ShowClockForceUpdate
-        jsr     ClearUpdates    ; following DA close (just in case)
-
-        icon := *+1
-        lda     #SELF_MODIFIED_BYTE
-    IF NC
-        CALL    AnimateWindowClose, X=#$FF ; desktop
-    END_IF
-
-        jmp     SetCursorPointer ; after invoking DA
-
-.params DAHeader
-aux_length:     .word   0
-main_length:    .word   0
-.endparams
-
-        DEFINE_OPEN_PARAMS open_params, 0, DA_IO_BUFFER
-        DEFINE_READWRITE_PARAMS read_header_params, DAHeader, .sizeof(DAHeader)
-        DEFINE_READWRITE_PARAMS read_params, DA_LOAD_ADDRESS, kDAMaxSize
-        DEFINE_CLOSE_PARAMS close_params
-
-.endproc ; InvokeDeskAccWithIcon
 
 ;;; ============================================================
 
