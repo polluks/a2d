@@ -83,6 +83,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Select disk (if present) after Special > Check Drive.
 * Add "Startup.Items" folder support.
 * When needed, ensure icon scrolled into view even if already selected.
+* Fix crash when repainting only header of scrolled window.
 
 ### Selector
 

@@ -225,6 +225,8 @@ skip_get:
         jsr     DrawWindowHeader
 
         jsr     AdjustUpdatePortForEntries
+        RTS_IF A = #MGTK::Error::window_obscured
+
         jmp     DrawWindowEntries
 .endproc ; _UpdateWindow
 

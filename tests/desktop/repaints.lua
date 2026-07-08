@@ -1354,3 +1354,25 @@ test.Step(
     a2d.WaitForRepaint()
     test.Snap("verify no file icons mispaint onto desktop")
 end)
+
+--[[
+  Open a window. View > By Name. Scroll down so some icons are hidden
+  behind the header. Open another window. Move it so it overlaps only
+  the header of the first window. Close the window. Verify no crash.
+]]
+test.Step(
+  "degenerate entry update rect",
+  function()
+    a2d.OpenPath("/A2.DESKTOP")
+    a2d.MoveWindowBy(0, 55)
+    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
+    for i = 1, 20 do
+      apple2.DownArrowKey()
+      a2d.WaitForRepaint()
+    end
+    a2d.OpenPath("/RAM1", {keep_windows=true})
+    a2d.CloseWindow()
+    emu.wait(5)
+
+    a2dtest.ExpectNotHanging()
+end)
