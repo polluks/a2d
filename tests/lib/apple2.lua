@@ -189,24 +189,26 @@ elseif machine.system.name:match("^apple2p") or machine.system.name:match("^appl
   if machine.ioport.ports[":keyb_special"] then
     -- MAME through 0.283
     keyboard = {
-      ["Control"]     = { port = ":keyb_special", field = "Control"     },
-      ["Shift"]       = { port = ":keyb_special", field = "Left Shift"  },
+      ["Control"]     = { port = ":keyb_special", field = "Control"    },
+      ["Shift"]       = { port = ":keyb_special", field = "Left Shift" },
+      ["Reset"]       = { port = ":keyb_special", field = "Reset"      },
 
-      ["Left Arrow"] = { port = ":X2", field = "←" },
-      ["Right Arrow"] = { port = ":X2", field = "→" },
+      ["Left Arrow"]  = { port = ":X2", field = "←"      },
+      ["Right Arrow"] = { port = ":X2", field = "→"      },
       ["Return"]      = { port = ":X4", field = "Return" },
-      ["Escape"]      = { port = ":X4", field = "Esc"    }
+      ["Escape"]      = { port = ":X4", field = "Esc"    },
     }
   elseif machine.ioport.ports[":kbd:nkbd:keyb_special"] then
     -- MAME from 0.284
     keyboard = {
       ["Control"]     = { port = ":kbd:nkbd:keyb_special", field = "Ctrl"        },
       ["Shift"]       = { port = ":kbd:nkbd:keyb_special", field = "Left Shift"  },
+      ["Reset"]       = { port = ":kbd:nkbd:keyb_special", field = "Reset"       },
 
-      ["Left Arrow"] = { port = ":kbd:nkbd:X2", field = "Cursor Left" },
+      ["Left Arrow"]  = { port = ":kbd:nkbd:X2", field = "Cursor Left"  },
       ["Right Arrow"] = { port = ":kbd:nkbd:X2", field = "Cursor Right" },
-      ["Return"]      = { port = ":kbd:nkbd:X4", field = "Return" },
-      ["Escape"]      = { port = ":kbd:nkbd:X4", field = "Esc"    }
+      ["Return"]      = { port = ":kbd:nkbd:X4", field = "Return"       },
+      ["Escape"]      = { port = ":kbd:nkbd:X4", field = "Esc"          },
     }
   else
     error(string.format(
