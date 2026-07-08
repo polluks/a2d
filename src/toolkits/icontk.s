@@ -632,7 +632,6 @@ END_PARAM_BLOCK
 .proc FreeAllImpl
 PARAM_BLOCK params, icontk::command_data
 window_id       .byte
-icon            .byte
 END_PARAM_BLOCK
 
         ldx     num_icons
@@ -1477,16 +1476,6 @@ rest:
     WHILE bit more_drawing_needed_flag : NS
 
 ret:    rts
-
-.params shield_cursor_params
-        DEFINE_POINT viewloc, 0, 0
-mapbits:        .addr   MGTK::screen_mapbits
-mapwidth:       .byte   MGTK::screen_mapwidth
-reserved:       .byte   0
-        DEFINE_RECT maprect, 0, 0, 0, 0
-        REF_MAPINFO_MEMBERS
-.endparams
-
 
 .proc _DoPaint
         label_pos := generic_ptr
