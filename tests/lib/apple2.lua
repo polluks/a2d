@@ -183,7 +183,7 @@ elseif machine.system.name:match("^prav8c") then
     ["Caps Lock"]   = { port = ":kbd:KEY6", field = "Caps Lock", bits = 0x01 }, -- TODO: bits?
   }
 
-elseif machine.system.name:match("^apple2p") then
+elseif machine.system.name:match("^apple2p") or machine.system.name:match("^apple2$") then
   -- minimal support for launcher testing
 
   if machine.ioport.ports[":keyb_special"] then
@@ -192,8 +192,8 @@ elseif machine.system.name:match("^apple2p") then
       ["Control"]     = { port = ":keyb_special", field = "Control"     },
       ["Shift"]       = { port = ":keyb_special", field = "Left Shift"  },
 
+      ["Left Arrow"] = { port = ":X2", field = "←" },
       ["Right Arrow"] = { port = ":X2", field = "→" },
-      ["Down Arrow"]  = { port = ":X2", field = "↓"  },
       ["Return"]      = { port = ":X4", field = "Return" },
       ["Escape"]      = { port = ":X4", field = "Esc"    }
     }
@@ -203,8 +203,8 @@ elseif machine.system.name:match("^apple2p") then
       ["Control"]     = { port = ":kbd:nkbd:keyb_special", field = "Ctrl"        },
       ["Shift"]       = { port = ":kbd:nkbd:keyb_special", field = "Left Shift"  },
 
+      ["Left Arrow"] = { port = ":kbd:nkbd:X2", field = "Cursor Left" },
       ["Right Arrow"] = { port = ":kbd:nkbd:X2", field = "Cursor Right" },
-      ["Down Arrow"]  = { port = ":kbd:nkbd:X2", field = "Cursor Left"  },
       ["Return"]      = { port = ":kbd:nkbd:X4", field = "Return" },
       ["Escape"]      = { port = ":kbd:nkbd:X4", field = "Esc"    }
     }
@@ -399,9 +399,15 @@ function apple2.TypeLine(sequence)
 end
 
 local function press(k)
+  if keyboard[k] == nil then
+    error(string.format("No key binding for %q on system %q", k, machine.system.name))
+  end
   get_field(keyboard[k].port, keyboard[k].field):set_value(1)
 end
 local function release(k)
+  if keyboard[k] == nil then
+    error(string.format("No key binding for %q on system %q", k, machine.system.name))
+  end
   get_field(keyboard[k].port, keyboard[k].field):clear_value()
 end
 local function press_and_release(k)
