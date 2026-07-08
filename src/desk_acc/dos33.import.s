@@ -103,6 +103,14 @@ control_block:  .tag    ControlBlock
 str_alert_no_windows_open:
         PASCAL_STRING res_string_alert_no_windows_open
 
+.params AlertCatalogCouldNotBeRead
+        .addr   str_alert_catalog_could_not_be_read
+        .byte   AlertButtonOptions::OK
+        .byte   AlertOptions::Beep | AlertOptions::SaveBack
+.endparams
+str_alert_catalog_could_not_be_read:
+        PASCAL_STRING res_string_alert_catalog_could_not_be_read
+
 ;;; ============================================================
 
 .scope DevicePicker
@@ -873,6 +881,10 @@ str_from_int:   PASCAL_STRING "000000" ; filled in by IntToString
 
         JUMP_TABLE_MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::watch
         jsr     LoadCatalogEntries
+    IF CS
+        TAIL_CALL JUMP_TABLE_SHOW_ALERT_PARAMS, AX=#aux::AlertCatalogCouldNotBeRead
+    END_IF
+
         JUMP_TABLE_MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
         jsr     SendControlBlock
         JSR_TO_AUX aux::Catalog::Init
@@ -1021,11 +1033,12 @@ next_sector:
     WHILE NOT ZERO
 
 exit_success:
+        clc
         rts
 
 exit_error:
-        ;; TODO: Something useful here
-        brk
+        sec
+        rts
 
 aux_entry_ptr:
         .addr   0

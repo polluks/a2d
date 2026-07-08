@@ -114,6 +114,7 @@ Project Page: https://github.com/a2stuff/a2d
   * Fix keyboard shortcut handling.
   * Close window if too many icons present after import.
   * Handle control characters and empty filenames.
+  * Prevent crash if VTOC can't be read.
 * Sounds: Time "Silent" menu bar flash using VBL.
 * Screen Savers: improve animation for Flying Toasters, Hexix, Message and Melt.
 * Calculator & Sci.Calc

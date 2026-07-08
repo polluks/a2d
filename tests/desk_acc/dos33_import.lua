@@ -1,7 +1,7 @@
 --[[ BEGINCONFIG ========================================
 
 MODELARGS="-sl1 ramfactor -sl2 mouse -sl7 cffa2"
-DISKARGS="-hard1 $HARDIMG -flop1 dos33_floppy.dsk"
+DISKARGS="-hard1 $HARDIMG -flop1 dos33_floppy.dsk -flop2 SD073c.dsk"
 
 ======================================== ENDCONFIG ]]
 
@@ -164,4 +164,19 @@ test.Step(
     a2d.DialogOK()
     emu.wait(5)
     test.ExpectEquals(a2dtest.GetWindowCount(), 0, "window should have closed")
+end)
+
+--[[
+  Insert SD073c.dsk - formatted as DOS 3.3 but with a non-standard VTOC.
+  Select the disk. Click OK. Verify an alert is shown.
+]]
+test.Step(
+  "Non-DOS 3.3 VTOC",
+  function()
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/DOS33.IMPORT", {no_validate=true})
+    apple2.DownArrowKey() -- select drive
+    apple2.DownArrowKey() -- select drive
+    apple2.ReturnKey()
+    a2dtest.WaitForAlert({match="catalog could not be read"})
+    apple2.ReturnKey()
 end)
