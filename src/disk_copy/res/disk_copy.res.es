@@ -2,8 +2,8 @@
 .define res_string_menu_bar_item_facilities "Opciones"
 .define res_string_dc_menu_item_quit "Salir"
 .define res_char_dc_menu_item_quit_shortcut 'Q'
-.define res_string_menu_item_quick_copy "Copia R\x10pida"
-.define res_string_dc_menu_item_disk_copy "Copiar Disco"
+.define res_string_menu_item_quick_copy "Copia Inteligente Bloques"
+.define res_string_dc_menu_item_disk_copy "Copia Completa Disco"
 .define res_string_button_read_drive "Leer Unidad"
 .define res_char_button_read_drive_shortcut 'L'
 .define res_string_label_slot_drive_name "Ranura, Unidad, Nombre"

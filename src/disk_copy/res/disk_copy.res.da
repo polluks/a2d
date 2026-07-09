@@ -2,8 +2,8 @@
 .define res_string_menu_bar_item_facilities "Indstillinger"
 .define res_string_dc_menu_item_quit "Slut"
 .define res_char_dc_menu_item_quit_shortcut 'Q'
-.define res_string_menu_item_quick_copy "Hurtig kopi"
-.define res_string_dc_menu_item_disk_copy "Disk kopi"
+.define res_string_menu_item_quick_copy "Smart Blokkopi"
+.define res_string_dc_menu_item_disk_copy "Fuld Diskkopi"
 .define res_string_button_read_drive "L{s Drev"
 .define res_char_button_read_drive_shortcut 'L'
 .define res_string_label_slot_drive_name "Kortplads, Drev, Navn"

@@ -360,15 +360,15 @@ DialogTest(
   function(suffix)
     a2d.CopyDisk()
 
-    -- "Disk Copy"
+    -- "Full Disk Copy"
     a2d.InvokeMenuItem(3, 2)
-    test.Snap("Disk Copy - \"Disk Copy\" option" .. suffix)
+    test.Snap("Disk Copy - \"Full Disk Copy\" option" .. suffix)
 
-    -- "Quick Copy" / select source
+    -- "Smart Block Copy" / select source
     a2d.InvokeMenuItem(3, 1)
-    test.Snap("Disk Copy - \"Quick Copy\" option" .. suffix)
+    test.Snap("Disk Copy - \"Smart Block Copy\" option" .. suffix)
 
-    -- Use "Disk Copy" so we get Formatting in there
+    -- Use "Full Disk Copy" so we get Formatting in there
     a2d.InvokeMenuItem(3, 2)
 
     apple2.DownArrowKey() -- S7,D1
@@ -428,8 +428,8 @@ DialogTest(
     a2d.DialogOK()
     emu.wait(5)
 
-    -- "Quick Copy"
-    a2d.InvokeMenuItem(3, 1) -- Options > Quick Copy
+    -- "Smart Block Copy"
+    a2d.InvokeMenuItem(3, 1) -- Options > Smart Block Copy
     apple2.DownArrowKey() -- S7,D1
     apple2.DownArrowKey() -- S1,D1
     apple2.DownArrowKey() -- S6,D1

@@ -101,7 +101,7 @@ memory bitmap is maintained with available/reserved page-pairs marked
 for main, aux, and aux-lcbank2 addresses. See `memory_bitmap` in
 `main.s`.
 
-In Quick Copy mode, the volume's bitmap is loaded at $4000 upwards
-(and then marked as used in the memory bitmap) and used to track which
-blocks to copy. In Disk Copy mode, a synthetic bitmap is used instead
-(to copy all blocks).
+In Smart Block Copy mode, the volume's bitmap is loaded at $4000
+upwards (and then marked as used in the memory bitmap) and used to
+track which blocks to copy. In Full Disk Copy mode, a synthetic bitmap
+is used instead (to copy all blocks).

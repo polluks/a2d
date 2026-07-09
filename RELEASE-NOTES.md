@@ -101,6 +101,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Fix copying all blocks on volumes with unusual sizes.
 * Fix overlapping labels during copy in some locales.
 * Fix crash on Apple IIc/IIc+ on mouse activity after some copies. ([https://github.com/a2stuff/a2d/issues/900](#900))
+* Rename "Quick Copy" to "Smart Block Copy" and "Disk Copy" to "Full Disk Copy".
 
 ### Desk Accessories
 

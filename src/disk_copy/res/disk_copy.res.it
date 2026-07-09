@@ -2,8 +2,8 @@
 .define res_string_menu_bar_item_facilities "Opzioni"
 .define res_string_dc_menu_item_quit "Smetti"
 .define res_char_dc_menu_item_quit_shortcut 'Q'
-.define res_string_menu_item_quick_copy "Copia rapida"
-.define res_string_dc_menu_item_disk_copy "Copia volume"
+.define res_string_menu_item_quick_copy "Copia Blocchi Intelligente"
+.define res_string_dc_menu_item_disk_copy "Copia Completa Disco"
 .define res_string_button_read_drive "Volumi collegati"
 .define res_char_button_read_drive_shortcut 'V'
 .define res_string_label_slot_drive_name "Slot, Lettore, Nome"

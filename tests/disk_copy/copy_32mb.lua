@@ -17,19 +17,19 @@ local s5d2 = manager.machine.images[":sl5:cffa2:cffa2_ata:1:hdd:image"]
 
 --[[
   Launch DeskTop. Special > Copy Disk.... Copy a 32MB disk image using
-  Quick Copy (the default mode). Verify that the screen is not
+  Smart Block Copy (the default mode). Verify that the screen is not
   garbled, the progress bar updates correctly, and that the copy is
   successful.
 
   Launch DeskTop. Special > Copy Disk.... Copy a 32MB disk image using
-  Disk Copy (the other mode). Verify that the screen is not garbled,
+  Full Disk Copy (the other mode). Verify that the screen is not garbled,
   the progress bar updates correctly, and that the copy is successful.
 ]]
 
 test.Variants(
   {
-    {"Quick Copy 32MB", "quick"},
-    {"Disk Copy 32MB", "disk"},
+    {"Smart Block Copy 32MB", "quick"},
+    {"Full Disk Copy 32MB", "disk"},
   },
   function(idx, name, what)
     if a2dtest.IsAlertShowing() then  -- duplicate volume
@@ -38,7 +38,7 @@ test.Variants(
 
     a2d.CopyDisk()
 
-    a2d.InvokeMenuItem(3, idx) -- Options > Quick Copy or Disk Copy
+    a2d.InvokeMenuItem(3, idx) -- Options > Smart Block Copy or Full Disk Copy
 
     -- select source
     apple2.UpArrowKey() -- S5D2

@@ -12,8 +12,8 @@ a2d.ConfigureRepaintTime(0.25)
 ]]
 test.Variants(
   {
-    {"Format then Quick Copy 511 blocks", "quick"},
-    {"Format then Disk Copy 511 blocks", "disk"},
+    {"Format then Smart Block Copy 511 blocks", "quick"},
+    {"Format then Full Disk Copy 511 blocks", "disk"},
   },
   function(idx, name, what)
     if a2dtest.IsAlertShowing() then  -- duplicate volume
@@ -41,7 +41,7 @@ test.Variants(
     a2d.ClearSelection()
     a2d.CopyDisk()
 
-    a2d.InvokeMenuItem(3, idx) -- Options > Quick Copy or Disk Copy
+    a2d.InvokeMenuItem(3, idx) -- Options > Smart Block Copy or Full Disk Copy
 
     -- select source
     apple2.UpArrowKey() -- S6D2
