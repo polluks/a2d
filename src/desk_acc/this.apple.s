@@ -949,6 +949,9 @@ model_lookup_table:
         .byte   model::iie_card ; must check before IIe enhanced check
         .byte   $B3, $06, $C0, $E0, $DD, $02, 0
 
+        .byte   model::iie_edm
+        .byte   $B3, $06, $C0, $E1, 0
+
         .byte   model::iie_enhanced
         .byte   $B3, $06, $C0, $E0, 0
 
