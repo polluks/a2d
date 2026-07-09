@@ -293,11 +293,10 @@ ret:    rts
         lda     #0
         sta     index
         copy16  #file_names, curr_ptr
-loop:
+    REPEAT
         index := *+1
         lda     #SELF_MODIFIED_BYTE
-        cmp     num_file_names
-        beq     failed
+        BREAK_IF A = num_file_names
 
         ;; Check length
         jsr     _CompareStrings
@@ -306,9 +305,9 @@ loop:
         ;; No match - next!
         inc     index
         add16_8 curr_ptr, #16
-        jmp     loop
+    FOREVER
 
-failed: RETURN  A=#$FF
+        RETURN  A=#$FF
 
         ;; Now find index
 found:  ldx     num_file_names
@@ -710,12 +709,6 @@ found:  RETURN  A=index
 
         rts
 .endproc ; _UpdateDynamicButtons
-
-;;; ============================================================
-
-.proc NoOp
-        rts
-.endproc ; NoOp
 
 ;;; ============================================================
 

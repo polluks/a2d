@@ -1580,8 +1580,6 @@ check_path:
 
 .endproc ; LaunchPath
 
-        DEFINE_QUIT_PARAMS quit_params
-
 .proc ClearSelectedIndex
     IF bit invoked_during_boot_flag : NC
         copy8   #$FF, op_params::new_selection

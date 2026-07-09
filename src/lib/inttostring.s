@@ -18,15 +18,16 @@
         ldx     #0              ; x = which power index is subtracted (*2)
 
         ;; For each power of ten
-loop:   lda     #0
+    DO
+        lda     #0
         sta     digit
 
         ;; Keep subtracting/incrementing until zero is hit
-    REPEAT
+      REPEAT
         BREAK_IF cmp16 value, powers,x : LT
         inc     digit
         sub16   value, powers,x, value
-    FOREVER
+      FOREVER
 
         lda     digit
         bne     not_pad
@@ -52,12 +53,10 @@ not_pad:
         lda     #SELF_MODIFIED_BYTE
         sta     str_from_int,y
 
-next:   inx
-        inx
-        cpx     #8              ; up to 4 digits (*2) via subtraction
-        bne     loop
+next:
+    WHILE inx : inx : X <> #8   ; up to 4 digits (*2) via subtraction
 
-done:   lda     value           ; handle last digit
+        lda     value           ; handle last digit
         ora     #'0'
         iny
         sta     str_from_int,y
