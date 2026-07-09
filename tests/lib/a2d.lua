@@ -760,7 +760,7 @@ function a2d.WaitForDesktopShowing(options, level)
   if level == nil then level = 0 end
 
   function IsDesktopShowing()
-    -- TODO: Is there RDDHIRES (two 'D's) on anything but IIc?
+    -- RDDHIRES is only on the IIc.
     -- Use RDHIRES (one 'D'), the best we can do on the IIe.
     if apple2.ReadSSW("RDHIRES") < 128 then
       return false

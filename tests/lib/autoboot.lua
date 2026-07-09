@@ -23,7 +23,11 @@ local c = coroutine.create(function()
 
     -- Wait for DeskTop to start
     if emu.subst_env("$WAITFORDESKTOP") == "true" then
-      a2d.WaitForDesktopReady()
+      local status, err = pcall(function() a2d.WaitForDesktopReady() end)
+      if not status then
+        io.stderr:write(string.format("%s\n", err))
+        os.exit(1)
+      end
     end
 
     -- Globals
