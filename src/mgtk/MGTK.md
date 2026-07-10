@@ -530,6 +530,8 @@ Since 0 is typeable character (Control+Shift+2 a.k.a. ^@, ASCII `NUL`), a byte w
 MGTK::no_shortcut = $FF
 ```
 
+If the shortcut #1 character is a control character (ASCII 0x00 through 0x1F) then it is shown in the menu with the `control_char` prefix specified by the `InitMenu` call (or the default). For example, if `control_char` was set to `^` and `char1` is set to `$01`, then **^A** is shown in the menu. As a special case, if `char1` and `char2` are identical then the glyph at that code point in the default font is shown.
+
 ### Window "winfo"
 ```
 .byte       id
