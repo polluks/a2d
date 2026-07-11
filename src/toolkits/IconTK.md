@@ -14,15 +14,15 @@ Client code must define `ITKEntry` (referencing the instance's `icon_toolkit::IT
 This defines an icon instance.
 ```
 .byte icon      icon index
-.byte state     bits 0-5 = (unused)
-                bit 6 = highlighted
-                bit 7 = dimmed
-.byte type/window_id
-                bits 0-3 = window_id
+.byte flags     bits 0-3 = (unused)
                 bit 4 = small icon
                 bit 5 = not valid drop source flag (i.e. trash)
                 bit 6 = drop target flag (trash, folder, dir)
                 bit 7 = fixed location
+.byte state/window_id
+                bits 0-3 = window_id
+                bit 6 = highlighted
+                bit 7 = dimmed
 .word iconx     (pixels)
 .word icony     (pixels)
 .type type      (type, mapped to IconResource)

@@ -71,15 +71,16 @@ label   := *
 ;;; ============================================================
 
 ;;; Icon (file/volume) entries - length 25 bytes, maximum of 127
-;;;      .byte state     bit 0-5 = (unused)
-;;;                      bit 6   = highlighted
-;;;                      bit 7   = dimmed
-;;;      .byte flags/window_id
-;;;                      bits 0-3 = window_id
+;;;      .byte flags     bit 0-3 = (unused)
 ;;;                      bit 4 = small icon
 ;;;                      bit 5 = not valid drop source flag (i.e. trash)
 ;;;                      bit 6 = drop target flag (trash, folder, dir)
 ;;;                      bit 7 = fixed location
+;;;      .byte state/window_id
+;;;                      bit 0-3 = window_id
+;;;                      bit 4-5 = (unused)
+;;;                      bit 6   = highlighted
+;;;                      bit 7   = dimmed
 ;;;      .word iconx     (pixels)
 ;;;      .word icony     (pixels)
 ;;;      .byte type      mapped to IconResource (see InitToolKit)
@@ -88,8 +89,8 @@ label   := *
 ;;;      .byte record_num (index of icon in window)
 
 .struct IconEntry
-        state           .byte   ; 0
-        win_flags       .byte   ; 1
+        flags           .byte   ; 0
+        win_state       .byte   ; 1
         iconx           .word   ; 2
         icony           .word   ; 4
         type            .byte   ; 6
@@ -101,16 +102,16 @@ label   := *
 ;;; (Tables keyed by icon number must hold `kMaxIconCount` + 1 entries)
 kMaxIconCount   = 127
 
-;;; Masks for IconEntry::state
+;;; Masks for IconEntry::win_state
 kIconEntryStateDimmed      = %10000000
 kIconEntryStateHighlighted = %01000000
+kIconEntryWinIdMask        = %00001111
 
-;;; Masks for IconEntry::win_flags
+;;; Masks for IconEntry::flags
 kIconEntryFlagsFixed            = %10000000
 kIconEntryFlagsDropTarget       = %01000000
 kIconEntryFlagsNotDropSource    = %00100000
 kIconEntryFlagsSmall            = %00010000
-kIconEntryWinIdMask             = %00001111
 
 ;;; Metrics
 kIconRenameLineEditWidth = kMaxFilenameLength * kSystemFontWidth + kTextBoxTextHOffset * 2 - 1

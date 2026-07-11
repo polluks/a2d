@@ -419,11 +419,14 @@ bufsize:
         iny
         sta     (params_addr),y
 
-        ;; Initialize IconEntry::state
+        ;; Initialize IconEntry::flags/state
         lda     #0
-        ;; ldy     #IconEntry::state
-        ASSERT_EQUALS IconEntry::state, 0
+        ;; ldy     #IconEntry::flags
+        ASSERT_EQUALS IconEntry::flags, 0
         tay
+        sta     (icon_ptr),y
+        ASSERT_EQUALS IconEntry::win_state, 1
+        iny
         sta     (icon_ptr),y
 
         rts
@@ -485,7 +488,7 @@ END_PARAM_BLOCK
 
         CALL    GetIconWin, A=icon_list,x ; A = window_id
       IF A = params::window_id
-        ldy     #IconEntry::state
+        ldy     #IconEntry::win_state
         ora     #kIconEntryStateHighlighted
         sta     (icon_ptr),y
       END_IF
@@ -581,18 +584,6 @@ END_PARAM_BLOCK
 
 ;;; ============================================================
 
-;;; Input: A = icon
-;;; Output: Z=0 if fixed, Z=1 if not fixed
-.proc IsIconFixed
-        jsr     SetIconPtr
-        ldy     #IconEntry::win_flags
-        lda     (icon_ptr),y
-        and     #kIconEntryFlagsFixed
-        rts
-.endproc ; IsIconFixed
-
-;;; ============================================================
-
 ;;; Move icon to end of `icon_list`, i.e. top of z-order, unless
 ;;; it has `kIconEntryFlagsFixed`.
 ;;; Input: A = icon
@@ -600,7 +591,8 @@ END_PARAM_BLOCK
 ;;; Assert: icon is in `icon_list`
 .proc MaybeMoveIconToTop
         pha                     ; A = icon
-        jsr     IsIconFixed
+        jsr     GetIconFlags
+        and     #kIconEntryFlagsFixed
     IF NOT_ZERO
         pla                     ; discard
         rts
@@ -953,7 +945,8 @@ same_window:
         jsr     _CheckRealContentArea
         bcs     exit_canceled   ; don't move
 
-        CALL    IsIconFixed, A=last_highlighted_icon ; Z=0 if fixed
+        CALL    GetIconFlags, A=last_highlighted_icon
+        and     #kIconEntryFlagsFixed
         bne     exit_canceled   ; don't move
 
         ;; --------------------------------------------------
@@ -1140,9 +1133,7 @@ headery:
         bmi     done            ; Not valid (it's being dragged)
 
         ;; Is it a drop target?
-        ;;ldy     #IconEntry::win_flags
-        ASSERT_EQUALS (IconEntry::win_flags - IconEntry::state), 1
-        iny
+        ldy     #IconEntry::flags
         lda     (icon_ptr),y
         ;;and     #kIconEntryFlagsDropTarget
         ASSERT_EQUALS ::kIconEntryFlagsDropTarget, $40
@@ -1184,24 +1175,24 @@ done:   rts
 ;;; Input: A = icon number
 ;;; Output: A = window id (0=desktop), `icon_ptr` set
 .proc GetIconWin
-        jsr     GetIconFlags
+        jsr     GetIconState
         and     #kIconEntryWinIdMask
         rts
 .endproc ; GetIconWin
 
 ;;; Input: A = icon number
-;;; Output: A = flags (including window), Y = IconEntry::win_flags, `icon_ptr` set
+;;; Output: A = flags, Y = IconEntry::flags, `icon_ptr` set
 .proc GetIconFlags
         jsr     SetIconPtr
-        ldy     #IconEntry::win_flags
+        ldy     #IconEntry::flags
         RETURN  A=(icon_ptr),y
 .endproc ; GetIconFlags
 
 ;;; Input: A = icon number
-;;; Output: A = state, Y = IconEntry::state, `icon_ptr` set
+;;; Output: A = state (including window), Y = IconEntry::state, `icon_ptr` set
 .proc GetIconState
         jsr     SetIconPtr
-        ldy     #IconEntry::state
+        ldy     #IconEntry::win_state
         RETURN  A=(icon_ptr),y
 .endproc ; GetIconState
 
@@ -1418,12 +1409,9 @@ END_PARAM_BLOCK
 
         jsr     CalcIconBoundingRect ; sets `res_ptr`, needed below
 
-        ;; Stash some flags
-        ldy     #IconEntry::state
-        copy8   (icon_ptr),y, state
-        ASSERT_EQUALS IconEntry::win_flags, IconEntry::state + 1
-        iny
-        copy8   (icon_ptr),y, win_flags
+        ;; Stash some state
+        ldy     #IconEntry::win_state
+        copy8   (icon_ptr),y, win_state
 
         ;; For quick access
         and     #kIconEntryWinIdMask
@@ -1494,7 +1482,7 @@ ret:    rts
         ;; Set text background color
         lda     #MGTK::textbg_white
         ASSERT_EQUALS ::kIconEntryStateHighlighted, $40
-    IF bit state : VS           ; highlighted?
+    IF bit win_state : VS       ; highlighted?
         lda     #MGTK::textbg_black
     END_IF
         sta     settextbg_params
@@ -1505,14 +1493,14 @@ ret:    rts
 
         ;; Shade (XORs background)
         ASSERT_EQUALS ::kIconEntryStateDimmed, $80
-    IF bit state : NS
+    IF bit win_state : NS
         MGTK_CALL MGTK::SetPattern, dark_pattern
         jsr     _Shade
     END_IF
 
         ;; Mask (cleared to white or black)
         ASSERT_EQUALS ::kIconEntryStateHighlighted, $40
-    IF bit state : VS
+    IF bit win_state : VS
         MGTK_CALL MGTK::SetPenMode, penBIC
     ELSE
         MGTK_CALL MGTK::SetPenMode, penOR
@@ -1521,13 +1509,13 @@ ret:    rts
 
         ;; Shade again (restores background)
         ASSERT_EQUALS ::kIconEntryStateDimmed, $80
-    IF bit state : NS
+    IF bit win_state : NS
         jsr     _Shade
     END_IF
 
         ;; Icon (drawn in black or white)
         ASSERT_EQUALS ::kIconEntryStateHighlighted, $40
-    IF bit state : VS
+    IF bit win_state : VS
         MGTK_CALL MGTK::SetPenMode, penOR
     ELSE
         MGTK_CALL MGTK::SetPenMode, penBIC
@@ -1553,9 +1541,7 @@ ret:    rts
 
 .endproc ; _DoPaint
 
-state:                          ; copy of IconEntry::state
-        .byte   0
-win_flags:                      ; copy of IconEntry::win_flags
+win_state:                      ; copy of IconEntry::win_state
         .byte   0
 
 .endproc ; DrawIconCommon
@@ -1595,7 +1581,7 @@ win_flags:                      ; copy of IconEntry::win_flags
         iny
         add16in bitmap_rect+MGTK::Rect::y1, (res_ptr),y, bitmap_rect+MGTK::Rect::y2
 
-        ldy     #IconEntry::win_flags
+        ldy     #IconEntry::flags
         lda     (icon_ptr),y
         and     #kIconEntryFlagsSmall
     IF NOT_ZERO
@@ -1690,7 +1676,7 @@ kIconPolySize = (8 * .sizeof(MGTK::Point)) + 2
         .assert bitmap_rect < $100, error, "assumes zero page"
         .assert label_rect < $100, error, "assumes zero page"
 
-        ldy     #IconEntry::win_flags
+        ldy     #IconEntry::flags
         lda     (icon_ptr),y
         and     #kIconEntryFlagsSmall
     IF NOT_ZERO
@@ -1899,7 +1885,7 @@ END_PARAM_BLOCK
         ;; careful default window size and icon placement calculations
         ;; in DeskTop means that icons stay vertically aligned as
         ;; windows are scrolled to the top and bottom.
-        ldy     #IconEntry::win_flags
+        ldy     #IconEntry::flags
         lda     (icon_ptr),y
         and     #kIconEntryFlagsSmall
        IF ZERO
@@ -1965,7 +1951,7 @@ END_PARAM_BLOCK
 
         jsr     InitSetIconPort
 
-        ldy     #IconEntry::win_flags
+        ldy     #IconEntry::win_state
         lda     (icon_ptr),y
         and     #kIconEntryWinIdMask
         sta     clip_window_id
@@ -2022,7 +2008,7 @@ END_PARAM_BLOCK
         bne     next
 
       IF bit redraw_highlighted_flag : NC
-        ldy     #IconEntry::state
+        ldy     #IconEntry::win_state
         lda     (icon_ptr),y
         and     #kIconEntryStateHighlighted
         bne     next

@@ -2836,7 +2836,7 @@ next:   txa
         jsr     GetIconEntry
         stax    ptr
 
-        ldy     #IconEntry::win_flags
+        ldy     #IconEntry::flags
         lda     (ptr),y
         and     #kIconEntryFlagsDropTarget ; folder or volume?
         beq     maybe_open_file ; nope
@@ -3623,7 +3623,7 @@ RefreshActiveWindow := RefreshActiveWindowImpl::entry3
         jsr     GetIconEntry
         ptr := $06
         stax    ptr
-        ldy     #IconEntry::win_flags
+        ldy     #IconEntry::win_state
         lda     (ptr),y
         and     #kIconEntryWinIdMask
         jsr     PopPointers     ; do not tail-call optimize!
@@ -6337,7 +6337,7 @@ OpenWindowForPath := OpenWindowImpl::for_path
         stax    ptr
 
         ;; Set dimmed flag
-        ldy     #IconEntry::state
+        ldy     #IconEntry::win_state
         lda     (ptr),y
         ora     #kIconEntryStateDimmed
         sta     (ptr),y
@@ -6359,7 +6359,7 @@ OpenWindowForPath := OpenWindowImpl::for_path
         stax    ptr
 
         ;; Clear dimmed flag
-        ldy     #IconEntry::state
+        ldy     #IconEntry::win_state
         lda     (ptr),y
         and     #AS_BYTE(~kIconEntryStateDimmed)
         sta     (ptr),y
@@ -8400,10 +8400,14 @@ records_base_ptr:
         copy8   #0, icons_this_row
     END_IF
 
-        ;; Assign `IconEntry::win_flags`
+        ;; Assign `IconEntry::flags`
+        lda     icon_flags
+        ldy     #IconEntry::flags
+        sta     (icon_entry),y
+
+        ;; Assign `IconEntry::win_state`
         lda     cached_window_id
-        ora     icon_flags
-        ldy     #IconEntry::win_flags
+        ldy     #IconEntry::win_state
         sta     (icon_entry),y
 
         ;; Assign `IconEntry::type`
@@ -8424,8 +8428,8 @@ records_base_ptr:
        IF NOT_ZERO
         copy8   icon_num, window_to_dir_icon_table-1,x
 
-        ;; Update `IconEntry::state`
-        ldy     #IconEntry::state ; mark as dimmed
+        ;; Update `IconEntry::win_state`
+        ldy     #IconEntry::win_state ; mark as dimmed
         lda     (icon_entry),y
         ora     #kIconEntryStateDimmed
         sta     (icon_entry),y
@@ -8446,7 +8450,7 @@ records_base_ptr:
         sty     view_by
         jsr     PushPointers
 
-        ;; For populating `IconEntry::win_flags`
+        ;; For populating `IconEntry::flags`
         tay                     ; Y = `IconType`
         copy8   icontype_iconentryflags_table,y, icon_flags
 
@@ -9116,8 +9120,12 @@ error:
         ;; ----------------------------------------
 
         ;; Assign icon flags
-        ldy     #IconEntry::win_flags
+        ldy     #IconEntry::flags
         copy8   #kIconEntryFlagsDropTarget, (icon_ptr),y
+
+        ;; Assign state/window
+        ldy     #IconEntry::win_state
+        copy8   #0, (icon_ptr),y
 
         ;; Invalid record
         ldy     #IconEntry::record_num
@@ -14552,7 +14560,7 @@ ret:    rts
         jsr     GetIconEntry
         stax    icon_entry
 
-        ldy     #IconEntry::state ; mark as dimmed
+        ldy     #IconEntry::win_state
         lda     (icon_entry),y
         and     #kIconEntryStateHighlighted
         cmp     #kIconEntryStateHighlighted
