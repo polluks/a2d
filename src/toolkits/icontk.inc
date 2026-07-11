@@ -71,10 +71,11 @@ label   := *
 ;;; ============================================================
 
 ;;; Icon (file/volume) entries - length 25 bytes, maximum of 127
-;;;      .byte flags     bit 0-3 = (unused)
+;;;      .byte flags     bit 0-2 = (unused)
+;;;                      bit 3 = directory type (volume or folder)
 ;;;                      bit 4 = small icon
 ;;;                      bit 5 = not valid drop source flag (i.e. trash)
-;;;                      bit 6 = drop target flag (trash, folder, dir)
+;;;                      bit 6 = drop target flag (trash, volume, folder, app)
 ;;;                      bit 7 = fixed location
 ;;;      .byte state/window_id
 ;;;                      bit 0-3 = window_id
@@ -112,6 +113,7 @@ kIconEntryFlagsFixed            = %10000000
 kIconEntryFlagsDropTarget       = %01000000
 kIconEntryFlagsNotDropSource    = %00100000
 kIconEntryFlagsSmall            = %00010000
+kIconEntryFlagsDirectory        = %00001000
 
 ;;; Metrics
 kIconRenameLineEditWidth = kMaxFilenameLength * kSystemFontWidth + kTextBoxTextHOffset * 2 - 1

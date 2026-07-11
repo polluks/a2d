@@ -859,6 +859,18 @@ check_drag:
         jsr     SetOperationDstPathFromDragDropResult
         RTS_IF CS               ; failure, e.g. path too long
 
+        ;; Non-directory icon?
+        lda     drag_drop_params::target
+    IF NC
+        jsr     GetIconEntry
+        icon_ptr := $06
+        stax    icon_ptr
+        ldy     #IconEntry::flags
+        lda     (icon_ptr),y
+        and     #kIconEntryFlagsDirectory
+        jeq     _DropOnApplication
+    END_IF
+
         ;; Double modifier?
         lda     drag_end_modifiers
         and     #kEitherAppleModifierMask
@@ -1188,6 +1200,68 @@ beyond:
         TAIL_CALL MapCoordsScreenToWindow, AX=#event_params::coords
 .endproc ; _CoordsScreenToWindow
 .endproc ; _DragSelect
+
+;;; --------------------------------------------------
+
+;;; Input: A = drop target icon
+;;; Assert: Caller has set `operation_dst_path` already
+.proc _DropOnApplication
+        ;; Valid source?
+        ;; NOTE: Trash is already blocked
+        jsr     GetSingleSelectedIcon
+        beq     invalid         ; not single icon
+        jsr     GetIconPath
+        jne     ShowAlert       ; bad path
+
+        ;; Read file header
+        MLI_CALL OPEN, open_params
+        RTS_IF CS
+        lda     open_params::ref_num
+        sta     read_params::ref_num
+        sta     close_params::ref_num
+        MLI_CALL READ, read_params
+        php
+        MLI_CALL CLOSE, close_params
+        plp
+        bcs     invalid         ; READ failed
+        lda     read_params::trans_count
+        cmp     #5
+        bne     invalid         ; couldn't read header
+
+        ;; Interpreter?
+        ;; ProDOS Technical Reference Manual - 5.1.5.1 - Starting System Programs
+        ;; "It requires that the interpreter start a certain way:
+        ;; $2000 is a jump instruction. $2003 and $2004 are $EE."
+        ;; https://prodos8.com/docs/techref/writing-a-prodos-system-program/
+
+        lda     #OPC_JMP_abs
+        cmp     header_buf
+        bne     invalid
+        lda     #$EE
+        cmp     header_buf+3
+        bne     invalid
+        cmp     header_buf+4
+        bne     invalid
+
+        ;; Copy `operation_src_path` to `src_path_buf`
+        CALL    CopyToSrcPath, AX=#operation_src_path
+
+        ;; Copy `operation_dst_path` to `INVOKER_INTERPRETER`
+        ptr1 := $06
+        copy16  #operation_dst_path, ptr1
+        CALL    CopyPtr1ToBuf, AX=#INVOKER_INTERPRETER
+
+        TAIL_CALL LaunchFileByPathWithInterpreter
+
+invalid:
+        TAIL_CALL ShowAlertParams, Y=#AlertButtonOptions::OK, AX=#aux::str_alert_unsupported_type
+
+        header_buf := $800
+        DEFINE_OPEN_PARAMS open_params, operation_dst_path, $1C00
+        DEFINE_READWRITE_PARAMS read_params, header_buf, 5
+        DEFINE_CLOSE_PARAMS close_params
+
+.endproc ; _DropOnApplication
 
 ;;; --------------------------------------------------
 
@@ -1929,6 +2003,7 @@ _CheckBasisSystem        := _CheckBasixSystemImpl::basis
 .endproc ; LaunchFileByPathImpl
 LaunchFileByPathOnSystemDisk := LaunchFileByPathImpl::sys_disk
 LaunchFileByPath := LaunchFileByPathImpl::normal_disk
+LaunchFileByPathWithInterpreter := LaunchFileByPathImpl::launch
 
 ;;; ============================================================
 
@@ -2838,7 +2913,7 @@ next:   txa
 
         ldy     #IconEntry::flags
         lda     (ptr),y
-        and     #kIconEntryFlagsDropTarget ; folder or volume?
+        and     #kIconEntryFlagsDirectory ; folder or volume?
         beq     maybe_open_file ; nope
 
         ;; Directory
@@ -9121,7 +9196,7 @@ error:
 
         ;; Assign icon flags
         ldy     #IconEntry::flags
-        copy8   #kIconEntryFlagsDropTarget, (icon_ptr),y
+        copy8   #kIconEntryFlagsDropTarget | kIconEntryFlagsDirectory, (icon_ptr),y
 
         ;; Assign state/window
         ldy     #IconEntry::win_state
@@ -15190,8 +15265,8 @@ icontype_iconentryflags_table := * - IconType::VOL_COUNT
         .byte   0               ; font
         .byte   0               ; relocatable
         .byte   0               ; command
-        .byte   kIconEntryFlagsDropTarget ; folder
-        .byte   kIconEntryFlagsDropTarget ; system_folder
+        .byte   kIconEntryFlagsDropTarget | kIconEntryFlagsDirectory ; folder
+        .byte   kIconEntryFlagsDropTarget | kIconEntryFlagsDirectory ; system_folder
         .byte   0               ; iigs
         .byte   0               ; appleworks_db
         .byte   0               ; appleworks_wp
@@ -15205,7 +15280,7 @@ icontype_iconentryflags_table := * - IconType::VOL_COUNT
         .byte   0               ; intbasic
         .byte   0               ; variables
         .byte   0               ; system
-        .byte   0               ; application
+        .byte   kIconEntryFlagsDropTarget ; application
         ;; Small Icon types skipped via math below
         ASSERT_TABLE_SIZE icontype_iconentryflags_table, IconType::COUNT - IconType::SMALL_COUNT
 

@@ -84,6 +84,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Add "Startup.Items" folder support.
 * When needed, ensure icon scrolled into view even if already selected.
 * Fix crash when repainting only header of scrolled window.
+* Support dragging files onto ProDOS "interpreter" applications. ([https://github.com/a2stuff/a2d/issues/903](#903))
 
 ### Selector
 
