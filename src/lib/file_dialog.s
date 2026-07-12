@@ -59,8 +59,10 @@
 ;;;          |           |
 ;;;          | filenames | 128 x 16-byte filenames
 ;;;  $1800   +-----------+
-;;;          | index     | position in list to filename
+;;;          | filetypes |
 ;;;  $1780   +-----------+
+;;;          | index     | position in list to filename
+;;;  $1700   +-----------+
 ;;;          | (unused)  |
 ;;;  $1661   +-----------+
 ;;;          | path buf  |
@@ -102,9 +104,12 @@ type_down_buf   := $1600        ; 16 bytes
 on_line_buffer  := $1610        ; 16 bytes for ON_LINE calls
 path_buf        := $1620        ; 65 bytes for path+length
 
-;;; Map from index in file_names to list entry; high bit is
-;;; set for directories.
-file_list_index := $1780
+;;; Map from index in file_names to list entry.
+file_list_index := $1700
+
+;;; File type for each entry in current directory.
+;;; Volumes are treated as directories.
+file_types      := $1780
 
 ;;; Sequence of 16-byte records, filenames in current directory.
 file_names      := $1800
@@ -182,14 +187,13 @@ ret:    rts
         bmi     ret
         jsr     DetectDoubleClick
         bmi     ret
-        ldx     selected_index
-        lda     file_list_index,x
-      IF NC
+        CALL    _GetFileTypeForIndex, A=selected_index
+      IF A <> #FT_DIRECTORY
         ;; File - accept it.
         BTK_CALL BTK::Flash, file_dialog_res::ok_button
         jmp     HandleOK
       END_IF
-        ;; Folder - open it.
+        ;; Folder/Volume - open it.
         BTK_CALL BTK::Flash, file_dialog_res::open_button
         jmp     _DoOpen
     END_IF
@@ -314,7 +318,6 @@ found:  ldx     num_file_names
     DO
         dex
         lda     file_list_index,x
-        and     #$7F
     WHILE A <> index
         txa
         rts
@@ -393,10 +396,11 @@ found:  ldx     num_file_names
 
 ;;; Output: C=0 if allowed, C=1 if not.
 .proc _IsOpenAllowed
-        ldx     selected_index
+        lda     selected_index
         bmi     _ReturnNotAllowed ; no selection
-        lda     file_list_index,x
-        bpl     _ReturnNotAllowed ; not a folder
+        jsr     _GetFileTypeForIndex
+        cmp     #FT_DIRECTORY
+        bne     _ReturnNotAllowed ; not a folder/volume
         FALL_THROUGH_TO _ReturnAllowed
 .endproc ; _IsOpenAllowed
 
@@ -633,7 +637,6 @@ found:  RETURN  A=index
 .proc _GetFilenameForIndex
         tax
         lda     file_list_index,x
-        and     #$7F
         FALL_THROUGH_TO _GetNthFilename
 .endproc ; _GetFilenameForIndex
 
@@ -665,6 +668,18 @@ found:  RETURN  A=index
         tya
         rts
 .endproc ; _GetNthFilename
+
+;;; ============================================================
+
+;;; Input: A = index (must be valid, not -1)
+;;; Output: A = file_type
+.proc _GetFileTypeForIndex
+        tax
+        lda     file_list_index,x
+        tax
+        lda     file_types,x
+        rts
+.endproc ; _GetFilenameForIndex
 
 ;;; ============================================================
 
@@ -973,6 +988,7 @@ do_entry:
         lda     (ptr),y
         and     #NAME_LENGTH_MASK
         beq     done_entry      ; deleted entry
+        sta     (ptr),y
 
         ldx     entry_index
         txa
@@ -991,30 +1007,17 @@ do_entry:
       END_IF
     END_IF
 
-        ;; Directory?
-        ldy     #FileEntry::storage_type_name_length
+        ;; Type
+        ldy     #FileEntry::file_type
         lda     (ptr),y
-        and     #STORAGE_TYPE_MASK
-        cmp     #ST_LINKED_DIRECTORY << 4
-        beq     is_dir
-
-        bit     only_show_dirs_flag
-        bpl     not_dir         ; not dir, but show
+        ldx     entry_index
+        sta     file_types,x
+    IF A <> #FT_DIRECTORY
+      IF bit only_show_dirs_flag : NS
         dec     num_file_names  ; not dir, so skip
         jmp     done_entry
-
-        ;; Flag as "is dir"
-is_dir:
-        ldx     entry_index
-        lda     file_list_index,x
-        ora     #$80
-        sta     file_list_index,x
-
-not_dir:
-        ldy     #FileEntry::storage_type_name_length
-        lda     (ptr),y
-        and     #NAME_LENGTH_MASK
-        sta     (ptr),y
+      END_IF
+    END_IF
 
         CALL    _CopyIntoNthFilename, A=entry_index
 
@@ -1080,11 +1083,10 @@ entries_per_block:
 
         CALL    _CopyIntoNthFilename, A=num_file_names
 
-
         ldx     num_file_names
         txa
-        ora     #$80            ; treat as folder
         sta     file_list_index,x
+        copy8   #FT_DIRECTORY, file_types,x ; treat as folder
 
         inc     num_file_names
 
@@ -1311,7 +1313,8 @@ OnListSelectionChange := _UpdateDynamicButtons
 
 ;;; Called with A = index, X,Y = addr of drawing pos (MGTK::Point)
 .proc DrawListEntryProc
-        pha
+        pha                     ; A = index
+
         pt_ptr := $06
         stxy    pt_ptr
         ldy     #.sizeof(MGTK::Point)-1
@@ -1319,16 +1322,13 @@ OnListSelectionChange := _UpdateDynamicButtons
         lda     (pt_ptr),y
         sta     file_dialog_res::item_pos,y
     WHILE dey : POS
-        pla
 
-        tax
-        lda     file_list_index,x
-        pha
-        and     #$7F
-
-        jsr     _GetNthFilename
+        ;; Name
+        pla                     ; A = index
+        pha                     ; A = index
+        jsr     _GetFilenameForIndex
         stax    ptr
-        ldx     #kMaxFilenameLength
+        ldx     #kMaxFilenameLength ; copy string somewhere MGTK can see it
     DO
         ptr := *+1
         lda     SELF_MODIFIED,x
@@ -1338,11 +1338,12 @@ OnListSelectionChange := _UpdateDynamicButtons
         MGTK_CALL MGTK::MoveTo, file_dialog_res::item_pos
         MGTK_CALL MGTK::DrawString, file_dialog_res::filename_buf
 
-        ;; Folder glyph?
+        ;; Icon
         copy16  #kListViewIconX, file_dialog_res::item_pos+MGTK::Point::xcoord
         MGTK_CALL MGTK::MoveTo, file_dialog_res::item_pos
-        pla
-    IF NS
+        pla                     ; A = index
+        jsr     _GetFileTypeForIndex
+    IF A = #FT_DIRECTORY
         ldax    #file_dialog_res::str_folder
 
         ldy     path_buf
@@ -1350,6 +1351,8 @@ OnListSelectionChange := _UpdateDynamicButtons
         ldax    #file_dialog_res::str_vol
       END_IF
 
+    ELSE_IF A = #FT_SYSTEM
+        ldax    #file_dialog_res::str_app
     ELSE
         ldax    #file_dialog_res::str_file
     END_IF

@@ -10,6 +10,7 @@ Project Page: https://github.com/a2stuff/a2d
 
 * Add "Startup.Items" folder support.
 * New Screen Saver: Maze.
+* Show app icons for system files in file picker.
 
 ### General
 
