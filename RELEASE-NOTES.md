@@ -27,6 +27,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Reduce cursor flickering while list view rows are drawn.
 * Improve appearance of menu items with check marks.
 * Fix file picker behavior with more than 127 files.
+* Add small icons for system files.
 
 ### Launcher
 

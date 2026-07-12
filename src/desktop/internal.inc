@@ -45,10 +45,11 @@
         ;; Small Icons
         small_generic
         small_folder
+        small_app
 
         COUNT                   ; last
         VOL_COUNT = generic
-        SMALL_COUNT = 2
+        SMALL_COUNT = 3
 .endenum
 
 kMaxDeskAccCount        = MGTK::max_menu_items - kAppleMenuFixedItems

@@ -15312,8 +15312,8 @@ icontype_to_smicon_table := * - IconType::VOL_COUNT
         .byte   IconType::small_generic ; basic
         .byte   IconType::small_generic ; intbasic
         .byte   IconType::small_generic ; variables
-        .byte   IconType::small_generic ; system
-        .byte   IconType::small_generic ; application
+        .byte   IconType::small_app     ; system
+        .byte   IconType::small_app     ; application
         ;; Small Icon types skipped via math below
         ASSERT_TABLE_SIZE icontype_to_smicon_table, IconType::COUNT - IconType::SMALL_COUNT
 
