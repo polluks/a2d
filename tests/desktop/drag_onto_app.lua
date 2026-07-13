@@ -115,6 +115,10 @@ test.Step(
   function()
     a2d.RenamePath("/A2.DESKTOP/PRODOS", "PRODOS.SYSTEM")
 
+    --[[
+      Note that this test renames but then refreshes the window,
+      so the icon is recreated from scratch.
+    ]]
     a2d.OpenPath("/A2.DESKTOP")
     a2d.GrowWindowBy(-600,-200)
     a2d.MoveWindowBy(300, 100)
@@ -130,6 +134,80 @@ test.Step(
         m.MoveToApproximately(file_x+5, file_y+10)
         m.ButtonDown()
         m.MoveToApproximately(app_x+5, app_y)
+        test.ExpectIMatch(a2dtest.OCRScreen({invert=true}), "PRODOS%.SYSTEM", "app icon should be highlighted")
+        m.ButtonUp()
+    end)
+
+    a2dtest.WaitForAlert({match="Unsupported file type"})
+    a2d.DialogCancel()
+
+    -- cleanup
+    a2d.RenamePath("/A2.DESKTOP/PRODOS.SYSTEM", "PRODOS")
+    a2d.CloseAllWindows()
+end)
+
+test.Step(
+  "drag text file onto SYS file after renaming with .SYSTEM suffix",
+  function()
+    --[[
+      Note that this test renames but does not refresh the window;
+      this exercises rename updating the properties of the icon.
+    ]]
+    a2d.OpenPath("/A2.DESKTOP")
+    a2d.GrowWindowBy(-600,-200)
+    a2d.MoveWindowBy(300, 100)
+    a2d.Select("PRODOS")
+    a2d.RenameSelection("PRODOS.SYSTEM")
+    a2d.Select("PRODOS.SYSTEM")
+    local app_x, app_y = a2dtest.GetSelectedIconCoords()
+
+    a2d.OpenPath("/RAM1", {keep_windows=true})
+    a2d.GrowWindowBy(-600,-200)
+    a2d.Select("READ.ME")
+    local file_x, file_y = a2dtest.GetSelectedIconCoords()
+
+    a2d.InMouseKeysMode(function(m)
+        m.MoveToApproximately(file_x+5, file_y+10)
+        m.ButtonDown()
+        m.MoveToApproximately(app_x+5, app_y)
+        test.ExpectIMatch(a2dtest.OCRScreen({invert=true}), "PRODOS%.SYSTEM", "app icon should be highlighted")
+        m.ButtonUp()
+    end)
+
+    a2dtest.WaitForAlert({match="Unsupported file type"})
+    a2d.DialogCancel()
+
+    -- cleanup
+    a2d.RenamePath("/A2.DESKTOP/PRODOS.SYSTEM", "PRODOS")
+    a2d.CloseAllWindows()
+end)
+
+test.Step(
+  "drag text file onto SYS file after renaming with .SYSTEM suffix - list view",
+  function()
+    --[[
+      Note that this test renames but does not refresh the window;
+      this exercises rename updating the properties of the icon.
+    ]]
+    a2d.OpenPath("/A2.DESKTOP")
+    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
+    a2d.GrowWindowBy(-600,-200)
+    a2d.MoveWindowBy(300, 100)
+    a2d.Select("PRODOS")
+    a2d.RenameSelection("PRODOS.SYSTEM")
+    a2d.Select("PRODOS.SYSTEM")
+    local app_x, app_y = a2dtest.GetSelectedIconCoords()
+
+    a2d.OpenPath("/RAM1", {keep_windows=true})
+    a2d.GrowWindowBy(-600,-200)
+    a2d.Select("READ.ME")
+    local file_x, file_y = a2dtest.GetSelectedIconCoords()
+
+    a2d.InMouseKeysMode(function(m)
+        m.MoveToApproximately(file_x+25, file_y+15)
+        m.ButtonDown()
+        m.MoveToApproximately(app_x, app_y)
+        emu.wait(1)
         test.ExpectIMatch(a2dtest.OCRScreen({invert=true}), "PRODOS%.SYSTEM", "app icon should be highlighted")
         m.ButtonUp()
     end)

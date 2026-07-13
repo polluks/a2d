@@ -12460,7 +12460,7 @@ retry:
 
         ;; If not volume, find and update associated FileEntry
         lda     selected_window_id
-        beq     end_filerecord_and_icon_update
+        jeq     end_filerecord_and_icon_update
 
         ;; Dig up the index of the icon within the window.
         icon_ptr := $06
@@ -12489,7 +12489,13 @@ retry:
         bit     LCBANK1
 
         ;; Determine new icon type
-        jsr     GetSelectionViewBy
+        CALL    DetermineIconType, AX=#new_name_buf ; uses passed name and `src_file_info_params`
+        sta     new_icon_type
+        tax
+        ldy     #IconEntry::flags ; might change, e.g. app <-> system
+        copy8   icontype_iconentryflags_table,x, (icon_ptr),y
+
+        jsr     GetSelectionViewBy ; preserves Y
         ASSERT_EQUALS DeskTopSettings::kViewByIcon, 0
     IF ZERO
 
@@ -12500,10 +12506,15 @@ retry:
         jsr     _GetIconBitmapSize
         COPY_STRUCT tmp_rect::bottomright, tmpc
 
-        CALL    DetermineIconType, AX=#new_name_buf ; uses passed name and `src_file_info_params`
         ldy     #IconEntry::type
+        new_icon_type := *+1
+        lda     #SELF_MODIFIED_BYTE
         sta     (icon_ptr),y
-        ;; Assumes flags will not change, regardless of icon.
+
+        ;; Flags may change (e.g. app <-> system)
+        tax
+        ldy     #IconEntry::flags
+        copy8   icontype_iconentryflags_table,x, (icon_ptr),y
 
         ;; Compute new bounds of icon bitmap
         jsr     _GetIconBitmapSize
