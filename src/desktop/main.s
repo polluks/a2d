@@ -6757,19 +6757,15 @@ set_pos:
 
         PROC_USED_CLEARING_UPDATES
 .proc ComposeDateString
-        lda     datetime_for_conversion ; any bits set?
-        ora     datetime_for_conversion+1
-    IF ZERO
+        copy16  #parsed_date, $0A
+        CALL    ParseDatetime, AX=#datetime_for_conversion
+    IF CS
         COPY_STRING str_no_date, text_buffer2
         rts
     END_IF
 
-        copy16  #parsed_date, $0A
-        CALL    ParseDatetime, AX=#datetime_for_conversion
-
         ;; --------------------------------------------------
         ;; Date
-
 
     IF ecmp16 datetime_for_conversion, DATELO : EQ
         TAIL_CALL finish_date, AX=#str_today

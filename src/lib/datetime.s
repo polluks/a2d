@@ -153,27 +153,13 @@ month_offset_table:
 ;;; Parse date/time
 ;;; Input: A,X = addr of datetime to parse
 ;;; $0A points at ParsedDateTime to be filled
+;;; Output: C=0 on success, C=1 if invalid
 
 .proc ParseDatetime
         parsed_ptr := $0A
         datetime_ptr := $0C
 
         stax    datetime_ptr
-
-        ;; Null date? Leave as all zeros.
-        ldy     #0
-        lda     (datetime_ptr),y
-        iny
-        ora     (datetime_ptr),y ; null date?
-        bne     not_null
-
-        ldy     #.sizeof(ParsedDateTime)-1
-    DO
-        sta     (parsed_ptr),y
-    WHILE dey : POS
-        rts
-
-not_null:
 
 .ifdef PRODOS_2_5
         ;; Is it a ProDOS 2.5 extended date/time? (see below)
@@ -233,6 +219,9 @@ do1900: ldy     #ParsedDateTime::year
         lsr     a
         lsr     a
         lsr     a
+        beq     invalid         ; < 1
+        cmp     #13
+        bcs     invalid         ; > 12
         ldy     #ParsedDateTime::month
         sta     (parsed_ptr),y
 
@@ -242,6 +231,9 @@ do1900: ldy     #ParsedDateTime::year
         ldy     #DateTime::datelo
         lda     (datetime_ptr),y
         and     #%00011111
+        beq     invalid         ; < 1
+        cmp     #32
+        bcs     invalid         ; > 31
         ldy     #ParsedDateTime::day
         sta     (parsed_ptr),y
 
@@ -250,6 +242,8 @@ do1900: ldy     #ParsedDateTime::year
         ldy     #DateTime::timehi
         lda     (datetime_ptr),y
         and     #%00011111
+        cmp     #24
+        bcs     invalid         ; > 23
         ldy     #ParsedDateTime::hour
         sta     (parsed_ptr),y
 
@@ -258,9 +252,21 @@ do1900: ldy     #ParsedDateTime::year
         ldy     #DateTime::timelo
         lda     (datetime_ptr),y
         and     #%00111111
+        cmp     #60
+        bcs     invalid         ; > 59
         ldy     #ParsedDateTime::minute
         sta     (parsed_ptr),y
 
+        clc
+        rts
+
+invalid:
+        lda     #0
+        ldy     #.sizeof(ParsedDateTime)-1
+    DO
+        sta     (parsed_ptr),y
+    WHILE dey : POS
+        sec
         rts
 
 .ifdef PRODOS_2_5
@@ -339,6 +345,7 @@ prodos_2_5:
         ldy     #ParsedDateTime::minute
         sta     (parsed_ptr),y
 
+        clc
         rts
 .endif ; PRODOS_2_5
 
