@@ -117,6 +117,7 @@ Project Page: https://github.com/a2stuff/a2d
   * Detect Oxen Super Expander E memory expansion.
   * Detect Phasor sound card.
   * Detect Z-80 Appli-Card.
+  * Detect 13-sector Disk II card.
 * DOS 3.3 Import
   * Fix keyboard shortcut handling.
   * Close window if too many icons present after import.

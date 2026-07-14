@@ -35,6 +35,7 @@
 .define res_string_memory_kb_suffix "K"
 .define res_string_memory_mb_suffix "MB"
 .define res_string_card_type_diskii "Disk II"
+.define res_string_card_type_diskii_13sector "Disk II (13-sector)"
 .define res_string_card_type_block "Generische Blockdatei"
 .define res_string_card_type_smartport "SmartPort: "
 .define res_string_card_type_ssc "Super Serial Card"

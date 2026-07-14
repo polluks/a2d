@@ -35,6 +35,7 @@
 .define res_string_memory_kb_suffix "k"
 .define res_string_memory_mb_suffix "mb"
 .define res_string_card_type_diskii "disk II"
+.define res_string_card_type_diskii_13sector "DISK II (13-SECTOR)"
 .define res_string_card_type_block "blokowo ustrojstwo"
 .define res_string_card_type_smartport "SMARTPORT: "
 .define res_string_card_type_ssc "super serijna karta"

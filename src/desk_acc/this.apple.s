@@ -722,6 +722,7 @@ slot_pos_table:
 kMaxSmartportDevices = 8
 
 str_diskii:     PASCAL_STRING res_string_card_type_diskii
+str_diskii_13:  PASCAL_STRING res_string_card_type_diskii_13sector
 str_nvram:      PASCAL_STRING res_string_device_type_nvram
 str_booti:      PASCAL_STRING res_string_device_type_booti
 str_xdrive:     PASCAL_STRING res_string_device_type_xdrive
@@ -1495,6 +1496,11 @@ mask:   .byte   0
         COMPARE_FWB $FF, $00    ; $CnFF == $00 ?
       IF EQ
         RETURN  AX=#str_diskii
+      END_IF
+
+        COMPARE_FWB $FF, $FF    ; $CnFF == $FF ?
+      IF EQ
+        RETURN  AX=#str_diskii_13
       END_IF
 
         ;; Smartport?
