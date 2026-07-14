@@ -116,6 +116,7 @@ Project Page: https://github.com/a2stuff/a2d
   * Identify Nuova Elettronica DELTA.
   * Detect Oxen Super Expander E memory expansion.
   * Detect Phasor sound card.
+  * Detect Z-80 Appli-Card.
 * DOS 3.3 Import
   * Fix keyboard shortcut handling.
   * Close window if too many icons present after import.
