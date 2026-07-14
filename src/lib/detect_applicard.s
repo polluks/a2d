@@ -37,12 +37,19 @@
         lda     $C081,X         ; and read the latch back
         cmp     #$A5
         bne     fail
+        lda     $C085,X         ; reset the Z80 to a clean boot state
+        lda     $C081,X         ; and read the latch back
+        cmp     #$A5
+        beq     fail            ; not reset, so some other card
 
         lda     #$5A            ; complementary pattern, in case the
         sta     $C081,X         ; first readback was a floating-bus echo
         lda     $C081,X
         cmp     #$5A
         bne     fail
+        lda     $C085,X         ; reset the Z80 to a clean boot state
+        cmp     #$5A
+        beq     fail            ; not reset, so some other card
 
         lda     $C085,X         ; reset the Z80 to a clean boot state
 
