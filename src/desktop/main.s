@@ -2316,21 +2316,7 @@ filerecords_free_start:
 
 ;;; ============================================================
 
-.proc RestoreDeviceList
-        ldx     devlst_backup
-        inx                     ; include the count itself
-    DO
-        copy8   devlst_backup,x, DEVLST-1,x ; DEVCNT is at DEVLST-1
-    WHILE dex : POS
-        rts
-.endproc ; RestoreDeviceList
-
-;;; Backup copy of DEVLST made before reordering and detaching offline devices
-devlst_backup:
-        .res    ::kMaxDevListSize+1, 0 ; +1 for DEVCNT itself
-
-;;; ============================================================
-
+        PROC_USED_IN_OVERLAY
 .proc CmdSelectorAction
         ;; If adding, try to default to the current selection.
         lda     menu_click_params::item_num
@@ -2379,6 +2365,18 @@ devlst_backup:
 
 done:   rts
 .endproc ; CmdSelectorAction
+        PROC_USED_IN_OVERLAY
+
+;;; ============================================================
+
+.proc RestoreDeviceList
+        ldx     devlst_backup
+        inx                     ; include the count itself
+    DO
+        copy8   devlst_backup,x, DEVLST-1,x ; DEVCNT is at DEVLST-1
+    WHILE dex : POS
+        rts
+.endproc ; RestoreDeviceList
 
 ;;; ============================================================
 
@@ -15242,6 +15240,12 @@ window_filerecord_table:
 
 startup_slot_table:
         .res    7, 0            ; maps menu item index (0-based) to slot number
+
+;;; ============================================================
+
+;;; Backup copy of DEVLST made before reordering and detaching offline devices
+devlst_backup:
+        .res    ::kMaxDevListSize+1, 0 ; +1 for DEVCNT itself
 
 ;;; ============================================================
 
