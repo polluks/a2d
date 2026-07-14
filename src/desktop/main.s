@@ -376,9 +376,10 @@ tick_counter:
         rts
 
 call_proc:
+        tsx                     ; ensure we exit return this proc on failure
+        stx     saved_stack     ; so that caller's cleanup can happen
         proc_addr := *+1
         jmp     SELF_MODIFIED
-
 
         ;; Keep in sync with aux::menu_item_id_*
 
@@ -7493,6 +7494,7 @@ suppress_error_on_open_flag:
         jsr     SetCursorPointer ; after loading directory (failure)
         ldx     saved_stack
         txs
+        rts
 .endproc ; _HandleFailure
 
 ;;; --------------------------------------------------
