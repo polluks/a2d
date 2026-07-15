@@ -65,6 +65,7 @@
 .define res_string_card_type_thunderclock "THUNDERCLOCK"
 .define res_string_card_type_applecat "APPLE-CAT II modem"
 .define res_string_card_type_workstation "WORKSTATION karta"
+.define res_string_card_type_ieee488 "IEEE-488 INTERFACE"
 .define res_string_device_type_cricket "THE CRICKET!"
 .define res_string_device_type_nvram "NVRAM blokowo u-wo"
 .define res_string_device_type_booti "BOOTI blokowo u-wo"

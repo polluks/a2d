@@ -755,6 +755,7 @@ str_grappler:   PASCAL_STRING res_string_card_type_grappler
 str_thunderclock: PASCAL_STRING res_string_card_type_thunderclock
 str_applecat:   PASCAL_STRING res_string_card_type_applecat
 str_workstation: PASCAL_STRING res_string_card_type_workstation
+str_ieee488:    PASCAL_STRING res_string_card_type_ieee488
 str_cricket:    PASCAL_STRING res_string_device_type_cricket
 str_ramworks:   PASCAL_STRING res_string_device_type_ramworks
 str_unknown:    PASCAL_STRING res_string_unknown
@@ -1638,6 +1639,15 @@ notpas:
         RETURN  AX=#str_parallel
     END_IF
 
+;;; ---------------------------------------------
+;;; Other cards not conforming to Pascal signature
+
+;;; Apple IEEE-488 Interface
+        CALL    SigCheck, AX=#sigtable_ieee488
+    IF CS
+        RETURN  AX=#str_ieee488
+    END_IF
+
         rts
 
 ;;; Input: A,X = pointer to table (num, offset, value, offset, value, ...)
@@ -1697,6 +1707,9 @@ sigtable_parallel:      .byte   2, $05, $48, $07, $48
 sigtable_nvram:         .byte   3, $07, $3C, $0B, $58, $0C, $FF
 sigtable_booti:         .byte   4, $07, $3C, $0B, $B0, $0C, $01, $F0, $D5
 sigtable_xdrive:        .byte   4, $07, $3C, $0B, $B0, $0C, $01, $F0, $CA
+
+;;; Other
+sigtable_ieee488:       .byte   4, $05, $50, $07, $38, $0B, $FF, $0C, $CF
 
 .endproc ; ProbeSlot
 
