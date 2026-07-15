@@ -2,7 +2,7 @@
 .define res_string_status_loading_selector "Starting Shortcuts..."
 .define res_string_alert_selector_unable_to_run "Unable to run the program."
 .define res_string_menu_bar_item_file "File"
-.define res_string_menu_bar_item_startup "Startup"
+.define res_string_menu_bar_item_startup "Restart"
 .define res_string_menu_item_run_a_program "Run a Program..."
 .define res_char_menu_item_run_a_program_shortcut 'R'
 .define res_string_menu_item_slot_pattern "Slot #"

@@ -3,7 +3,7 @@
 .define res_string_menu_bar_item_edit "Redigera"
 .define res_string_menu_bar_item_view "Inneh}ll"
 .define res_string_menu_bar_item_special "Speciell"
-.define res_string_menu_bar_item_startup "Start"
+.define res_string_menu_bar_item_startup "Starta om"
 .define res_string_menu_bar_item_selector "Genv{gar"
 .define res_string_menu_item_new_folder "Ny Mapp"
 .define res_char_menu_item_new_folder_shortcut 'N'

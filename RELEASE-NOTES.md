@@ -88,12 +88,14 @@ Project Page: https://github.com/a2stuff/a2d
 * Fix crash when repainting only header of scrolled window.
 * Support dragging files onto ProDOS "interpreter" applications. ([https://github.com/a2stuff/a2d/issues/903](#903))
 * Fix crash when inspecting file with invalid dates.
+* Renamed "Startup" menu to "Restart"
 
 ### Selector
 
 * Fix potential hang after 30 restarts.
 * Reduce cursor flickering when copying programs to RAMCard.
 * Center title of copy progress dialog.
+* Renamed "Startup" menu to "Restart"
 
 ### Disk Copy
 

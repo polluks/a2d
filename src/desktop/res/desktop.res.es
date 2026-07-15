@@ -3,7 +3,7 @@
 .define res_string_menu_bar_item_edit "Edici\x13n"
 .define res_string_menu_bar_item_view "Listado"
 .define res_string_menu_bar_item_special "Especial"
-.define res_string_menu_bar_item_startup "Arranque"
+.define res_string_menu_bar_item_startup "Reiniciar"
 .define res_string_menu_bar_item_selector "Atajos"
 .define res_string_menu_item_new_folder "Nuevo Folder"
 .define res_char_menu_item_new_folder_shortcut 'N'

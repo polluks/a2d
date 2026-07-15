@@ -2,7 +2,7 @@
 .define res_string_status_loading_selector "Iniciando Atajos..."
 .define res_string_alert_selector_unable_to_run "No puede ejecutar el programa."
 .define res_string_menu_bar_item_file "Archivo"
-.define res_string_menu_bar_item_startup "Arranque"
+.define res_string_menu_bar_item_startup "Reiniciar"
 .define res_string_menu_item_run_a_program "Ejecutar un Programa..."
 .define res_char_menu_item_run_a_program_shortcut 'R'
 .define res_string_menu_item_slot_pattern "Ranura #"
