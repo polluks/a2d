@@ -32,7 +32,7 @@ test.Step(
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(apple2.SCREEN_WIDTH*3/4, apple2.SCREEN_HEIGHT/2)
     end)
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALCULATOR")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALCULATOR", {no_validate=true})
     test.Snap("verify cursor not at 0,0")
     a2d.CloseWindow()
 end)
@@ -44,7 +44,7 @@ end)
 test.Step(
   "Move window and mouse cursor",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALCULATOR")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALCULATOR", {no_validate=true})
     local x, y = a2dtest.GetFrontWindowDragCoords()
 
     a2d.InMouseKeysMode(function(m)
@@ -68,7 +68,7 @@ end)
 test.Step(
   "Window and volume icons",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALCULATOR")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALCULATOR", {no_validate=true})
     local x, y = a2dtest.GetFrontWindowDragCoords()
 
     local drop_x, drop_y = 500, 20
@@ -102,7 +102,7 @@ end)
 test.Step(
   "Obscured window",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALCULATOR")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALCULATOR", {no_validate=true})
     local x, y = a2dtest.GetFrontWindowDragCoords()
 
     a2d.InMouseKeysMode(function(m)
@@ -146,7 +146,7 @@ test.Variants(
     {"Sci.Calc - misc", "/A2.DESKTOP/EXTRAS/SCI.CALC"},
   },
   function(idx, name, path)
-    a2d.OpenPath(path)
+    a2d.OpenPath(path, {no_validate=true})
     a2d.WaitForRepaint()
 
     ExpectExpression("1-2=", "-1")
@@ -176,7 +176,7 @@ test.Variants(
     { "Sci.Calc - decimal separator", "/A2.DESKTOP/EXTRAS/SCI.CALC"},
   },
   function(idx, name, path)
-    a2d.OpenPath(path)
+    a2d.OpenPath(path, {no_validate=true})
     a2d.WaitForRepaint()
 
     ExpectExpression("12.34", "12.34")
@@ -185,7 +185,7 @@ test.Variants(
     a2d.CloseWindow()
 
     function SetNumberFormat(decimal_separator, thousands_separator)
-      a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/INTERNATIONAL")
+      a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/INTERNATIONAL", {no_validate=true})
       apple2.TabKey() -- focus date > time
       apple2.TabKey() -- focus time > decimal
       apple2.Type(decimal_separator)
@@ -197,7 +197,7 @@ test.Variants(
     -- Change decimal separator
     SetNumberFormat(",", ".")
 
-    a2d.OpenPath(path)
+    a2d.OpenPath(path, {no_validate=true})
     a2d.WaitForRepaint()
 
     ExpectExpression("12,34", "12,34")
@@ -240,7 +240,7 @@ end)
 test.Step(
   "Sci.Calc - Trig functions",
   function()
-    a2d.OpenPath("/A2.DESKTOP/EXTRAS/SCI.CALC")
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/SCI.CALC", {no_validate=true})
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
 
     -- Pattern - '.' and '-' do not need escaping
@@ -321,7 +321,7 @@ test.Variants(
     {"Sci.Calc - repeated operations", "/A2.DESKTOP/EXTRAS/SCI.CALC"},
   },
   function(idx, name, path)
-    a2d.OpenPath(path)
+    a2d.OpenPath(path, {no_validate=true})
     a2d.WaitForRepaint()
 
     ExpectExpression("2+3=", "5")

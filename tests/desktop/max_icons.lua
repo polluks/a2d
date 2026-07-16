@@ -186,3 +186,16 @@ MaxIconsTest(
     test.Snap("verify repaint is correct")
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "window should have closed")
 end)
+
+test.Step(
+  "File menu doesn't remain highlighted after failed open",
+  function()
+    a2d.OpenPath("/TESTS")
+    a2d.Select("HUNDRED.FILES")
+    a2d.OAShortcut("O") -- File > Open
+    a2dtest.WaitForAlert({match="window must be closed"})
+    test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "File", "file menu should be highlighted")
+    a2d.DialogOK()
+    a2d.WaitForRepaint()
+    test.ExpectNotMatch(a2dtest.OCRScreen({invert=true}), "File", "file menu should not be highlighted")
+end)

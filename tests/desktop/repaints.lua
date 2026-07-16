@@ -867,7 +867,7 @@ test.Step(
   "dimming effect",
   function()
     -- Disable ZIP Chip
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED", {no_validate=true})
     apple2.Type("N") -- Normal Speed
     a2d.CloseWindow()
 
@@ -888,7 +888,7 @@ test.Step(
     -- cleanup
     -- Enable ZIP Chip
     a2d.ConfigureRepaintTime(1)
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED", {no_validate=true})
     a2d.ConfigureRepaintTime(0.25)
     apple2.Type("F") -- Fast Speed
     a2d.CloseWindow()
@@ -1353,4 +1353,26 @@ test.Step(
     end)
     a2d.WaitForRepaint()
     test.Snap("verify no file icons mispaint onto desktop")
+end)
+
+--[[
+  Open a window. View > By Name. Scroll down so some icons are hidden
+  behind the header. Open another window. Move it so it overlaps only
+  the header of the first window. Close the window. Verify no crash.
+]]
+test.Step(
+  "degenerate entry update rect",
+  function()
+    a2d.OpenPath("/A2.DESKTOP")
+    a2d.MoveWindowBy(0, 55)
+    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
+    for i = 1, 20 do
+      apple2.DownArrowKey()
+      a2d.WaitForRepaint()
+    end
+    a2d.OpenPath("/RAM1", {keep_windows=true})
+    a2d.CloseWindow()
+    emu.wait(5)
+
+    a2dtest.ExpectNotHanging()
 end)

@@ -225,7 +225,7 @@ fail:   RETURN  A=#auxlc::kSourceDiskFormatOther
         adc     #1
         sta     volume_bitmap_blocks
 
-        ;; Quick Copy or Disk Copy?
+        ;; Smart Block Copy or Full Disk Copy?
 
         bit     auxlc::source_disk_format
         ASSERT_EQUALS auxlc::kSourceDiskFormatProDOS & $80, $00
@@ -271,7 +271,7 @@ fail:   RETURN  A=#auxlc::kSourceDiskFormatOther
 .endscope
 
         ;; --------------------------------------------------
-        ;; Quick Copy - load volume bitmap from disk
+        ;; Smart Block Copy - load volume bitmap from disk
         ;; so only used blocks are copied
 .proc QuickCopy
         ldx     auxlc::source_drive_index

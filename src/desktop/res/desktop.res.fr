@@ -3,7 +3,7 @@
 .define res_string_menu_bar_item_edit "Edition"
 .define res_string_menu_bar_item_view "Pr{sentation"
 .define res_string_menu_bar_item_special "Sp{cial"
-.define res_string_menu_bar_item_startup "D{marrer"
+.define res_string_menu_bar_item_startup "Red{marrer"
 .define res_string_menu_bar_item_selector "Raccourcis"
 .define res_string_menu_item_new_folder "Nouveau dossier"
 .define res_char_menu_item_new_folder_shortcut 'N'

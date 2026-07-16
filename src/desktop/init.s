@@ -329,16 +329,21 @@ done:
         stax    ptr
 
         ;; Trash is a drop target
-        ldy     #IconEntry::win_flags
+        ldy     #IconEntry::flags
         copy8   #kIconEntryFlagsDropTarget|kIconEntryFlagsNotDropSource, (ptr),y
-
-        ldy     #IconEntry::iconx
-        copy16in #main::kTrashIconX, (ptr),y
-        ldy     #IconEntry::icony
-        copy16in #main::kTrashIconY, (ptr),y
-        ldy     #IconEntry::type
+        ASSERT_EQUALS IconEntry::win_state, IconEntry::flags+1
+        iny
+        copy8   #0, (ptr),y
+        ASSERT_EQUALS IconEntry::iconx, IconEntry::win_state+1
+        iny
+        copy16in #main::kTrashIconX, (ptr),y ; includes INY
+        ASSERT_EQUALS IconEntry::icony, IconEntry::iconx+2
+        iny
+        copy16in #main::kTrashIconY, (ptr),y ; includes INY
+        ASSERT_EQUALS IconEntry::type, IconEntry::icony+2
+        iny
         copy8   #IconType::trash, (ptr),y
-
+        ASSERT_EQUALS IconEntry::name, IconEntry::type+1
         iny
         ldx     #0
     DO

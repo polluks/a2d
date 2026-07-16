@@ -626,3 +626,12 @@ test.Step(
         a2d.WaitForRepaint()
     end)
 end)
+
+test.Step(
+  "File > Rename shortcut display",
+  function()
+    a2d.SelectPath("/A2.DESKTOP")
+    a2d.OpenMenu(a2d.FILE_MENU)
+    test.ExpectNotMatch(a2dtest.OCRScreen(), "Rename *^M", "rename shortcut should not be ^M")
+    apple2.EscapeKey()
+end)

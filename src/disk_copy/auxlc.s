@@ -324,7 +324,7 @@ kSourceDiskFormatOther  = %11000001
 source_disk_format:
         .byte   0
 
-disk_copy_flag:                 ; bit7 0 = Quick Copy, 1 = Disk Copy
+disk_copy_flag:                 ; bit7 0 = Smart Block Copy, 1 = Full Disk Copy
         .byte   0
 
 str_2_spaces:   PASCAL_STRING "  "

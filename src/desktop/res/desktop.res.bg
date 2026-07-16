@@ -3,7 +3,7 @@
 .define res_string_menu_bar_item_edit "redakciq"
 .define res_string_menu_bar_item_view "izgled"
 .define res_string_menu_bar_item_special "specialen"
-.define res_string_menu_bar_item_startup "startirane"
+.define res_string_menu_bar_item_startup "restart"
 .define res_string_menu_bar_item_selector "prqk pyt"
 .define res_string_menu_item_new_folder "nowa papka"
 .define res_char_menu_item_new_folder_shortcut 'N'

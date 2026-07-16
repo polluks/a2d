@@ -16,7 +16,7 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "Key Caps - Apple IIgs",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/KEY.CAPS")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/KEY.CAPS", {no_validate=true})
     test.Snap("verify the keyboard layout is \"extended\"")
 end)
 

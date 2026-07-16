@@ -3,7 +3,7 @@
 .define res_string_menu_bar_item_edit "Rediger"
 .define res_string_menu_bar_item_view "Oversigt"
 .define res_string_menu_bar_item_special "Speciel"
-.define res_string_menu_bar_item_startup "Start"
+.define res_string_menu_bar_item_startup "Start igen"
 .define res_string_menu_bar_item_selector "Genveje"
 .define res_string_menu_item_new_folder "Ny Mappe"
 .define res_char_menu_item_new_folder_shortcut 'N'

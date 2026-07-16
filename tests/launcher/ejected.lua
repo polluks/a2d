@@ -83,7 +83,7 @@ test.Step(
     -- Re-launch from original startup disk
     apple2.BitsyInvokePath("/A2.DESKTOP/DESKTOP.SYSTEM")
     a2d.WaitForDesktopReady({timeout=360})
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/APPLEVISION")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/APPLEVISION", {no_validate=true})
     util.WaitFor(
       "APPLE-VISION", function()
         return apple2.GrabTextScreen():match("APPLE%-VISION")

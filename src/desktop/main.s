@@ -32,7 +32,7 @@ JT_MGTK_CALL:           jmp     ::MGTKRelayImpl         ; *
 JT_MLI_CALL:            jmp     MLIRelayImpl            ; *
 JT_CLEAR_UPDATES:       jmp     ClearUpdates            ; *
 JT_SYSTEM_TASK:         jmp     SystemTask              ; *
-JT_ACTIVATE_WINDOW:     jmp     ActivateAndRefreshWindow ; *
+JT_ACTIVATE_WINDOW:     jmp     ActivateReloadAndRefreshWindow ; *
 JT_SHOW_ALERT:          jmp     ShowAlert               ; *
 JT_SHOW_ALERT_PARAMS:   jmp     ShowAlertStruct         ; *
 JT_LAUNCH_FILE:         jmp     LaunchFileByPath
@@ -202,12 +202,34 @@ skip_get:
         ITK_CALL IconTK::DrawAll, event_params::window_id
       ELSE_IF A < #kMaxDeskTopWindows+1 ; 1...max are ours
         ;; Directory Window
-        jsr     UpdateWindow
+        jsr     _UpdateWindow
       END_IF
         MGTK_CALL MGTK::EndUpdate
     WHILE ZERO                  ; always
 
         rts
+
+;;; --------------------------------------------------
+
+;;; Inputs: A = `window_id` from `update` event
+.proc _UpdateWindow
+        sta     getwinport_params::window_id
+        jsr     CacheWindowIconList
+
+        ;; `AdjustUpdatePortForEntries` relies on `window_grafport`
+        ;; for dimensions
+        MGTK_CALL MGTK::GetWinPort, getwinport_params
+
+        ;; This correctly uses the clipped port provided by BeginUpdate.
+
+        jsr     DrawWindowHeader
+
+        jsr     AdjustUpdatePortForEntries
+        RTS_IF A = #MGTK::Error::window_obscured
+
+        jmp     DrawWindowEntries
+.endproc ; _UpdateWindow
+
 .endproc ; ClearUpdates
 ClearUpdatesSkipGet := ClearUpdates::skip_get
 
@@ -241,26 +263,6 @@ ClearUpdatesSkipGet := ClearUpdates::skip_get
 
 tick_counter:
         .faraddr 0
-
-;;; ============================================================
-
-        PROC_USED_CLEARING_UPDATES
-;;; Inputs: A = `window_id` from `update` event
-.proc UpdateWindow
-        sta     getwinport_params::window_id
-        jsr     CacheWindowIconList
-
-        ;; `AdjustUpdatePortForEntries` relies on `window_grafport`
-        ;; for dimensions
-        MGTK_CALL MGTK::GetWinPort, getwinport_params
-
-        ;; This correctly uses the clipped port provided by BeginUpdate.
-
-        jsr     DrawWindowHeader
-
-        jsr     AdjustUpdatePortForEntries
-        jmp     DrawWindowEntries
-.endproc ; UpdateWindow
 
 ;;; ============================================================
 ;;; Menu Dispatch
@@ -374,9 +376,10 @@ tick_counter:
         rts
 
 call_proc:
+        tsx                     ; ensure we exit return this proc on failure
+        stx     saved_stack     ; so that caller's cleanup can happen
         proc_addr := *+1
         jmp     SELF_MODIFIED
-
 
         ;; Keep in sync with aux::menu_item_id_*
 
@@ -554,7 +557,7 @@ offset_table:
         lda     active_window_id
        IF NOT_ZERO
         jsr     GetWindowPath
-        jsr     IconToAnimate
+        jsr     GetIconToAnimate
         jmp     SelectIcon
        END_IF
       END_IF
@@ -857,6 +860,18 @@ check_drag:
         jsr     SetOperationDstPathFromDragDropResult
         RTS_IF CS               ; failure, e.g. path too long
 
+        ;; Non-directory icon?
+        lda     drag_drop_params::target
+    IF NC
+        jsr     GetIconEntry
+        icon_ptr := $06
+        stax    icon_ptr
+        ldy     #IconEntry::flags
+        lda     (icon_ptr),y
+        and     #kIconEntryFlagsDirectory
+        jeq     _DropOnApplication
+    END_IF
+
         ;; Double modifier?
         lda     drag_end_modifiers
         and     #kEitherAppleModifierMask
@@ -943,7 +958,7 @@ prev_selected_icon:
       IF EQ
         inx
         txa
-        jmp     ActivateAndRefreshWindowOrClose
+        jmp     ActivateReloadAndRefreshWindow
       END_IF
         rts
     END_IF
@@ -952,7 +967,7 @@ prev_selected_icon:
         ;; (4/4) Dropped on window!
 
         and     #$7F            ; mask off window number
-        jmp     UpdateActivateAndRefreshWindow
+        jmp     UpdateActivateReloadAndRefreshWindow
 .endproc ; _PerformPostDropUpdates
 
 ;;; --------------------------------------------------
@@ -1186,6 +1201,68 @@ beyond:
         TAIL_CALL MapCoordsScreenToWindow, AX=#event_params::coords
 .endproc ; _CoordsScreenToWindow
 .endproc ; _DragSelect
+
+;;; --------------------------------------------------
+
+;;; Input: A = drop target icon
+;;; Assert: Caller has set `operation_dst_path` already
+.proc _DropOnApplication
+        ;; Valid source?
+        ;; NOTE: Trash is already blocked
+        jsr     GetSingleSelectedIcon
+        beq     invalid         ; not single icon
+        jsr     GetIconPath
+        jne     ShowAlert       ; bad path
+
+        ;; Read file header
+        MLI_CALL OPEN, open_params
+        RTS_IF CS
+        lda     open_params::ref_num
+        sta     read_params::ref_num
+        sta     close_params::ref_num
+        MLI_CALL READ, read_params
+        php
+        MLI_CALL CLOSE, close_params
+        plp
+        bcs     invalid         ; READ failed
+        lda     read_params::trans_count
+        cmp     #5
+        bne     invalid         ; couldn't read header
+
+        ;; Interpreter?
+        ;; ProDOS Technical Reference Manual - 5.1.5.1 - Starting System Programs
+        ;; "It requires that the interpreter start a certain way:
+        ;; $2000 is a jump instruction. $2003 and $2004 are $EE."
+        ;; https://prodos8.com/docs/techref/writing-a-prodos-system-program/
+
+        lda     #OPC_JMP_abs
+        cmp     header_buf
+        bne     invalid
+        lda     #$EE
+        cmp     header_buf+3
+        bne     invalid
+        cmp     header_buf+4
+        bne     invalid
+
+        ;; Copy `operation_src_path` to `src_path_buf`
+        CALL    CopyToSrcPath, AX=#operation_src_path
+
+        ;; Copy `operation_dst_path` to `INVOKER_INTERPRETER`
+        ptr1 := $06
+        copy16  #operation_dst_path, ptr1
+        CALL    CopyPtr1ToBuf, AX=#INVOKER_INTERPRETER
+
+        TAIL_CALL LaunchFileByPathWithInterpreter
+
+invalid:
+        TAIL_CALL ShowAlertParams, Y=#AlertButtonOptions::OK, AX=#aux::str_alert_unsupported_type
+
+        header_buf := $800
+        DEFINE_OPEN_PARAMS open_params, operation_dst_path, $1C00
+        DEFINE_READWRITE_PARAMS read_params, header_buf, 5
+        DEFINE_CLOSE_PARAMS close_params
+
+.endproc ; _DropOnApplication
 
 ;;; --------------------------------------------------
 
@@ -1721,7 +1798,7 @@ interpreter:
         ;; --------------------------------------------------
         ;; Generic launch
 launch:
-        CALL    IconToAnimate, AX=#src_path_buf
+        CALL    GetIconToAnimate, AX=#src_path_buf
         CALL    AnimateWindowOpen, X=#$FF ; desktop
 
         CALL    UpcaseString, AX=#INVOKER_PREFIX
@@ -1889,7 +1966,7 @@ _CheckBasisSystem        := _CheckBasixSystemImpl::basis
 
 .proc _InvokePreview
         phax
-        CALL    IconToAnimate, AX=#src_path_buf
+        CALL    GetIconToAnimate, AX=#src_path_buf
         tay
         plax
         jmp     InvokeDeskAccWithIcon
@@ -1927,6 +2004,7 @@ _CheckBasisSystem        := _CheckBasixSystemImpl::basis
 .endproc ; LaunchFileByPathImpl
 LaunchFileByPathOnSystemDisk := LaunchFileByPathImpl::sys_disk
 LaunchFileByPath := LaunchFileByPathImpl::normal_disk
+LaunchFileByPathWithInterpreter := LaunchFileByPathImpl::launch
 
 ;;; ============================================================
 
@@ -1979,6 +2057,156 @@ check_header:
         DEFINE_CLOSE_PARAMS close_params
 
 .endproc ; ReadLinkFile
+
+;;; ============================================================
+;;; Invoke a DA, with path set to first file selection
+;;; Input: `src_path_buf` has DA absolute path
+
+.proc InvokeDeskAccByPath
+        ;; * Can't use `dst_path_buf` as it is within DA_IO_BUFFER
+        ;; * Can't use `src_path_buf` as it holds file selection
+        COPY_STRING src_path_buf, tmp_path_buf ; Use this to launch the DA
+
+        copy8   #0, src_path_buf ; Signal no file selection
+
+        ;; As a convenience for DAs, pass path to first selected icon.
+        lda     selected_icon_count
+    IF NOT_ZERO
+        lda     selected_icon_list ; first selected icon
+      IF A <> trash_icon_num    ; ignore trash
+        jsr     GetIconPath     ; `operation_src_path` set to path; A=0 on success
+        jne     ShowAlert       ; `ERR_INVALID_PATHNAME`
+        CALL    CopyToSrcPath, AX=#operation_src_path
+      END_IF
+    END_IF
+        CALL    GetIconToAnimate, AX=#tmp_path_buf
+        tay
+        FALL_THROUGH_TO InvokeDeskAccWithIcon, AX=#tmp_path_buf
+.endproc ; InvokeDeskAccByPath
+
+;;; ============================================================
+;;; Invoke Desk Accessory
+;;; Input: A,X = DA pathname (relative is OK)
+;;;        Y = icon id to animate ($FF for none)
+
+        PROC_USED_IN_OVERLAY    ; Prevent DA overlay from trashing SMC
+.proc InvokeDeskAccWithIcon
+        stax    open_params::pathname
+
+        tya
+        sta     icon            ; can't use stack, as DAs can modify
+    IF NC
+        CALL    AnimateWindowOpen, X=#$FF ; desktop
+    END_IF
+
+        ;; --------------------------------------------------
+        ;; Load the DA
+
+    DO
+        MLI_CALL OPEN, open_params
+      IF CS
+        CALL    ShowAlert, A=#kErrInsertSystemDisk
+        ASSERT_EQUALS ::kAlertResultTryAgain, 0
+        REDO_IF ZERO
+        rts                     ; cancel, so fail
+      END_IF
+
+        lda     open_params::ref_num
+        sta     read_header_params::ref_num
+        sta     read_params::ref_num
+        sta     close_params::ref_num
+        MLI_CALL READ, read_header_params
+
+        lda     DAHeader::aux_length
+        ora     DAHeader::aux_length+1
+      IF NOT ZERO
+        ;; Aux memory segment
+        copy16  DAHeader::aux_length, read_params::request_count
+        MLI_CALL READ, read_params
+        copy16  #DA_LOAD_ADDRESS, STARTLO
+        copy16  #DA_LOAD_ADDRESS, DESTINATIONLO
+        add16   #DA_LOAD_ADDRESS-1, DAHeader::aux_length, ENDLO
+        CALL    AUXMOVE, C=1    ; main>aux
+      END_IF
+
+        ;; Main memory segment
+        copy16  DAHeader::main_length, read_params::request_count
+        MLI_CALL READ, read_params
+        MLI_CALL CLOSE, close_params
+    DONE
+
+        ;; --------------------------------------------------
+        ;; Invoke it
+
+        jsr     SetCursorPointer ; before invoking DA
+        jsr     DA_LOAD_ADDRESS
+
+        ;; --------------------------------------------------
+        ;; Restore state
+
+        jsr     InitSetDesktopPort ; DA's port destroyed, set something real as current
+        jsr     ShowClockForceUpdate
+        jsr     ClearUpdates    ; following DA close (just in case)
+
+        icon := *+1
+        lda     #SELF_MODIFIED_BYTE
+    IF NC
+        CALL    AnimateWindowClose, X=#$FF ; desktop
+    END_IF
+
+        jmp     SetCursorPointer ; after invoking DA
+
+.params DAHeader
+aux_length:     .word   0
+main_length:    .word   0
+.endparams
+
+        DEFINE_OPEN_PARAMS open_params, 0, DA_IO_BUFFER
+        DEFINE_READWRITE_PARAMS read_header_params, DAHeader, .sizeof(DAHeader)
+        DEFINE_READWRITE_PARAMS read_params, DA_LOAD_ADDRESS, kDAMaxSize
+        DEFINE_CLOSE_PARAMS close_params
+
+.endproc ; InvokeDeskAccWithIcon
+
+;;; ============================================================
+;;; Copy the string at $06 to target at A,X
+;;; Inputs: Source string at $06, target buffer at A,X
+;;; Output: String length in A
+
+        PROC_USED_IN_FORMAT_ERASE_OVERLAY
+        PROC_USED_IN_OVERLAY
+.proc CopyPtr1ToBuf
+        ptr1 := $06
+
+        stax    addr
+        ldy     #0
+        lda     (ptr1),y
+        tay
+    DO
+        lda     (ptr1),y
+        addr := *+1
+        sta     SELF_MODIFIED,y
+    WHILE dey : POS
+        rts
+.endproc ; CopyPtr1ToBuf
+
+;;; Copy the string at $08 to target at A,X
+;;; Inputs: Source string at $08, target buffer at A,X
+;;; Output: String length in A
+.proc CopyPtr2ToBuf
+        ptr2 := $08
+
+        stax    addr
+        ldy     #0
+        lda     (ptr2),y
+        tay
+    DO
+        lda     (ptr2),y
+        addr := *+1
+        sta     SELF_MODIFIED,y
+    WHILE dey : POS
+        rts
+.endproc ; CopyPtr2ToBuf
 
 ;;; ============================================================
 ;;; Uppercase a string
@@ -2089,21 +2317,7 @@ filerecords_free_start:
 
 ;;; ============================================================
 
-.proc RestoreDeviceList
-        ldx     devlst_backup
-        inx                     ; include the count itself
-    DO
-        copy8   devlst_backup,x, DEVLST-1,x ; DEVCNT is at DEVLST-1
-    WHILE dex : POS
-        rts
-.endproc ; RestoreDeviceList
-
-;;; Backup copy of DEVLST made before reordering and detaching offline devices
-devlst_backup:
-        .res    ::kMaxDevListSize+1, 0 ; +1 for DEVCNT itself
-
-;;; ============================================================
-
+        PROC_USED_IN_OVERLAY
 .proc CmdSelectorAction
         ;; If adding, try to default to the current selection.
         lda     menu_click_params::item_num
@@ -2116,7 +2330,7 @@ devlst_backup:
         CALL    GetIconPath, A=selected_icon_list ; `operation_src_path` set to path; A=0 on success
         jne     ShowAlert       ; `ERR_INVALID_PATHNAME`
 
-        CALL    CopyToBuf0, AX=#operation_src_path
+        CALL    CopyToPathBuf0, AX=#operation_src_path
       END_IF
     END_IF
 
@@ -2152,6 +2366,18 @@ devlst_backup:
 
 done:   rts
 .endproc ; CmdSelectorAction
+        PROC_USED_IN_OVERLAY
+
+;;; ============================================================
+
+.proc RestoreDeviceList
+        ldx     devlst_backup
+        inx                     ; include the count itself
+    DO
+        copy8   devlst_backup,x, DEVLST-1,x ; DEVCNT is at DEVLST-1
+    WHILE dex : POS
+        rts
+.endproc ; RestoreDeviceList
 
 ;;; ============================================================
 
@@ -2205,7 +2431,7 @@ done:   rts
 
     IF A = #kOperationFailed
         CALL    CopyRAMCardPrefix, AX=#operation_dst_path
-        jmp     RefreshWindowForOperationDstPath
+        jmp     UpdateActivateReloadAndRefreshWindowForOperationDstPath
     END_IF
 
         ;; Success!
@@ -2342,46 +2568,6 @@ entry_num:
 .endproc ; InvokeSelectorEntry
 
 ;;; ============================================================
-;;; Copy the string at $06 to target at A,X
-;;; Inputs: Source string at $06, target buffer at A,X
-;;; Output: String length in A
-
-        PROC_USED_IN_FORMAT_ERASE_OVERLAY
-        PROC_USED_IN_OVERLAY
-.proc CopyPtr1ToBuf
-        ptr1 := $06
-
-        stax    addr
-        ldy     #0
-        lda     (ptr1),y
-        tay
-    DO
-        lda     (ptr1),y
-        addr := *+1
-        sta     SELF_MODIFIED,y
-    WHILE dey : POS
-        rts
-.endproc ; CopyPtr1ToBuf
-
-;;; Copy the string at $08 to target at A,X
-;;; Inputs: Source string at $08, target buffer at A,X
-;;; Output: String length in A
-.proc CopyPtr2ToBuf
-        ptr2 := $08
-
-        stax    addr
-        ldy     #0
-        lda     (ptr2),y
-        tay
-    DO
-        lda     (ptr2),y
-        addr := *+1
-        sta     SELF_MODIFIED,y
-    WHILE dey : POS
-        rts
-.endproc ; CopyPtr2ToBuf
-
-;;; ============================================================
 
 CmdAbout := AboutDialogProc
 
@@ -2443,120 +2629,11 @@ skip:   iny
 CmdDeskAcc      := CmdDeskAccImpl::start
 
 ;;; ============================================================
-;;; Invoke a DA, with path set to first file selection
-;;; Input: `src_path_buf` has DA absolute path
-
-.proc InvokeDeskAccByPath
-        ;; * Can't use `dst_path_buf` as it is within DA_IO_BUFFER
-        ;; * Can't use `src_path_buf` as it holds file selection
-        COPY_STRING src_path_buf, tmp_path_buf ; Use this to launch the DA
-
-        copy8   #0, src_path_buf ; Signal no file selection
-
-        ;; As a convenience for DAs, pass path to first selected icon.
-        lda     selected_icon_count
-    IF NOT_ZERO
-        lda     selected_icon_list ; first selected icon
-      IF A <> trash_icon_num    ; ignore trash
-        jsr     GetIconPath     ; `operation_src_path` set to path; A=0 on success
-        jne     ShowAlert       ; `ERR_INVALID_PATHNAME`
-        CALL    CopyToSrcPath, AX=#operation_src_path
-      END_IF
-    END_IF
-        CALL    IconToAnimate, AX=#tmp_path_buf
-        tay
-        FALL_THROUGH_TO InvokeDeskAccWithIcon, AX=#tmp_path_buf
-.endproc ; InvokeDeskAccByPath
-
-;;; ============================================================
-;;; Invoke Desk Accessory
-;;; Input: A,X = DA pathname (relative is OK)
-;;;        Y = icon id to animate ($FF for none)
-
-.proc InvokeDeskAccWithIcon
-        stax    open_params::pathname
-
-        tya
-        sta     icon            ; can't use stack, as DAs can modify
-    IF NC
-        CALL    AnimateWindowOpen, X=#$FF ; desktop
-    END_IF
-
-        ;; --------------------------------------------------
-        ;; Load the DA
-
-    DO
-        MLI_CALL OPEN, open_params
-      IF CS
-        CALL    ShowAlert, A=#kErrInsertSystemDisk
-        ASSERT_EQUALS ::kAlertResultTryAgain, 0
-        REDO_IF ZERO
-        rts                     ; cancel, so fail
-      END_IF
-
-        lda     open_params::ref_num
-        sta     read_header_params::ref_num
-        sta     read_params::ref_num
-        sta     close_params::ref_num
-        MLI_CALL READ, read_header_params
-
-        lda     DAHeader::aux_length
-        ora     DAHeader::aux_length+1
-      IF NOT ZERO
-        ;; Aux memory segment
-        copy16  DAHeader::aux_length, read_params::request_count
-        MLI_CALL READ, read_params
-        copy16  #DA_LOAD_ADDRESS, STARTLO
-        copy16  #DA_LOAD_ADDRESS, DESTINATIONLO
-        add16   #DA_LOAD_ADDRESS-1, DAHeader::aux_length, ENDLO
-        CALL    AUXMOVE, C=1    ; main>aux
-      END_IF
-
-        ;; Main memory segment
-        copy16  DAHeader::main_length, read_params::request_count
-        MLI_CALL READ, read_params
-        MLI_CALL CLOSE, close_params
-    DONE
-
-        ;; --------------------------------------------------
-        ;; Invoke it
-
-        jsr     SetCursorPointer ; before invoking DA
-        jsr     DA_LOAD_ADDRESS
-
-        ;; --------------------------------------------------
-        ;; Restore state
-
-        jsr     InitSetDesktopPort ; DA's port destroyed, set something real as current
-        jsr     ShowClockForceUpdate
-        jsr     ClearUpdates    ; following DA close (just in case)
-
-        icon := *+1
-        lda     #SELF_MODIFIED_BYTE
-    IF NC
-        CALL    AnimateWindowClose, X=#$FF ; desktop
-    END_IF
-
-        jmp     SetCursorPointer ; after invoking DA
-
-.params DAHeader
-aux_length:     .word   0
-main_length:    .word   0
-.endparams
-
-        DEFINE_OPEN_PARAMS open_params, 0, DA_IO_BUFFER
-        DEFINE_READWRITE_PARAMS read_header_params, DAHeader, .sizeof(DAHeader)
-        DEFINE_READWRITE_PARAMS read_params, DA_LOAD_ADDRESS, kDAMaxSize
-        DEFINE_CLOSE_PARAMS close_params
-
-.endproc ; InvokeDeskAccWithIcon
-
-;;; ============================================================
 
 ;;; Inputs: A,X = absolute path
 ;;; Outputs: A = icon to animate (path or volume)
 
-.proc IconToAnimate
+.proc GetIconToAnimate
         jsr     PushPointers
 
         ptr := $06
@@ -2585,7 +2662,7 @@ main_length:    .word   0
     END_IF
         jsr     PopPointers     ; do not tail-call optimize!
         rts
-.endproc ; IconToAnimate
+.endproc ; GetIconToAnimate
 
 ;;; ============================================================
 
@@ -2647,13 +2724,16 @@ main_length:    .word   0
 
         RTS_IF A = #kOperationCanceled
 
-        FALL_THROUGH_TO RefreshWindowForOperationDstPath
+        FALL_THROUGH_TO UpdateActivateReloadAndRefreshWindowForOperationDstPath
 
 .endproc ; CmdCopySelection
 
 ;;; ============================================================
 
-.proc RefreshWindowForOperationDstPath
+;;; Input: `operation_dst_path` is path to consider
+;;; NOTE: Updates all same-volume window used/free values, even if there is no
+;;; matching window to activate/reload/refresh.
+.proc UpdateActivateReloadAndRefreshWindowForOperationDstPath
         ;; See if there's a window we should activate later.
         CALL    FindWindowForPath, AX=#operation_dst_path
         pha                     ; save for later
@@ -2663,10 +2743,10 @@ main_length:    .word   0
 
         ;; Select/refresh window if there was one
         pla
-        jne     ActivateAndRefreshWindowOrClose
+        jne     ActivateReloadAndRefreshWindow
 
         rts
-.endproc ; RefreshWindowForOperationDstPath
+.endproc ; UpdateActivateReloadAndRefreshWindowForOperationDstPath
 
 ;;; ============================================================
 ;;; Copy string at ($6) to `operation_src_path`, string at ($8) to `operation_dst_path`,
@@ -2830,9 +2910,9 @@ next:   txa
         jsr     GetIconEntry
         stax    ptr
 
-        ldy     #IconEntry::win_flags
+        ldy     #IconEntry::flags
         lda     (ptr),y
-        and     #kIconEntryFlagsDropTarget ; folder or volume?
+        and     #kIconEntryFlagsDirectory ; folder or volume?
         beq     maybe_open_file ; nope
 
         ;; Directory
@@ -2876,7 +2956,7 @@ CmdOpenFromKeyboard := CmdOpen::from_keyboard
 .proc MaybeCloseWindowAfterOpen
         lda     window_id_to_close
     IF NOT_ZERO
-        jsr     CloseSpecifiedWindow
+        jsr     CloseWindow
     END_IF
         rts
 .endproc ; MaybeCloseWindowAfterOpen
@@ -3073,7 +3153,7 @@ start:
         bcs     error
 
         ;; Update cached used/free for all same-volume windows and refresh
-        CALL    UpdateActivateAndRefreshWindow, A=active_window_id
+        CALL    UpdateActivateReloadAndRefreshWindow, A=active_window_id
         RTS_IF NE
 
         ;; Select and rename the file
@@ -3264,7 +3344,7 @@ concatenate:
 
         ;; Get the viewport, and adjust for header
         jsr     ApplyActiveWinfoToWindowGrafport
-        add16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
+        jsr     RemoveHeaderFromWindowGrafport
 
         ;; Padding
         MGTK_CALL MGTK::InflateRect, bbox_pad_tmp_rect
@@ -3299,10 +3379,7 @@ adjust:
 
         lda     dirty
     IF NOT_ZERO
-        ;; Apply the viewport (accounting for header)
-        sub16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
-        jsr     AssignActiveWindowCliprectAndUpdateCachedIcons
-        jsr     ClearAndDrawActiveWindowEntries
+        jsr     UpdateViewportAndRedrawActiveWindowEntriesAfterScroll
         jsr     ScrollUpdate
     END_IF
 
@@ -3493,12 +3570,12 @@ menu_item_to_view_by:
         ldx     active_window_id
         sta     win_view_by_table-1,x
 
-        FALL_THROUGH_TO RefreshViewPreserveSelection
+        FALL_THROUGH_TO RefreshActiveWindowPreserveSelection
 .endproc ; CmdViewBy
 
 ;;; ============================================================
 
-.proc RefreshViewImpl
+.proc RefreshActiveWindowImpl
 
 ;;; Entry point when view needs refreshing, e.g. rename when sorted.
 entry2:
@@ -3605,9 +3682,9 @@ entry3:
 
 selection_preserved_count:
         .byte   0
-.endproc ; RefreshViewImpl
-RefreshViewPreserveSelection := RefreshViewImpl::entry2
-RefreshView := RefreshViewImpl::entry3
+.endproc ; RefreshActiveWindowImpl
+RefreshActiveWindowPreserveSelection := RefreshActiveWindowImpl::entry2
+RefreshActiveWindow := RefreshActiveWindowImpl::entry3
 
 
 ;;; ============================================================
@@ -3620,7 +3697,7 @@ RefreshView := RefreshViewImpl::entry3
         jsr     GetIconEntry
         ptr := $06
         stax    ptr
-        ldy     #IconEntry::win_flags
+        ldy     #IconEntry::win_state
         lda     (ptr),y
         and     #kIconEntryWinIdMask
         jsr     PopPointers     ; do not tail-call optimize!
@@ -3824,7 +3901,7 @@ ep2:
         jsr     GetSelectionViewBy
       IF A = #DeskTopSettings::kViewByName
         txa                     ; X = window id
-        jsr     RefreshViewPreserveSelection
+        jsr     RefreshActiveWindowPreserveSelection
 
         CALL    ScrollIconIntoView, A=selected_icon_list
       ELSE
@@ -3890,7 +3967,7 @@ CmdRenameWithDefaultNameGiven := CmdRename::ep2 ; A,X = name
         jsr     ApplyCaseBits   ; applies `stashed_name` to `src_path_buf`
 
         ;; Update cached used/free for all same-volume windows, and refresh
-        CALL    UpdateActivateAndRefreshWindow, A=selected_window_id
+        CALL    UpdateActivateReloadAndRefreshWindow, A=selected_window_id
         RTS_IF NE
 
         ;; If operation failed, then just leave the default name.
@@ -3922,7 +3999,7 @@ END_PARAM_BLOCK
         ;; Next/prev in sorted order
 
         ;; Tab / Shift+Tab
-alpha:  jsr     ShiftDown
+alpha:  jsr     IsShiftDown
         bpl     a_next
         FALL_THROUGH_TO a_prev
 
@@ -3943,7 +4020,7 @@ alpha:  jsr     ShiftDown
         sta     delta
         jsr     GetKeyboardSelectableIcons
 
-        jsr     ShiftDown
+        jsr     IsShiftDown
         sta     extend_selection_flag
 
         FALL_THROUGH_TO common
@@ -4056,7 +4133,7 @@ END_PARAM_BLOCK
 ;;; --------------------------------------------------
 ;;; Identify a starting icon
 
-        jsr     ShiftDown
+        jsr     IsShiftDown
         sta     shift_flag
 
         jsr     CacheFocusedWindowIconList
@@ -4213,7 +4290,7 @@ fallback:
         jmp     SelectIconAndEnsureVisible
 
 select:
-        jsr     ShiftDown
+        jsr     IsShiftDown
     IF NS
         TAIL_CALL AddIconToSelectionAndEnsureVisible, A=best_icon
     END_IF
@@ -4562,7 +4639,7 @@ make_visible:
         cpy     #'~'
         beq     reverse
 
-        jsr     ShiftDown
+        jsr     IsShiftDown
         bmi     reverse
 
         ;; TODO: Using this table as the source is a little odd.
@@ -4707,7 +4784,7 @@ _PreamblePreCached:
 
         ;; Compute effective viewport
         CALL    ApplyWinfoToWindowGrafport, A=cached_window_id
-        add16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
+        jsr     RemoveHeaderFromWindowGrafport
         COPY_STRUCT MGTK::Point, viewport+MGTK::Rect::topleft, old
 
         ldx     #2              ; loop over dimensions
@@ -4911,8 +4988,7 @@ _PreamblePreCached:
 .proc _MaybeUpdateHThumb
     IF ecmp16 viewport+MGTK::Rect::x1, old+MGTK::Point::xcoord : NE
         jsr     _SetHThumbFromViewport
-        jsr     _UpdateViewport
-        jsr     ClearAndDrawActiveWindowEntries
+        jsr     UpdateViewportAndRedrawActiveWindowEntriesAfterScroll
 
         ;; Handle offset case - may be able to deactivate scrollbar now
       IF cmp16 width, bbox_w : GE
@@ -4929,8 +5005,7 @@ _PreamblePreCached:
 .proc _MaybeUpdateVThumb
     IF ecmp16 viewport+MGTK::Rect::y1, old+MGTK::Point::ycoord : NE
         jsr     _SetVThumbFromViewport
-        jsr     _UpdateViewport
-        jsr     ClearAndDrawActiveWindowEntries
+        jsr     UpdateViewportAndRedrawActiveWindowEntriesAfterScroll
 
         ;; Handle offset case - may be able to deactivate scrollbar now
       IF cmp16 height, bbox_h : GE
@@ -4974,16 +5049,6 @@ _PreamblePreCached:
         MGTK_CALL MGTK::MulDiv, setthumb_muldiv_params
         rts
 .endproc ; _CalcThumbFromViewport
-
-;;; --------------------------------------------------
-;;; Apply `maprect` back to active window's GrafPort
-
-.proc _UpdateViewport
-        ;; Restore header to viewport
-        sub16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
-
-        jmp     AssignActiveWindowCliprectAndUpdateCachedIcons
-.endproc ; _UpdateViewport
 
 ;;; --------------------------------------------------
 ;;; Check contents against window size, and activate/deactivate
@@ -5217,7 +5282,7 @@ close_loop:
         CALL    FindWindowsForPrefix, AX=#path_buf
         ldx     found_windows_count
       IF NOT_ZERO
-        CALL    CloseSpecifiedWindow, A=found_windows_list-1,x
+        CALL    CloseWindow, A=found_windows_list-1,x
         jmp     close_loop
       END_IF
     END_IF
@@ -5509,19 +5574,19 @@ alert:  jmp     ShowAlert       ; either `ERR_INVALID_PATHNAME` or `ERR_FILE_NOT
 ;;; Given a window, update used/free data for all same-volume windows,
 ;;; then activate the window (if needed) and refresh the contents
 ;;; (closing on error).
-;;; Same inputs/outputs as `ActivateAndRefreshWindowOrClose`
+;;; Same inputs/outputs as `ActivateReloadAndRefreshWindow`
 
 .proc UpdateActivateAndRefreshSelectedWindow
-        FALL_THROUGH_TO UpdateActivateAndRefreshWindow, A=selected_window_id
+        FALL_THROUGH_TO UpdateActivateReloadAndRefreshWindow, A=selected_window_id
 .endproc ; UpdateActivateAndRefreshSelectedWindow
 
-.proc UpdateActivateAndRefreshWindow
+.proc UpdateActivateReloadAndRefreshWindow
         pha
         jsr     GetWindowPath   ; into A,X
         jsr     UpdateUsedFreeViaPath
         pla
-        jmp     ActivateAndRefreshWindowOrClose
-.endproc ; UpdateActivateAndRefreshWindow
+        jmp     ActivateReloadAndRefreshWindow
+.endproc ; UpdateActivateReloadAndRefreshWindow
 
 ;;; ============================================================
 ;;; Input: A = icon id
@@ -5596,39 +5661,39 @@ alert:  jmp     ShowAlert       ; either `ERR_INVALID_PATHNAME` or `ERR_FILE_NOT
 
 ;;; ============================================================
 
-;;; Calls `ActivateAndRefreshWindow` - on failure (e.g. too
-;;; many files) the window is closed.
+;;; Activate the passed window and reload the directory, recreating
+;;; `FileRecord`s and eventually icons. On failure (e.g. too many
+;;; files for the number of free icons) the window is closed.
 ;;; Input: A = window id
 ;;; Output: A=0/Z=1/N=0 on success, A=$FF/Z=0/N=1 on failure
 
-.proc ActivateAndRefreshWindowOrClose
+.proc ActivateReloadAndRefreshWindow
         pha                     ; A = window id
-        jsr     _TryActivateAndRefreshWindow
+        jsr     _TryActivateReloadAndRefreshWindow
         pla                     ; A = window id
 
     IF bit exception_flag : NC
         RETURN  A=#0
     END_IF
 
-        jsr     CloseSpecifiedWindow ; A = window id
+        jsr     CloseWindow ; A = window id
         RETURN  A=#$FF
 
-.proc _TryActivateAndRefreshWindow
+.proc _TryActivateReloadAndRefreshWindow
         SET_BIT7_FLAG exception_flag ; set bit7, preserving A
         tsx
         stx     saved_stack
-        jsr     ActivateAndRefreshWindow
+        jsr     _ActivateReloadAndRefreshWindow
         CLEAR_BIT7_FLAG exception_flag ; clear bit7, preserving A
         rts
-.endproc ; _TryActivateAndRefreshWindow
+.endproc ; _TryActivateReloadAndRefreshWindow
 
 exception_flag:
         .byte   0
-.endproc ; ActivateAndRefreshWindowOrClose
 
-;;; ============================================================
+;;; --------------------------------------------------
 
-.proc ActivateAndRefreshWindow
+.proc _ActivateReloadAndRefreshWindow
         pha                     ; A = window_id
 
         ;; Clear selection
@@ -5657,7 +5722,7 @@ exception_flag:
         ;; Remove old icons
         jsr     CacheActiveWindowIconList
         jsr     RemoveAndFreeCachedWindowIcons
-        jsr     ClearActiveWindowEntryCount
+        jsr     ClearAndStoreActiveWindowIconList
 
         ;; Copy window path to `src_path_buf`
         pla                     ; A = `active_window_id`
@@ -5678,8 +5743,10 @@ exception_flag:
     END_IF
 
         ;; Create icons and draw contents
-        jmp     RefreshView
-.endproc ; ActivateAndRefreshWindow
+        jmp     RefreshActiveWindow
+.endproc ; _ActivateReloadAndRefreshWindow
+
+.endproc ; ActivateReloadAndRefreshWindow
 
 ;;; ============================================================
 ;;; Initiate keyboard-based window moving
@@ -5743,11 +5810,11 @@ exception_flag:
 
 ;;; Close the active window
 .proc CloseActiveWindow
-        FALL_THROUGH_TO CloseSpecifiedWindow, A=active_window_id
+        FALL_THROUGH_TO CloseWindow, A=active_window_id
 .endproc ; CloseActiveWindow
 
 ;;; Inputs: A = window_id
-.proc CloseSpecifiedWindow
+.proc CloseWindow
         jsr     CacheWindowIconList
 
         ;; --------------------------------------------------
@@ -5765,7 +5832,7 @@ exception_flag:
         ;; Prep for animation
 
         CALL    GetWindowPath, A=cached_window_id
-        jsr     IconToAnimate
+        jsr     GetIconToAnimate
         pha                     ; A = animation icon
         lda     cached_window_id
         pha                     ; A = animation window
@@ -5819,7 +5886,7 @@ exception_flag:
         pla                     ; A = animation icon
         jmp     SelectIcon
 
-.endproc ; CloseSpecifiedWindow
+.endproc ; CloseWindow
 
 ;;; ============================================================
 ;;; Check windows and close any where the backing volume/file no
@@ -5849,7 +5916,7 @@ validate_windows_flag:
         jsr     GetSrcFileInfo
         IF CS
         ;; Nope - close the window
-        CALL    CloseSpecifiedWindow, A=window_id
+        CALL    CloseWindow, A=window_id
         END_IF
        END_IF
 
@@ -5877,6 +5944,15 @@ validate_windows_flag:
         rts
 .endproc ; ApplyWinfoToWindowGrafport
 
+;;; Used after calling `ApplyWinfoToWindowGrafport` to exclude the
+;;; header before computing viewport updates, etc.
+.proc RemoveHeaderFromWindowGrafport
+        viewport := window_grafport+MGTK::GrafPort::maprect
+
+        add16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
+        rts
+.endproc ; RemoveHeaderFromWindowGrafport
+
 ;;; NOTE: Does not update icon positions, so only use in empty windows.
 .proc ResetActiveWindowViewport
         jsr     ApplyActiveWinfoToWindowGrafport
@@ -5903,11 +5979,27 @@ validate_windows_flag:
         rts
 .endproc ; AssignActiveWindowCliprect
 
-.proc AssignActiveWindowCliprectAndUpdateCachedIcons
+;;; ============================================================
+;;; After an operation has adjusted the active window's viewport (e.g.
+;;; scrolling via the scrollbars, or bringing an icon into view) by
+;;; modifying `window_grafport`, apply it back to the winfo, update
+;;; the icon positions in window space and clear/redraw the window's
+;;; entries.
+
+;;; NOTE: Callers are assumed to have removed the header from the
+;;; viewport; this will restore the header.
+.proc UpdateViewportAndRedrawActiveWindowEntriesAfterScroll
+        viewport := window_grafport+MGTK::GrafPort::maprect
+
+        ;; Restore header to viewport
+        sub16_8 viewport+MGTK::Rect::y1, #kWindowHeaderHeight - 1
+
         jsr     CachedIconsScreenToWindow
         jsr     AssignActiveWindowCliprect
-        jmp     CachedIconsWindowToScreen
-.endproc ; AssignActiveWindowCliprectAndUpdateCachedIcons
+        jsr     CachedIconsWindowToScreen
+
+        jmp     ClearAndDrawActiveWindowEntries
+.endproc ; UpdateViewportAndRedrawActiveWindowEntriesAfterScroll
 
 ;;; ============================================================
 
@@ -6124,7 +6216,7 @@ no_win:
         iny
         copy8   #0, (winfo_ptr),y
 
-        ;; Map rect (initially empty, size assigned in `ComputeInitialWindowSize`)
+        ;; Map rect (initially empty, size assigned in `_ComputeInitialWindowSize`)
         lda     #0
         ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + .sizeof(MGTK::Rect)-1
         ldx     #.sizeof(MGTK::Rect)-1
@@ -6195,7 +6287,7 @@ no_win:
         jsr     InitWindowIcons
 
     IF bit copy_new_window_bounds_flag : NC
-        jsr     ComputeInitialWindowSize
+        jsr     _ComputeInitialWindowSize
         jsr     AdjustViewportForNewIcons
     END_IF
 
@@ -6203,11 +6295,104 @@ no_win:
         ;; Animate the window being opened
 
         CALL    GetWindowPath, A=cached_window_id
-        jsr     IconToAnimate
+        jsr     GetIconToAnimate
         CALL    AnimateWindowOpen, X=cached_window_id
 
         rts
 .endproc ; _PrepareNewWindow
+
+;;; --------------------------------------------------
+;;; Compute the window initial size for `cached_window_id`,
+;;; based on icons bounding box.
+;;; Output: Updates the Winfo record's maprect right/bottom.
+
+.proc _ComputeInitialWindowSize
+
+        jsr     PushPointers
+
+        ;; NOTE: Coordinates (screen vs. window) doesn't matter
+        ;; Results in `iconbb_rect` are ignored if window is empty
+        jsr     ComputeIconsBBox
+
+        winfo_ptr := $06
+
+        CALL    GetWindowPtr, A=cached_window_id
+        stax    winfo_ptr
+
+        ;; convert right/bottom to width/height
+        bbox_dx := iconbb_rect+MGTK::Rect::x2
+        bbox_dy := iconbb_rect+MGTK::Rect::y2
+
+        ldx     #2              ; loop over dimensions
+    DO
+        sub16   bbox_dx,x, iconbb_rect+MGTK::Rect::topleft,x, bbox_dx,x
+    WHILE dex : dex: POS
+
+        ;; Account for window header
+        add16_8 bbox_dy, #kWindowHeaderHeight
+
+        ;; --------------------------------------------------
+        ;; Width
+
+        lda     cached_window_icon_count
+        beq     use_minw        ; `iconbb_rect` is bogus if there are no icons
+
+        ;; Check if width is < min or > max
+        cmp16   bbox_dx, #kMinWindowWidth
+        bcc     use_minw
+        cmp16   bbox_dx, #kMaxWindowWidth
+        bcs     use_maxw
+        ldax    bbox_dx
+        bcc     assign_width    ; always
+
+use_minw:
+        ldax    #kMinWindowWidth
+        ASSERT_EQUALS .hibyte(::kMinWindowWidth), 0
+        beq     assign_width    ; always
+
+use_maxw:
+        ldax    #kMaxWindowWidth
+
+assign_width:
+        ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + MGTK::Rect::x2
+        sta     (winfo_ptr),y
+        txa
+        iny
+        sta     (winfo_ptr),y
+
+        ;; --------------------------------------------------
+        ;; Height
+
+        lda     cached_window_icon_count
+        beq     use_minh        ; `iconbb_rect` is bogus if there are no icons
+
+        ;; Check if height is < min or > max
+        cmp16   bbox_dy, #kMinWindowHeight
+        bcc     use_minh
+        cmp16   bbox_dy, #kMaxWindowHeight
+        bcs     use_maxh
+        ldax    bbox_dy
+        bcc     assign_height   ; always
+
+use_minh:
+        ldax    #kMinWindowHeight
+        ASSERT_EQUALS .hibyte(::kMinWindowHeight), 0
+        beq     assign_height   ; always
+
+use_maxh:
+        ldax    #kMaxWindowHeight
+
+assign_height:
+        ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + MGTK::Rect::y2
+        sta     (winfo_ptr),y
+        txa
+        iny
+        sta     (winfo_ptr),y
+
+        ;; Finished
+        jsr     PopPointers     ; do not tail-call optimise!
+        rts
+.endproc ; _ComputeInitialWindowSize
 
 .endproc ; OpenWindowImpl
 OpenWindowForIcon := OpenWindowImpl::for_icon
@@ -6226,7 +6411,7 @@ OpenWindowForPath := OpenWindowImpl::for_path
         stax    ptr
 
         ;; Set dimmed flag
-        ldy     #IconEntry::state
+        ldy     #IconEntry::win_state
         lda     (ptr),y
         ora     #kIconEntryStateDimmed
         sta     (ptr),y
@@ -6248,7 +6433,7 @@ OpenWindowForPath := OpenWindowImpl::for_path
         stax    ptr
 
         ;; Clear dimmed flag
-        ldy     #IconEntry::state
+        ldy     #IconEntry::win_state
         lda     (ptr),y
         and     #AS_BYTE(~kIconEntryStateDimmed)
         sta     (ptr),y
@@ -6301,7 +6486,7 @@ OpenWindowForPath := OpenWindowImpl::for_path
         old := *+1
         cmp     #SELF_MODIFIED_BYTE
     IF ZERO
-        CALL    ActivateAndRefreshWindowOrClose, A=active_window_id
+        CALL    ActivateReloadAndRefreshWindow, A=active_window_id
         bne     err
     END_IF
 
@@ -6388,7 +6573,7 @@ err:    RETURN  C=1
 
         ;; Look up file record number
         jsr     GetIconRecordNum
-        jsr     DrawListViewRow
+        jsr     _DrawListViewRow
 
         jsr     CheckEvents
 
@@ -6401,7 +6586,323 @@ err:    RETURN  C=1
         ;; --------------------------------------------------
 done:
         rts
+
+;;; --------------------------------------------------
+;;; A = entry number
+
+.proc _DrawListViewRow
+
+        ptr := $06
+
+        ASSERT_EQUALS .sizeof(FileRecord), 32
+        jsr     ATimes32        ; A,X = A * 32
+        addax   file_record_ptr, ptr
+
+        ;; Copy into more convenient location (LCBANK1)
+        bit     LCBANK2
+        bit     LCBANK2
+        ldy     #.sizeof(FileRecord)-1
+    DO
+        copy8   (ptr),y, list_view_filerecord,y
+    WHILE dey : POS
+        bit     LCBANK1
+        bit     LCBANK1
+
+        viewport := window_grafport+MGTK::GrafPort::maprect
+
+        ;; Below bottom?
+        scmp16  pos_col::ycoord, viewport+MGTK::Rect::y2
+        bpl     ret
+
+        copy16  pos_col::ycoord, list_view_shield_rect::y1
+        add16   pos_col::ycoord, #kListViewRowHeight, pos_col::ycoord
+
+        ;; Above top?
+        scmp16  pos_col::ycoord, viewport+MGTK::Rect::y1
+        bpl     in_range
+ret:    rts
+
+        ;; Draw it!
+in_range:
+        copy16  pos_col::ycoord, list_view_shield_rect::y2
+        MGTK_CALL MGTK::ShieldCursor, list_view_shield_rect
+
+        CALL    set_pos, AX=#kColLock
+        jsr     _PrepareColLock
+        lda     text_buffer2
+    IF NOT ZERO
+        MGTK_CALL MGTK::DrawString, text_buffer2
+    END_IF
+
+        CALL    set_pos, AX=#kColType
+        jsr     _PrepareColType
+        MGTK_CALL MGTK::DrawString, text_buffer2
+
+        CALL    set_pos, AX=#kColSize
+        jsr     _PrepareColSize
+        CALL    DrawStringRight, AX=#text_buffer2
+
+        CALL    set_pos, AX=#kColDate
+        jsr     ComposeDateString
+        MGTK_CALL MGTK::DrawString, text_buffer2
+        TAIL_CALL UnshieldCursor
+
+set_pos:
+        stax    pos_col::xcoord
+        MGTK_CALL MGTK::MoveTo, pos_col
+        rts
+
+;;; ============================================================
+
+.proc _PrepareColType
+        file_type := list_view_filerecord + FileRecord::file_type
+
+        CALL    ComposeFileTypeString, A=file_type
+
+        COPY_BYTES 4, str_file_type, text_buffer2 ; 3 characters + length
+
+        rts
+.endproc ; _PrepareColType
+
+.proc _PrepareColLock
+        copy8   #0, text_buffer2
+
+        access := list_view_filerecord + FileRecord::access
+        lda     access
+        and     #ACCESS_DEFAULT
+    IF A <> #ACCESS_DEFAULT
+        inc     text_buffer2
+        copy8   #kGlyphLock, text_buffer2+1
+    END_IF
+
+        rts
+.endproc ; _PrepareColLock
+
+.proc _PrepareColSize
+        file_type := list_view_filerecord + FileRecord::file_type
+
+    IF lda file_type : A = #FT_DIRECTORY
+        copy8   #1, text_buffer2
+        copy8   #'-', text_buffer2+1
+        rts
+    END_IF
+
+        blocks := list_view_filerecord + FileRecord::blocks
+
+        FALL_THROUGH_TO ComposeSizeString, AX=blocks
+.endproc ; _PrepareColSize
+
+.endproc ; _DrawListViewRow
+
 .endproc ; DrawWindowEntries
+
+;;; ============================================================
+;;; Populate `text_buffer2` with "12,345K"
+;;; Trashes: $06
+
+        PROC_USED_CLEARING_UPDATES
+.proc ComposeSizeString
+        value := $06
+
+        stax    value           ; size in 512-byte blocks
+
+        CALL    ReadSetting, X=#DeskTopSettings::intl_deci_sep
+        sta     deci_sep
+
+        CLEAR_BIT7_FLAG frac_flag
+
+    IF cmp16 value, #20 : LT
+        lsr16   value           ; Convert blocks to K, rounding up
+        ror     frac_flag       ; If < 10k and odd, show ".5" suffix"
+    ELSE
+        lsr16   value           ; Convert blocks to K, rounding up
+      IF CS                     ; NOTE: divide then maybe inc, rather than
+        inc16   value           ; always inc then divide, to handle $FFFF
+      END_IF
+    END_IF
+
+        CALL    IntToStringWithSeparators, AX=value
+        ldx     #0
+
+        ;; Append number
+        ldy     #0
+    DO
+        copy8   str_from_int+1,y, text_buffer2+1,x
+    WHILE iny : inx : Y <> str_from_int
+
+        ;; Append ".5" if needed
+        frac_flag := *+1
+        lda     #SELF_MODIFIED_BYTE ; bit7
+    IF NS
+        deci_sep := *+1
+        lda     #SELF_MODIFIED_BYTE
+        sta     text_buffer2+1,x
+        inx
+        copy8   #'5', text_buffer2+1,x
+        inx
+    END_IF
+
+        ;; Append suffix
+        ldy     #0
+    DO
+        copy8   str_kb_suffix+1, y, text_buffer2+1,x
+    WHILE iny : inx : Y <> str_kb_suffix
+
+        stx     text_buffer2
+        rts
+.endproc ; ComposeSizeString
+
+;;; ============================================================
+
+        PROC_USED_CLEARING_UPDATES
+.proc ComposeDateString
+        copy16  #parsed_date, $0A
+        CALL    ParseDatetime, AX=#datetime_for_conversion
+    IF CS
+        COPY_STRING str_no_date, text_buffer2
+        rts
+    END_IF
+
+        ;; --------------------------------------------------
+        ;; Date
+
+    IF ecmp16 datetime_for_conversion, DATELO : EQ
+        TAIL_CALL finish_date, AX=#str_today
+    END_IF
+
+        tmp_date := $A
+
+        copy16  datetime_for_conversion, tmp_date
+        jsr     _DecP8Date
+    IF ecmp16 DATELO, tmp_date : EQ
+        TAIL_CALL finish_date, AX=#str_tomorrow
+    END_IF
+
+        copy16  DATELO, tmp_date
+        jsr     _DecP8Date
+    IF ecmp16 datetime_for_conversion, tmp_date : EQ
+        TAIL_CALL finish_date, AX=#str_yesterday
+    END_IF
+
+        ;; arg0 = day
+        lda     day
+        pha
+        lda     #0
+        pha
+
+        ;; arg1 = month
+        lda     month
+        asl     a
+        tay
+        lda     month_table,y
+        pha
+        lda     month_table+1,y
+        pha
+
+        ;; arg2 = year
+        push16  year
+
+        CALL    ReadSetting, X=#DeskTopSettings::intl_date_order
+        ASSERT_EQUALS DeskTopSettings::kDateOrderMDY, 0
+    IF ZERO
+        ;; Month Day, Year
+        FORMAT_MESSAGE 3, str_mdy_format
+    ELSE
+        ;; Day Month Year
+        FORMAT_MESSAGE 3, str_dmy_format
+    END_IF
+
+        COPY_STRING text_input_buf, text_buffer2
+        ldax    #text_buffer2
+
+finish_date:
+        ;; arg0 = date
+        phax
+
+        ;; --------------------------------------------------
+        ;; Time
+
+        ;; arg1 = time
+        CALL    MakeTimeString, AX=#parsed_date
+        push16  #str_time
+
+        FORMAT_MESSAGE 2, str_datetime_format
+        COPY_STRING text_input_buf, text_buffer2
+        rts
+
+year    := parsed_date + ParsedDateTime::year
+month   := parsed_date + ParsedDateTime::month
+day     := parsed_date + ParsedDateTime::day
+hour    := parsed_date + ParsedDateTime::hour
+min     := parsed_date + ParsedDateTime::minute
+
+.proc _DecP8Date
+        DATELO := tmp_date
+        DATEHI := tmp_date+1
+
+;;; ====================================================
+;;;  DecP8Date - Takes a 16-bit P8 date and
+;;;              calculates the previous day
+;;; ----------------------------------------------------
+;;;  Written 5/30/2025 by John Brooks as part of the
+;;;  open-source AppleII Desktop code-golf challenge
+;;;  64-bytes
+;;; ====================================================
+
+;;;        7 6 5 4 3 2 1 0   7 6 5 4 3 2 1 0
+;;;       +-+-+-+-+-+-+-+-+ +-+-+-+-+-+-+-+-+
+;;; DATE: |    year     |  month  |   day   |
+;;;       +-+-+-+-+-+-+-+-+ +-+-+-+-+-+-+-+-+
+
+        dec     DATELO          ; dec day
+        lda     DATELO
+        and     #%00011111      ; day
+        bne     done
+
+        lsr     DATEHI          ; C = month high bit, year in DATEHI
+        lda     DATELO
+        ror                     ; A = month * 16
+        sbc     #1*16-1         ; dec month * 16 (-1 for c=0)
+        bne     calc_days
+
+        dec     DATEHI          ; year - 1
+    IF NEG
+        copy8   #99, DATEHI     ; wrap to year 99 (not 127)
+    END_IF
+        lda     #12*16          ; month = december
+
+calc_days:
+        tax                     ; X = month * 16
+        sta     DATELO
+        bpl     pre_august
+        eor     #1*16           ; 31 days in odd months 1-7 and in even months 8-12
+pre_august:
+        and     #1*16
+        adc     #$f0            ; C=1 if 31-day month (except Feb)
+        lda     #30/2
+        rol                     ; A = days in new month, 30 or 31
+
+        cpx     #2*16           ; Is new month == feb?
+        bne     not_feb
+
+        lda     DATEHI          ; C=1 from cpx above
+        and     #3              ; is year divisible by 4?
+        beq     is_leap
+        clc                     ; 28 days if not a leap year
+is_leap:
+        lda     #28/2           ; if C=1, 29 day leap year
+        rol
+
+not_feb:
+        asl     DATELO          ; 3 month bits in LO, top bit in C
+        ora     DATELO          ; merge day in A with 3 month bits
+        sta     DATELO          ; save day & month
+        rol     DATEHI          ; save year and month high bit
+done:
+        rts
+.endproc ; _DecP8Date
+
+.endproc ; ComposeDateString
 
 ;;; ============================================================
 ;;; Retrieve the `IconEntry::record_num` for a given icon.
@@ -6993,6 +7494,7 @@ suppress_error_on_open_flag:
         jsr     SetCursorPointer ; after loading directory (failure)
         ldx     saved_stack
         txs
+        rts
 .endproc ; _HandleFailure
 
 ;;; --------------------------------------------------
@@ -7135,99 +7637,6 @@ vol_blocks_used:  .word   0
 
 copy_new_window_bounds_flag:
         .byte   0
-
-;;; ============================================================
-;;; Compute the window initial size for `cached_window_id`,
-;;; based on icons bounding box.
-;;; Output: Updates the Winfo record's maprect right/bottom.
-
-.proc ComputeInitialWindowSize
-
-        jsr     PushPointers
-
-        ;; NOTE: Coordinates (screen vs. window) doesn't matter
-        ;; Results in `iconbb_rect` are ignored if window is empty
-        jsr     ComputeIconsBBox
-
-        winfo_ptr := $06
-
-        CALL    GetWindowPtr, A=cached_window_id
-        stax    winfo_ptr
-
-        ;; convert right/bottom to width/height
-        bbox_dx := iconbb_rect+MGTK::Rect::x2
-        bbox_dy := iconbb_rect+MGTK::Rect::y2
-
-        ldx     #2              ; loop over dimensions
-    DO
-        sub16   bbox_dx,x, iconbb_rect+MGTK::Rect::topleft,x, bbox_dx,x
-    WHILE dex : dex: POS
-
-        ;; Account for window header
-        add16_8 bbox_dy, #kWindowHeaderHeight
-
-        ;; --------------------------------------------------
-        ;; Width
-
-        lda     cached_window_icon_count
-        beq     use_minw        ; `iconbb_rect` is bogus if there are no icons
-
-        ;; Check if width is < min or > max
-        cmp16   bbox_dx, #kMinWindowWidth
-        bcc     use_minw
-        cmp16   bbox_dx, #kMaxWindowWidth
-        bcs     use_maxw
-        ldax    bbox_dx
-        bcc     assign_width    ; always
-
-use_minw:
-        ldax    #kMinWindowWidth
-        ASSERT_EQUALS .hibyte(::kMinWindowWidth), 0
-        beq     assign_width    ; always
-
-use_maxw:
-        ldax    #kMaxWindowWidth
-
-assign_width:
-        ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + MGTK::Rect::x2
-        sta     (winfo_ptr),y
-        txa
-        iny
-        sta     (winfo_ptr),y
-
-        ;; --------------------------------------------------
-        ;; Height
-
-        lda     cached_window_icon_count
-        beq     use_minh        ; `iconbb_rect` is bogus if there are no icons
-
-        ;; Check if height is < min or > max
-        cmp16   bbox_dy, #kMinWindowHeight
-        bcc     use_minh
-        cmp16   bbox_dy, #kMaxWindowHeight
-        bcs     use_maxh
-        ldax    bbox_dy
-        bcc     assign_height   ; always
-
-use_minh:
-        ldax    #kMinWindowHeight
-        ASSERT_EQUALS .hibyte(::kMinWindowHeight), 0
-        beq     assign_height   ; always
-
-use_maxh:
-        ldax    #kMaxWindowHeight
-
-assign_height:
-        ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + MGTK::Rect::y2
-        sta     (winfo_ptr),y
-        txa
-        iny
-        sta     (winfo_ptr),y
-
-        ;; Finished
-        jsr     PopPointers     ; do not tail-call optimise!
-        rts
-.endproc ; ComputeInitialWindowSize
 
 ;;; ============================================================
 ;;; For a newly populated window (new or refreshed), adjust the
@@ -8062,10 +8471,14 @@ records_base_ptr:
         copy8   #0, icons_this_row
     END_IF
 
-        ;; Assign `IconEntry::win_flags`
+        ;; Assign `IconEntry::flags`
+        lda     icon_flags
+        ldy     #IconEntry::flags
+        sta     (icon_entry),y
+
+        ;; Assign `IconEntry::win_state`
         lda     cached_window_id
-        ora     icon_flags
-        ldy     #IconEntry::win_flags
+        ldy     #IconEntry::win_state
         sta     (icon_entry),y
 
         ;; Assign `IconEntry::type`
@@ -8086,8 +8499,8 @@ records_base_ptr:
        IF NOT_ZERO
         copy8   icon_num, window_to_dir_icon_table-1,x
 
-        ;; Update `IconEntry::state`
-        ldy     #IconEntry::state ; mark as dimmed
+        ;; Update `IconEntry::win_state`
+        ldy     #IconEntry::win_state ; mark as dimmed
         lda     (icon_entry),y
         ora     #kIconEntryStateDimmed
         sta     (icon_entry),y
@@ -8108,7 +8521,7 @@ records_base_ptr:
         sty     view_by
         jsr     PushPointers
 
-        ;; For populating `IconEntry::win_flags`
+        ;; For populating `IconEntry::flags`
         tay                     ; Y = `IconType`
         copy8   icontype_iconentryflags_table,y, icon_flags
 
@@ -8180,326 +8593,6 @@ records_base_ptr:
 
         rts
 .endproc ; GetFileRecordCountForWindow
-
-;;; ============================================================
-;;; A = entry number
-
-        PROC_USED_CLEARING_UPDATES
-.proc DrawListViewRow
-
-        ptr := $06
-
-        ASSERT_EQUALS .sizeof(FileRecord), 32
-        jsr     ATimes32        ; A,X = A * 32
-        addax   file_record_ptr, ptr
-
-        ;; Copy into more convenient location (LCBANK1)
-        bit     LCBANK2
-        bit     LCBANK2
-        ldy     #.sizeof(FileRecord)-1
-    DO
-        copy8   (ptr),y, list_view_filerecord,y
-    WHILE dey : POS
-        bit     LCBANK1
-        bit     LCBANK1
-
-        viewport := window_grafport+MGTK::GrafPort::maprect
-
-        ;; Below bottom?
-        scmp16  pos_col::ycoord, viewport+MGTK::Rect::y2
-        bpl     ret
-
-        copy16  pos_col::ycoord, list_view_shield_rect::y1
-        add16   pos_col::ycoord, #kListViewRowHeight, pos_col::ycoord
-
-        ;; Above top?
-        scmp16  pos_col::ycoord, viewport+MGTK::Rect::y1
-        bpl     in_range
-ret:    rts
-
-        ;; Draw it!
-in_range:
-        copy16  pos_col::ycoord, list_view_shield_rect::y2
-        MGTK_CALL MGTK::ShieldCursor, list_view_shield_rect
-
-        CALL    set_pos, AX=#kColLock
-        jsr     _PrepareColLock
-        lda     text_buffer2
-    IF NOT ZERO
-        MGTK_CALL MGTK::DrawString, text_buffer2
-    END_IF
-
-        CALL    set_pos, AX=#kColType
-        jsr     _PrepareColType
-        MGTK_CALL MGTK::DrawString, text_buffer2
-
-        CALL    set_pos, AX=#kColSize
-        jsr     _PrepareColSize
-        CALL    DrawStringRight, AX=#text_buffer2
-
-        CALL    set_pos, AX=#kColDate
-        jsr     ComposeDateString
-        MGTK_CALL MGTK::DrawString, text_buffer2
-        TAIL_CALL UnshieldCursor
-
-set_pos:
-        stax    pos_col::xcoord
-        MGTK_CALL MGTK::MoveTo, pos_col
-        rts
-
-;;; ============================================================
-
-.proc _PrepareColType
-        file_type := list_view_filerecord + FileRecord::file_type
-
-        CALL    ComposeFileTypeString, A=file_type
-
-        COPY_BYTES 4, str_file_type, text_buffer2 ; 3 characters + length
-
-        rts
-.endproc ; _PrepareColType
-
-.proc _PrepareColLock
-        copy8   #0, text_buffer2
-
-        access := list_view_filerecord + FileRecord::access
-        lda     access
-        and     #ACCESS_DEFAULT
-    IF A <> #ACCESS_DEFAULT
-        inc     text_buffer2
-        copy8   #kGlyphLock, text_buffer2+1
-    END_IF
-
-        rts
-.endproc ; _PrepareColLock
-
-.proc _PrepareColSize
-        file_type := list_view_filerecord + FileRecord::file_type
-
-    IF lda file_type : A = #FT_DIRECTORY
-        copy8   #1, text_buffer2
-        copy8   #'-', text_buffer2+1
-        rts
-    END_IF
-
-        blocks := list_view_filerecord + FileRecord::blocks
-
-        FALL_THROUGH_TO ComposeSizeString, AX=blocks
-.endproc ; _PrepareColSize
-
-.endproc ; DrawListViewRow
-
-;;; ============================================================
-;;; Populate `text_buffer2` with "12,345K"
-;;; Trashes: $06
-
-        PROC_USED_CLEARING_UPDATES
-.proc ComposeSizeString
-        value := $06
-
-        stax    value           ; size in 512-byte blocks
-
-        CALL    ReadSetting, X=#DeskTopSettings::intl_deci_sep
-        sta     deci_sep
-
-        CLEAR_BIT7_FLAG frac_flag
-
-    IF cmp16 value, #20 : LT
-        lsr16   value           ; Convert blocks to K, rounding up
-        ror     frac_flag       ; If < 10k and odd, show ".5" suffix"
-    ELSE
-        lsr16   value           ; Convert blocks to K, rounding up
-      IF CS                     ; NOTE: divide then maybe inc, rather than
-        inc16   value           ; always inc then divide, to handle $FFFF
-      END_IF
-    END_IF
-
-        CALL    IntToStringWithSeparators, AX=value
-        ldx     #0
-
-        ;; Append number
-        ldy     #0
-    DO
-        copy8   str_from_int+1,y, text_buffer2+1,x
-    WHILE iny : inx : Y <> str_from_int
-
-        ;; Append ".5" if needed
-        frac_flag := *+1
-        lda     #SELF_MODIFIED_BYTE ; bit7
-    IF NS
-        deci_sep := *+1
-        lda     #SELF_MODIFIED_BYTE
-        sta     text_buffer2+1,x
-        inx
-        copy8   #'5', text_buffer2+1,x
-        inx
-    END_IF
-
-        ;; Append suffix
-        ldy     #0
-    DO
-        copy8   str_kb_suffix+1, y, text_buffer2+1,x
-    WHILE iny : inx : Y <> str_kb_suffix
-
-        stx     text_buffer2
-        rts
-.endproc ; ComposeSizeString
-
-;;; ============================================================
-
-        PROC_USED_CLEARING_UPDATES
-.proc ComposeDateString
-        lda     datetime_for_conversion ; any bits set?
-        ora     datetime_for_conversion+1
-    IF ZERO
-        COPY_STRING str_no_date, text_buffer2
-        rts
-    END_IF
-
-        copy16  #parsed_date, $0A
-        CALL    ParseDatetime, AX=#datetime_for_conversion
-
-        ;; --------------------------------------------------
-        ;; Date
-
-
-    IF ecmp16 datetime_for_conversion, DATELO : EQ
-        TAIL_CALL finish_date, AX=#str_today
-    END_IF
-
-        tmp_date := $A
-
-        copy16  datetime_for_conversion, tmp_date
-        jsr     _DecP8Date
-    IF ecmp16 DATELO, tmp_date : EQ
-        TAIL_CALL finish_date, AX=#str_tomorrow
-    END_IF
-
-        copy16  DATELO, tmp_date
-        jsr     _DecP8Date
-    IF ecmp16 datetime_for_conversion, tmp_date : EQ
-        TAIL_CALL finish_date, AX=#str_yesterday
-    END_IF
-
-        ;; arg0 = day
-        lda     day
-        pha
-        lda     #0
-        pha
-
-        ;; arg1 = month
-        lda     month
-        asl     a
-        tay
-        lda     month_table,y
-        pha
-        lda     month_table+1,y
-        pha
-
-        ;; arg2 = year
-        push16  year
-
-        CALL    ReadSetting, X=#DeskTopSettings::intl_date_order
-        ASSERT_EQUALS DeskTopSettings::kDateOrderMDY, 0
-    IF ZERO
-        ;; Month Day, Year
-        FORMAT_MESSAGE 3, str_mdy_format
-    ELSE
-        ;; Day Month Year
-        FORMAT_MESSAGE 3, str_dmy_format
-    END_IF
-
-        COPY_STRING text_input_buf, text_buffer2
-        ldax    #text_buffer2
-
-finish_date:
-        ;; arg0 = date
-        phax
-
-        ;; --------------------------------------------------
-        ;; Time
-
-        ;; arg1 = time
-        CALL    MakeTimeString, AX=#parsed_date
-        push16  #str_time
-
-        FORMAT_MESSAGE 2, str_datetime_format
-        COPY_STRING text_input_buf, text_buffer2
-        rts
-
-year    := parsed_date + ParsedDateTime::year
-month   := parsed_date + ParsedDateTime::month
-day     := parsed_date + ParsedDateTime::day
-hour    := parsed_date + ParsedDateTime::hour
-min     := parsed_date + ParsedDateTime::minute
-
-.proc _DecP8Date
-        DATELO := tmp_date
-        DATEHI := tmp_date+1
-
-;;; ====================================================
-;;;  DecP8Date - Takes a 16-bit P8 date and
-;;;              calculates the previous day
-;;; ----------------------------------------------------
-;;;  Written 5/30/2025 by John Brooks as part of the
-;;;  open-source AppleII Desktop code-golf challenge
-;;;  64-bytes
-;;; ====================================================
-
-;;;        7 6 5 4 3 2 1 0   7 6 5 4 3 2 1 0
-;;;       +-+-+-+-+-+-+-+-+ +-+-+-+-+-+-+-+-+
-;;; DATE: |    year     |  month  |   day   |
-;;;       +-+-+-+-+-+-+-+-+ +-+-+-+-+-+-+-+-+
-
-        dec     DATELO          ; dec day
-        lda     DATELO
-        and     #%00011111      ; day
-        bne     done
-
-        lsr     DATEHI          ; C = month high bit, year in DATEHI
-        lda     DATELO
-        ror                     ; A = month * 16
-        sbc     #1*16-1         ; dec month * 16 (-1 for c=0)
-        bne     calc_days
-
-        dec     DATEHI          ; year - 1
-    IF NEG
-        copy8   #99, DATEHI     ; wrap to year 99 (not 127)
-    END_IF
-        lda     #12*16          ; month = december
-
-calc_days:
-        tax                     ; X = month * 16
-        sta     DATELO
-        bpl     pre_august
-        eor     #1*16           ; 31 days in odd months 1-7 and in even months 8-12
-pre_august:
-        and     #1*16
-        adc     #$f0            ; C=1 if 31-day month (except Feb)
-        lda     #30/2
-        rol                     ; A = days in new month, 30 or 31
-
-        cpx     #2*16           ; Is new month == feb?
-        bne     not_feb
-
-        lda     DATEHI          ; C=1 from cpx above
-        and     #3              ; is year divisible by 4?
-        beq     is_leap
-        clc                     ; 28 days if not a leap year
-is_leap:
-        lda     #28/2           ; if C=1, 29 day leap year
-        rol
-
-not_feb:
-        asl     DATELO          ; 3 month bits in LO, top bit in C
-        ora     DATELO          ; merge day in A with 3 month bits
-        sta     DATELO          ; save day & month
-        rol     DATEHI          ; save year and month high bit
-done:
-        rts
-.endproc ; _DecP8Date
-
-.endproc ; ComposeDateString
 
 ;;; ============================================================
 ;;; Look up an icon address.
@@ -8752,6 +8845,7 @@ map_delta_y:    .word   0
 
         PROC_USED_CLEARING_UPDATES
 
+;;; Input: A = window id
 .proc PrepWindowScreenMapping
         .assert window_mapinfo_cache + .sizeof(MGTK::MapInfo) <= $50, error, "collision"
 
@@ -9097,8 +9191,12 @@ error:
         ;; ----------------------------------------
 
         ;; Assign icon flags
-        ldy     #IconEntry::win_flags
-        copy8   #kIconEntryFlagsDropTarget, (icon_ptr),y
+        ldy     #IconEntry::flags
+        copy8   #kIconEntryFlagsDropTarget | kIconEntryFlagsDirectory, (icon_ptr),y
+
+        ;; Assign state/window
+        ldy     #IconEntry::win_state
+        copy8   #0, (icon_ptr),y
 
         ;; Invalid record
         ldy     #IconEntry::record_num
@@ -9429,7 +9527,7 @@ AnimateWindowOpen       := AnimateWindowImpl::open
     WHILE dex : dex : POS
 
         MGTK_CALL MGTK::SetPattern, checkerboard_pattern
-        jsr     SetPenModeXOR
+        MGTK_CALL MGTK::SetPenMode, penXOR
         MGTK_CALL MGTK::FrameRect, tmp_rect
 
 ret:    rts
@@ -10594,13 +10692,11 @@ retry:  MLI_CALL DESTROY, destroy_src_params
         jsr     DecrementFileCount
         jsr     SetPortForProgressDialogAndShieldCursor
 
-        CALL    CopyToBuf0, AX=#src_path_buf
         CALL    DrawProgressDialogLabel, Y=#1, AX=#aux::str_copy_from
-        jsr     DrawTargetFilePath
+        CALL    DrawTargetFilePath, AX=#src_path_buf
 
-        CALL    CopyToBuf0, AX=#dst_path_buf
         CALL    DrawProgressDialogLabel, Y=#2, AX=#aux::str_copy_to
-        jsr     DrawDestFilePath
+        CALL    DrawDestFilePath, AX=#dst_path_buf
 
         jsr     DrawProgressDialogFilesRemaining
 
@@ -11391,9 +11487,8 @@ next_file:
 .proc DeleteRefreshProgress
         jsr     SetPortForProgressDialogAndShieldCursor
 
-        CALL    CopyToBuf0, AX=#src_path_buf
         CALL    DrawProgressDialogLabel, Y=#1, AX=#aux::str_file_colon
-        jsr     DrawTargetFilePath
+        CALL    DrawTargetFilePath, AX=#src_path_buf
 
         jsr     DrawProgressDialogFilesRemaining
         TAIL_CALL UnshieldCursor
@@ -11529,14 +11624,18 @@ src_path_slash_index:
 
 ;;; ============================================================
 
+;;; Input: A,X = path
 .proc DrawTargetFilePath
+        jsr     CopyToPathBuf0  ; string must be visible to MGTK
         jsr     SetPenModeCopy
         MGTK_CALL MGTK::PaintRect, aux::current_target_file_rect
         MGTK_CALL MGTK::MoveTo,  aux::current_target_file_pos
         jmp     DrawDialogPathBuf0
 .endproc ; DrawTargetFilePath
 
+;;; Input: A,X = path
 .proc DrawDestFilePath
+        jsr     CopyToPathBuf0  ; string must be visible to MGTK
         jsr     SetPenModeCopy
         MGTK_CALL MGTK::PaintRect, aux::current_dest_file_rect
         MGTK_CALL MGTK::MoveTo,  aux::current_dest_file_pos
@@ -12357,7 +12456,7 @@ retry:
 
         ;; If not volume, find and update associated FileEntry
         lda     selected_window_id
-        beq     end_filerecord_and_icon_update
+        jeq     end_filerecord_and_icon_update
 
         ;; Dig up the index of the icon within the window.
         icon_ptr := $06
@@ -12386,7 +12485,13 @@ retry:
         bit     LCBANK1
 
         ;; Determine new icon type
-        jsr     GetSelectionViewBy
+        CALL    DetermineIconType, AX=#new_name_buf ; uses passed name and `src_file_info_params`
+        sta     new_icon_type
+        tax
+        ldy     #IconEntry::flags ; might change, e.g. app <-> system
+        copy8   icontype_iconentryflags_table,x, (icon_ptr),y
+
+        jsr     GetSelectionViewBy ; preserves Y
         ASSERT_EQUALS DeskTopSettings::kViewByIcon, 0
     IF ZERO
 
@@ -12397,10 +12502,15 @@ retry:
         jsr     _GetIconBitmapSize
         COPY_STRUCT tmp_rect::bottomright, tmpc
 
-        CALL    DetermineIconType, AX=#new_name_buf ; uses passed name and `src_file_info_params`
         ldy     #IconEntry::type
+        new_icon_type := *+1
+        lda     #SELF_MODIFIED_BYTE
         sta     (icon_ptr),y
-        ;; Assumes flags will not change, regardless of icon.
+
+        ;; Flags may change (e.g. app <-> system)
+        tax
+        ldy     #IconEntry::flags
+        copy8   icontype_iconentryflags_table,x, (icon_ptr),y
 
         ;; Compute new bounds of icon bitmap
         jsr     _GetIconBitmapSize
@@ -12980,7 +13090,7 @@ ok:     RETURN  A=#0
         ;; Use system disk as animation source
         MLI_CALL GET_PREFIX, get_prefix_params
         dec     src_path_buf    ; remove trailing '/'
-        CALL    IconToAnimate, AX=#src_path_buf
+        CALL    GetIconToAnimate, AX=#src_path_buf
         pha
         CALL    AnimateWindowOpen, X=#$FF ; desktop
 
@@ -14432,11 +14542,11 @@ ret:    rts
 ;;; Input: A,X = string to copy
 ;;; Trashes: $06
         PROC_USED_IN_OVERLAY
-.proc CopyToBuf0
+.proc CopyToPathBuf0
         ptr1 := $06
         stax    ptr1
         TAIL_CALL CopyPtr1ToBuf, AX=#path_buf0
-.endproc ; CopyToBuf0
+.endproc ; CopyToPathBuf0
 
 ;;; ============================================================
 
@@ -14463,12 +14573,6 @@ ret:    rts
         MGTK_CALL MGTK::PeekEvent, event_params
         rts
 .endproc ; PeekEvent
-
-        PROC_USED_CLEARING_UPDATES
-.proc SetPenModeXOR
-        MGTK_CALL MGTK::SetPenMode, penXOR
-        rts
-.endproc ; SetPenModeXOR
 
 .proc SetPenModeCopy
         MGTK_CALL MGTK::SetPenMode, pencopy
@@ -14538,7 +14642,7 @@ ret:    rts
         jsr     GetIconEntry
         stax    icon_entry
 
-        ldy     #IconEntry::state ; mark as dimmed
+        ldy     #IconEntry::win_state
         lda     (icon_entry),y
         and     #kIconEntryStateHighlighted
         cmp     #kIconEntryStateHighlighted
@@ -14625,7 +14729,7 @@ kExtendSelectionModifierMask    = %10000001 ; OA or Shift
         and     #DeskTopSettings::kSysCapIsIIgs
         bne     iigs
 
-        jsr     TestShiftMod    ; bit7 = shift down, if detectable
+        jsr     _TestShiftMod   ; bit7 = shift down, if detectable
         rol                     ; C = shift (s)
         php
         lda     BUTN0           ; A = %Oxxxxxxx
@@ -14647,23 +14751,23 @@ iigs:   lda     KEYMODREG       ; bits match our return value
 ;;; Test if shift is down (if it can be detected).
 ;;; Output: A=high bit/N flag set if down.
 
-.proc ShiftDown
+.proc IsShiftDown
         CALL    ReadSetting, X=#DeskTopSettings::system_capabilities
         and     #DeskTopSettings::kSysCapIsIIgs
-        beq     TestShiftMod    ; no, rely on shift key mod
+        beq     _TestShiftMod    ; no, rely on shift key mod
 
         lda     KEYMODREG       ; On IIgs, use register instead
         and     #%00000001      ; bit 7 = Command (OA), bit 0 = Shift
         beq     ret
         lda     #$80
 ret:    rts
-.endproc ; ShiftDown
+.endproc ; IsShiftDown
 
 ;;; Compare the shift key mod state. Returns high bit set if
 ;;; not the initial state (i.e. Shift key is likely down), if
 ;;; detectable.
 
-.proc TestShiftMod
+.proc _TestShiftMod
         CALL    ReadSetting, X=#DeskTopSettings::system_capabilities
 
         ;; If a IIe, maybe use shift key mod
@@ -14676,7 +14780,7 @@ ret:    rts
     END_IF
 
         rts
-.endproc ; TestShiftMod
+.endproc ; _TestShiftMod
 
 ;;; ============================================================
 ;;; Window Entry Tables
@@ -14705,10 +14809,10 @@ ret:    rts
         rts
 .endproc ; CacheWindowIconList
 
-.proc ClearActiveWindowEntryCount
+.proc ClearAndStoreActiveWindowIconList
         jsr     CacheActiveWindowIconList
         FALL_THROUGH_TO ClearAndStoreCachedWindowIconList
-.endproc ; ClearActiveWindowEntryCount
+.endproc ; ClearAndStoreActiveWindowIconList
 
 .proc ClearAndStoreCachedWindowIconList
         copy8   #0, cached_window_icon_count
@@ -14932,7 +15036,10 @@ icontype_table:
         DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $4000, 17, IconType::graphics ; HR image as FOT
         DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $2000, 33, IconType::graphics ; DHR image as FOT
         DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $4000, 33, IconType::graphics ; DHR image as FOT
-        DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $5800, 3,  IconType::graphics ; Minipix as FOT
+        DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $4800, 3,  IconType::graphics ; Print Shop 88x52 Mono as FOT
+        DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $5800, 3,  IconType::graphics ; Print Shop 88x52 Mono as FOT
+        DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $6800, 3,  IconType::graphics ; Print Shop 88x52 Mono as FOT
+        DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $7800, 3,  IconType::graphics ; Print Shop 88x52 Mono as FOT
         DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $400, 3,  IconType::graphics ; LR image as FOT
         DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX|ICT_FLAGS_BLOCKS, $400, 5,  IconType::graphics ; DLR image as FOT
         DEFINE_ICTRECORD $FF, FT_BINARY, ICT_FLAGS_AUX, $60FF, 0, IconType::graphics ; AXE PACKER image as FOT
@@ -15138,6 +15245,12 @@ startup_slot_table:
 
 ;;; ============================================================
 
+;;; Backup copy of DEVLST made before reordering and detaching offline devices
+devlst_backup:
+        .res    ::kMaxDevListSize+1, 0 ; +1 for DEVCNT itself
+
+;;; ============================================================
+
 ;;; Assigned during startup
 trash_icon_num:  .byte   0
 
@@ -15165,8 +15278,8 @@ icontype_iconentryflags_table := * - IconType::VOL_COUNT
         .byte   0               ; font
         .byte   0               ; relocatable
         .byte   0               ; command
-        .byte   kIconEntryFlagsDropTarget ; folder
-        .byte   kIconEntryFlagsDropTarget ; system_folder
+        .byte   kIconEntryFlagsDropTarget | kIconEntryFlagsDirectory ; folder
+        .byte   kIconEntryFlagsDropTarget | kIconEntryFlagsDirectory ; system_folder
         .byte   0               ; iigs
         .byte   0               ; appleworks_db
         .byte   0               ; appleworks_wp
@@ -15180,7 +15293,7 @@ icontype_iconentryflags_table := * - IconType::VOL_COUNT
         .byte   0               ; intbasic
         .byte   0               ; variables
         .byte   0               ; system
-        .byte   0               ; application
+        .byte   kIconEntryFlagsDropTarget ; application
         ;; Small Icon types skipped via math below
         ASSERT_TABLE_SIZE icontype_iconentryflags_table, IconType::COUNT - IconType::SMALL_COUNT
 
@@ -15212,8 +15325,8 @@ icontype_to_smicon_table := * - IconType::VOL_COUNT
         .byte   IconType::small_generic ; basic
         .byte   IconType::small_generic ; intbasic
         .byte   IconType::small_generic ; variables
-        .byte   IconType::small_generic ; system
-        .byte   IconType::small_generic ; application
+        .byte   IconType::small_app     ; system
+        .byte   IconType::small_app     ; application
         ;; Small Icon types skipped via math below
         ASSERT_TABLE_SIZE icontype_to_smicon_table, IconType::COUNT - IconType::SMALL_COUNT
 

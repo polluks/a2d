@@ -2,8 +2,8 @@
 .define res_string_menu_bar_item_facilities "Op]#es"
 .define res_string_dc_menu_item_quit "Sair"
 .define res_char_dc_menu_item_quit_shortcut 'Q'
-.define res_string_menu_item_quick_copy "C~pia R@pida"
-.define res_string_dc_menu_item_disk_copy "C~pia do Disco"
+.define res_string_menu_item_quick_copy "C~pia Bloco Inteligente"
+.define res_string_dc_menu_item_disk_copy "C~pia Completa Disco"
 .define res_string_button_read_drive "Leia a Unidade"
 .define res_char_button_read_drive_shortcut 'L'
 .define res_string_label_slot_drive_name "Ranhura, Unidade, Nome"

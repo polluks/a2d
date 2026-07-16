@@ -722,6 +722,7 @@ slot_pos_table:
 kMaxSmartportDevices = 8
 
 str_diskii:     PASCAL_STRING res_string_card_type_diskii
+str_diskii_13:  PASCAL_STRING res_string_card_type_diskii_13sector
 str_nvram:      PASCAL_STRING res_string_device_type_nvram
 str_booti:      PASCAL_STRING res_string_device_type_booti
 str_xdrive:     PASCAL_STRING res_string_device_type_xdrive
@@ -745,6 +746,7 @@ str_network:    PASCAL_STRING res_string_card_type_network
 str_mockingboard: PASCAL_STRING res_string_card_type_mockingboard
 str_phasor:     PASCAL_STRING res_string_card_type_phasor
 str_z80:        PASCAL_STRING res_string_card_type_z80
+str_applicard:  PASCAL_STRING res_string_card_type_applicard
 str_uthernet2:  PASCAL_STRING res_string_card_type_uthernet2
 str_passport:   PASCAL_STRING res_string_card_type_passport
 str_lcmeve:     PASCAL_STRING res_string_card_type_lcmeve
@@ -753,6 +755,7 @@ str_grappler:   PASCAL_STRING res_string_card_type_grappler
 str_thunderclock: PASCAL_STRING res_string_card_type_thunderclock
 str_applecat:   PASCAL_STRING res_string_card_type_applecat
 str_workstation: PASCAL_STRING res_string_card_type_workstation
+str_ieee488:    PASCAL_STRING res_string_card_type_ieee488
 str_cricket:    PASCAL_STRING res_string_device_type_cricket
 str_ramworks:   PASCAL_STRING res_string_device_type_ramworks
 str_unknown:    PASCAL_STRING res_string_unknown
@@ -948,6 +951,9 @@ model_lookup_table:
 
         .byte   model::iie_card ; must check before IIe enhanced check
         .byte   $B3, $06, $C0, $E0, $DD, $02, 0
+
+        .byte   model::iie_edm
+        .byte   $B3, $06, $C0, $E1, 0
 
         .byte   model::iie_enhanced
         .byte   $B3, $06, $C0, $E0, 0
@@ -1493,6 +1499,11 @@ mask:   .byte   0
         RETURN  AX=#str_diskii
       END_IF
 
+        COMPARE_FWB $FF, $FF    ; $CnFF == $FF ?
+      IF EQ
+        RETURN  AX=#str_diskii_13
+      END_IF
+
         ;; Smartport?
         COMPARE_FWB $07, $00    ; $Cn07 == $00 ?
       IF EQ
@@ -1628,6 +1639,15 @@ notpas:
         RETURN  AX=#str_parallel
     END_IF
 
+;;; ---------------------------------------------
+;;; Other cards not conforming to Pascal signature
+
+;;; Apple IEEE-488 Interface
+        CALL    SigCheck, AX=#sigtable_ieee488
+    IF CS
+        RETURN  AX=#str_ieee488
+    END_IF
+
         rts
 
 ;;; Input: A,X = pointer to table (num, offset, value, offset, value, ...)
@@ -1688,6 +1708,9 @@ sigtable_nvram:         .byte   3, $07, $3C, $0B, $58, $0C, $FF
 sigtable_booti:         .byte   4, $07, $3C, $0B, $B0, $0C, $01, $F0, $D5
 sigtable_xdrive:        .byte   4, $07, $3C, $0B, $B0, $0C, $01, $F0, $CA
 
+;;; Other
+sigtable_ieee488:       .byte   4, $05, $50, $07, $38, $0B, $FF, $0C, $CF
+
 .endproc ; ProbeSlot
 
 ;;; ============================================================
@@ -1722,6 +1745,11 @@ sigtable_xdrive:        .byte   4, $07, $3C, $0B, $B0, $0C, $01, $F0, $CA
         CALL    WithInterruptsDisabled, AX=#DetectPassportMIDI
     IF CS
         RETURN  AX=#str_passport
+    END_IF
+
+        CALL    WithInterruptsDisabled, AX=#DetectApplicard
+    IF CS
+        RETURN  AX=#str_applicard
     END_IF
 
         RETURN  C=0
@@ -1934,6 +1962,7 @@ write:  sta     $C080,x         ; self-modified to $C0n0
 
         .include "../lib/detect_mockingboard.s"
         .include "../lib/detect_phasor.s"
+        .include "../lib/detect_applicard.s"
         .include "../lib/detect_thecricket.s"
 
 ;;; ============================================================

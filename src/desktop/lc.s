@@ -132,7 +132,8 @@ params: .res    3
 ;;;
 ;;; Assert: Within a `BeginUpdate`...`EndUpdate` sequence with port set
 ;;; Assert: `window_grafport` is set to window's raw port
-
+;;;
+;;; Output: A=0 on success, A=MGTK::Error::window_obscured if degenerate
 .proc AdjustUpdatePortForEntries
         port_ptr := $06
         tmpw := $08
@@ -157,9 +158,17 @@ params: .res    3
         add16   window_grafport+MGTK::GrafPort::viewloc+MGTK::Point::ycoord, #kWindowHeaderHeight, desktop_grafport+MGTK::GrafPort::viewloc+MGTK::Point::ycoord
         add16   window_grafport+MGTK::GrafPort::maprect+MGTK::Rect::y1, #kWindowHeaderHeight, desktop_grafport+MGTK::GrafPort::maprect+MGTK::Rect::y1
 
+        ;; Degenerate?
+        scmp16  desktop_grafport+MGTK::GrafPort::maprect+MGTK::Rect::y2, desktop_grafport+MGTK::GrafPort::maprect+MGTK::Rect::y1
+      IF NEG
+        lda     #MGTK::Error::window_obscured
+        jmp     BankInMain
+      END_IF
+
         MGTK_CALL MGTK::SetPort, desktop_grafport
     END_IF
 
+        lda     #0
         jmp     BankInMain
 .endproc ; AdjustUpdatePortForEntries
 

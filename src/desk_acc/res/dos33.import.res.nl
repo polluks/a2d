@@ -4,3 +4,4 @@
 .define res_const_slot_drive_pattern_offset2 16
 .define res_string_disk_volume_prefix "Disk Volume "
 .define res_string_button_import "Importeren"
+.define res_string_alert_catalog_could_not_be_read "De catalogus kon niet worden gelezen."

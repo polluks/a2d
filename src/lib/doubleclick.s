@@ -16,7 +16,8 @@
         sta     counter+1
 
         ;; Decrement counter, bail if time delta exceeded
-loop:   dec16   counter
+    REPEAT
+        dec16   counter
         lda     counter
         ora     counter+1
         beq     exit
@@ -28,8 +29,7 @@ loop:   dec16   counter
         bmi     exit            ; moved past delta; no double-click
 
         lda     event_params+MGTK::Event::kind
-        cmp     #MGTK::EventKind::no_event
-        beq     loop            ; nothing to consume
+        REDO_IF A = #MGTK::EventKind::no_event ; nothing to consume
 
         cmp     #MGTK::EventKind::drag
         beq     consume
@@ -51,7 +51,7 @@ exit:   RETURN  A=#$FF          ; not double-click
 
 consume:
         MGTK_CALL MGTK::GetEvent, event_params
-        jmp     loop
+    FOREVER
 
         ;; Is the new coord within range of the old coord?
 .proc _CheckDelta

@@ -2,7 +2,7 @@
 .define res_string_status_loading_selector "Starter Genveje..."
 .define res_string_alert_selector_unable_to_run "Kan ikke k|re programmet."
 .define res_string_menu_bar_item_file "Arkiv"
-.define res_string_menu_bar_item_startup "Start"
+.define res_string_menu_bar_item_startup "Start igen"
 .define res_string_menu_item_run_a_program "K|r et program..."
 .define res_char_menu_item_run_a_program_shortcut 'R'
 .define res_string_menu_item_slot_pattern "Kortplads #"

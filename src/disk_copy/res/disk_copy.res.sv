@@ -2,8 +2,8 @@
 .define res_string_menu_bar_item_facilities "Alternativ"
 .define res_string_dc_menu_item_quit "Avsluta"
 .define res_char_dc_menu_item_quit_shortcut 'Q'
-.define res_string_menu_item_quick_copy "Snabb Kopia"
-.define res_string_dc_menu_item_disk_copy "Diskkopia"
+.define res_string_menu_item_quick_copy "Smart Block Copy"
+.define res_string_dc_menu_item_disk_copy "Fullst{ndig Diskkopia"
 .define res_string_button_read_drive "L{s Drives"
 .define res_char_button_read_drive_shortcut 'L'
 .define res_string_label_slot_drive_name "Kortplats, Enhet, Namn"

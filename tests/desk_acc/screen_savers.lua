@@ -60,7 +60,7 @@ test.Variants(
     {"Matrix exits on key", apple2.ReturnKey },
   },
   function(idx, name, func)
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/SCREEN.SAVERS/MATRIX")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/SCREEN.SAVERS/MATRIX", {no_validate=true})
     emu.wait(1)
 
     func()
@@ -81,7 +81,7 @@ a2d.RemoveClockDriverAndReboot()
 test.Step(
   "Analog Clock shows alert if there is no system clock",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/SCREEN.SAVERS/ANALOG.CLOCK")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/SCREEN.SAVERS/ANALOG.CLOCK", {no_validate=true})
     a2dtest.WaitForAlert({match="Device not connected"})
     a2d.DialogOK()
     a2d.CloseAllWindows()
@@ -95,7 +95,7 @@ end)
 test.Step(
   "Digital Clock shows alert if there is no system clock",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/SCREEN.SAVERS/DIGITAL.CLOCK")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/SCREEN.SAVERS/DIGITAL.CLOCK", {no_validate=true})
     a2dtest.WaitForAlert({match="Device not connected"})
     a2d.DialogOK()
     a2d.CloseAllWindows()

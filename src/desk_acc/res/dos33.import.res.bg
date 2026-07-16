@@ -4,3 +4,4 @@
 .define res_const_slot_drive_pattern_offset2 13
 .define res_string_disk_volume_prefix "tom na diska "
 .define res_string_button_import "import"
+.define res_string_alert_catalog_could_not_be_read "katalogyt ne mova da byde pro~eten."

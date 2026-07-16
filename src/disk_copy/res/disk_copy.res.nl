@@ -2,8 +2,8 @@
 .define res_string_menu_bar_item_facilities "Opties"
 .define res_string_dc_menu_item_quit "Stop"
 .define res_char_dc_menu_item_quit_shortcut 'Q'
-.define res_string_menu_item_quick_copy "Snel kopi\x10ren"
-.define res_string_dc_menu_item_disk_copy "Schijf kopi\x10ren"
+.define res_string_menu_item_quick_copy "Slimme Blokkopie"
+.define res_string_dc_menu_item_disk_copy "Volledige Schijfkopie"
 .define res_string_button_read_drive "Lees schijven"
 .define res_char_button_read_drive_shortcut 'L'
 .define res_string_label_slot_drive_name "Slot, Schijfstation, Naam"

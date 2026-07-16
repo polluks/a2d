@@ -2,7 +2,7 @@
 .define res_string_status_loading_selector "Inizio Collegamenti..."
 .define res_string_alert_selector_unable_to_run "Impossibile eseguire il programma."
 .define res_string_menu_bar_item_file "File"
-.define res_string_menu_bar_item_startup "Avvio"
+.define res_string_menu_bar_item_startup "Riavvia"
 .define res_string_menu_item_run_a_program "Avvia un programma..."
 .define res_char_menu_item_run_a_program_shortcut 'R'
 .define res_string_menu_item_slot_pattern "Slot #"

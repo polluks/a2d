@@ -354,10 +354,10 @@ INVOKER_BITSY_COMPAT    := $3C1 ; bit7 = set $280 like Bitsy does
 ;;; $06 = disk right   !             $16 = degree       ! °
 ;;; $07 = lock         !             $17 = open diamond   ◇
 ;;; $08 = larrow       ! ← (MT:H)    $18 = close            (MT:])
-;;; $09 = left box                   $19 = gray odd         (MT:W)
+;;; $09 = app left     !             $19 = gray odd         (MT:W)
 ;;; $0A = darrow       ! ↓ (MT:J)    $1A = gray even        (MT:V)
 ;;; $0B = uarrow       ! ↑ (MT:K)    $1B = solid diamond  ◆
-;;; $0C = right box                  $1C = inv check        (MT:E)
+;;; $0C = app right    !             $1C = inv check        (MT:E)
 ;;; $0D = return       ! ⏎ (MT:M)    $1D = check        !   (MT:D)
 ;;; $0E = (C)            ©           $1E = solid apple  !   (MT:@)
 ;;; $0F = (R)            ®           $1F = open apple   !   (MT:A)
@@ -374,6 +374,8 @@ kGlyphFileLeft          = $03
 kGlyphFileRight         = $04
 kGlyphDiskLeft          = $05
 kGlyphDiskRight         = $06
+kGlyphAppLeft           = $09
+kGlyphAppRight          = $0C
 
 kGlyphLock              = $07
 kGlyphLeftArrow         = $08

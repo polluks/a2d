@@ -3,7 +3,7 @@
 .define res_string_menu_bar_item_edit "Wijzig"
 .define res_string_menu_bar_item_view "Weergave"
 .define res_string_menu_bar_item_special "Speciaal"
-.define res_string_menu_bar_item_startup "Opstart"
+.define res_string_menu_bar_item_startup "Herstart"
 .define res_string_menu_bar_item_selector "Opdrachten"
 .define res_string_menu_item_new_folder "Nieuwe map"
 .define res_char_menu_item_new_folder_shortcut 'N'

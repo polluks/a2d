@@ -57,7 +57,7 @@ test.Step(
     emu.wait(8)
     a2d.CheckAllDrives()
 
-    a2d.OpenPath("/FLOPPY2/LOREM.IPSUM")
+    a2d.OpenPath("/FLOPPY2/LOREM.IPSUM", {no_validate=true})
 
     emu.wait(5)
     test.ExpectMatch(a2dtest.OCRScreen(), "Lorem ipsum.*hac habitasse", "file contents should be the same")

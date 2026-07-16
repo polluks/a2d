@@ -10,6 +10,7 @@ Project Page: https://github.com/a2stuff/a2d
 
 * Add "Startup.Items" folder support.
 * New Screen Saver: Maze.
+* Show app icons for system files in file picker.
 
 ### General
 
@@ -27,6 +28,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Reduce cursor flickering while list view rows are drawn.
 * Improve appearance of menu items with check marks.
 * Fix file picker behavior with more than 127 files.
+* Add small icons for system files.
 
 ### Launcher
 
@@ -83,12 +85,17 @@ Project Page: https://github.com/a2stuff/a2d
 * Select disk (if present) after Special > Check Drive.
 * Add "Startup.Items" folder support.
 * When needed, ensure icon scrolled into view even if already selected.
+* Fix crash when repainting only header of scrolled window.
+* Support dragging files onto ProDOS "interpreter" applications. ([https://github.com/a2stuff/a2d/issues/903](#903))
+* Fix crash when inspecting file with invalid dates.
+* Renamed "Startup" menu to "Restart"
 
 ### Selector
 
 * Fix potential hang after 30 restarts.
 * Reduce cursor flickering when copying programs to RAMCard.
 * Center title of copy progress dialog.
+* Renamed "Startup" menu to "Restart"
 
 ### Disk Copy
 
@@ -100,6 +107,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Fix copying all blocks on volumes with unusual sizes.
 * Fix overlapping labels during copy in some locales.
 * Fix crash on Apple IIc/IIc+ on mouse activity after some copies. ([https://github.com/a2stuff/a2d/issues/900](#900))
+* Rename "Quick Copy" to "Smart Block Copy" and "Disk Copy" to "Full Disk Copy".
 
 ### Desk Accessories
 
@@ -110,7 +118,14 @@ Project Page: https://github.com/a2stuff/a2d
   * Identify Nuova Elettronica DELTA.
   * Detect Oxen Super Expander E memory expansion.
   * Detect Phasor sound card.
-* DOS 3.3 Import: Fix keyboard shortcut handling.
+  * Detect Z-80 Appli-Card.
+  * Detect 13-sector Disk II card.
+  * Detect IEEE-488 interface card.
+* DOS 3.3 Import
+  * Fix keyboard shortcut handling.
+  * Close window if too many icons present after import.
+  * Handle control characters and empty filenames.
+  * Prevent crash if VTOC can't be read.
 * Sounds: Time "Silent" menu bar flash using VBL.
 * Screen Savers: improve animation for Flying Toasters, Hexix, Message and Melt.
 * Calculator & Sci.Calc

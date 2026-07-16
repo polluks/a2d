@@ -57,7 +57,7 @@ function RenameTest(name, proc)
          a2d.CopySelectionTo("/RAM1", true)
          emu.wait(80) -- copy is slow
          -- Switch to copy
-         a2d.OpenPath("/RAM1/A2.DESKTOP/DESKTOP.SYSTEM")
+         a2d.OpenPath("/RAM1/A2.DESKTOP/DESKTOP.SYSTEM", {no_validate=true})
          a2d.WaitForDesktopReady()
 
          a2d.RenamePath("/RAM1/A2.DESKTOP", "NEWNAME")
@@ -161,13 +161,13 @@ RenameTest(
   "settings",
   function(dtpath)
     -- Control Panel, change desktop pattern, close, quit, restart
-    a2d.OpenPath(dtpath.."/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
+    a2d.OpenPath(dtpath.."/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
     apple2.LeftArrowKey()
     apple2.ControlKey("D")
     a2d.WaitForRepaint()
     a2d.CloseWindow()
 
-    a2d.OpenPath(dtpath.."/DESKTOP.SYSTEM")
+    a2d.OpenPath(dtpath.."/DESKTOP.SYSTEM", {no_validate=true})
     a2d.WaitForCopyToRAMCard()
 
     test.Snap("verify desktop pattern changed")
@@ -196,7 +196,7 @@ RenameTest(
   function(dtpath)
     -- Invoking another application (e.g. `BASIC.SYSTEM`)
     -- then quitting back to DeskTop (quit handler)
-    a2d.OpenPath(dtpath.."/EXTRAS/BASIC.SYSTEM")
+    a2d.OpenPath(dtpath.."/EXTRAS/BASIC.SYSTEM", {no_validate=true})
     apple2.WaitForBasicSystem()
     apple2.TypeLine("BYE")
     a2d.WaitForDesktopReady()
@@ -215,7 +215,7 @@ RenameTest(
     a2d.DialogOK()
     a2d.WaitForRepaint()
 
-    a2d.OpenPath(dtpath.."/DESKTOP.SYSTEM")
+    a2d.OpenPath(dtpath.."/DESKTOP.SYSTEM", {no_validate=true})
     a2d.WaitForCopyToRAMCard()
 
     a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_RUN_A_SHORTCUT)

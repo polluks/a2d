@@ -54,3 +54,18 @@ test.Step(
     a2dtest.MultiSnap(15, "window animates closed")
     emu.wait(5)
 end)
+
+test.Step(
+  "Ensure animation ends on correct icon after preview",
+  function()
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/JESU.JOY", {no_validate=true})
+
+    util.WaitFor(
+      "player showing", function()
+        return a2dtest.OCRScreen():match("Electric Duet")
+    end)
+
+    apple2.EscapeKey()
+    a2dtest.MultiSnap(60, "should animate back to JESU.JOY icon")
+    emu.wait(5)
+end)

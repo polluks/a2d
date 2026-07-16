@@ -13,7 +13,7 @@ local s6d2 = manager.machine.images[":sl6:superdrive:fdc:1:35hd"]
 --[[
   Populate a ProDOS disk with several large files, then delete all but
   the last. Launch DeskTop. Special > Copy Disk.... Select the
-  prepared disk. Ensure Options > Quick Copy is checked. Select an
+  prepared disk. Ensure Options > Smart Block Copy is checked. Select an
   appropriate destination disk. Proceed with the copy. Verify that the
   "Blocks to transfer" count is accurate (i.e. less than the total
   block count), and the blocks read/written count up to the transfer
@@ -21,15 +21,15 @@ local s6d2 = manager.machine.images[":sl6:superdrive:fdc:1:35hd"]
 
   Populate a ProDOS disk with several large files, then delete all but
   the last. Launch DeskTop. Special > Copy Disk.... Select the
-  prepared disk. Select Options > Disk Copy. Select an appropriate
+  prepared disk. Select Options > Full Disk Copy. Select an appropriate
   destination disk. Proceed with the copy. Verify that the "Blocks to
   transfer" count is equal to the total block count of the device, and
   the blocks read/written count up to the transfer count accurately.
 ]]
 test.Variants(
   {
-    {"copying disk with early unused blocks - Quick Copy", "quick"},
-    {"copying disk with early unused blocks - Disk Copy", "disk"},
+    {"copying disk with early unused blocks - Smart Block Copy", "quick"},
+    {"copying disk with early unused blocks - Full Disk Copy", "disk"},
   },
   function(idx, name, what)
     if a2dtest.IsAlertShowing() then  -- duplicate volume
@@ -41,7 +41,7 @@ test.Variants(
 
     a2d.CopyDisk()
 
-    a2d.InvokeMenuItem(3, idx) -- Quick Copy or Disk Copy
+    a2d.InvokeMenuItem(3, idx) -- Smart Block Copy or Full Disk Copy
 
     -- select source
     apple2.UpArrowKey() -- S6D2

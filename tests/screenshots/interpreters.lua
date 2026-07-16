@@ -9,7 +9,7 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "Applesoft BASIC",
   function()
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/HELLO.WORLD")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/HELLO.WORLD", {no_validate=true})
     util.WaitFor(
       "hello world", function()
         return apple2.GrabTextScreen():match("Hello world!")
@@ -22,7 +22,7 @@ end)
 test.Step(
   "Integer BASIC",
   function()
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/APPLEVISION")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/APPLEVISION", {no_validate=true})
     util.WaitFor(
       "APPLE-VISION", function()
         return apple2.GrabTextScreen():match("APPLE%-VISION")
@@ -37,7 +37,7 @@ end)
 test.Step(
   "S.A.M.",
   function()
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/EMERGENCY")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/EMERGENCY", {no_validate=true})
     util.WaitFor(
       "message", function()
         return apple2.GrabTextScreen():match("This is only a test")
@@ -50,7 +50,7 @@ end)
 test.Step(
   "PT3",
   function()
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/AUTUMN.PT3")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/AUTUMN.PT3", {no_validate=true})
     util.WaitFor(
       "lores mixed",
       function()
@@ -66,7 +66,7 @@ end)
 test.Step(
   "CHIP-8",
   function()
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/BLINKY.CH8")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/BLINKY.CH8", {no_validate=true})
     util.WaitFor(
       "lores full",
       function()

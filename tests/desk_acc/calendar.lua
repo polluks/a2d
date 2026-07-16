@@ -8,7 +8,7 @@ a2d.ConfigureRepaintTime(0.5)
 test.Step(
   "Calendar - with real-time clock",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALENDAR")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALENDAR", {no_validate=true})
     test.Snap("verify current month and year")
     a2d.CloseWindow()
 end)
@@ -23,7 +23,7 @@ test.Step(
   function()
     a2d.RemoveClockDriverAndReboot()
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALENDAR")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CALENDAR", {no_validate=true})
     test.Snap("verify month and year match build")
     a2d.CloseWindow()
 end)

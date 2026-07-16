@@ -2,7 +2,7 @@
 .define res_string_status_loading_selector "Startar Genv{gar..."
 .define res_string_alert_selector_unable_to_run "Det g}r inte att k|ra programmet."
 .define res_string_menu_bar_item_file "Arkiv"
-.define res_string_menu_bar_item_startup "Start"
+.define res_string_menu_bar_item_startup "Starta om"
 .define res_string_menu_item_run_a_program "K|r ett program..."
 .define res_char_menu_item_run_a_program_shortcut 'R'
 .define res_string_menu_item_slot_pattern "Kortplats #"

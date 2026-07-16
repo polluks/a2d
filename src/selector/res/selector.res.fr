@@ -2,7 +2,7 @@
 .define res_string_status_loading_selector "D{marrage des Raccourcis..."
 .define res_string_alert_selector_unable_to_run "ne peut pas lancer ce programme."
 .define res_string_menu_bar_item_file "Fichier"
-.define res_string_menu_bar_item_startup "D{marrer"
+.define res_string_menu_bar_item_startup "Red{marrer"
 .define res_string_menu_item_run_a_program "Ex{cuter un programme..."
 .define res_char_menu_item_run_a_program_shortcut 'R'
 .define res_string_menu_item_slot_pattern "Port #"

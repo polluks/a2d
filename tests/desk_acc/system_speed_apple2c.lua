@@ -16,7 +16,7 @@ a2d.ConfigureRepaintTime(2)
 test.Step(
   "IIc - speed doesn't affect DHR display",
   function()
-    a2d.OpenPath("/A2.DESKTOP.2/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED")
+    a2d.OpenPath("/A2.DESKTOP.2/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED", {no_validate=true})
     emu.wait(5) -- floppy drives are slow
     apple2.Type("N") -- Normal Speed
     apple2.Type("F") -- Fast Speed

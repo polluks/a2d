@@ -9,7 +9,7 @@ a2d.ConfigureRepaintTime(1)
 test.Step(
   "Image Preview",
   function()
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/MONARCH")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/MONARCH", {no_validate=true})
     emu.wait(5) -- file load
     test.Snap("Image Preview")
     apple2.EscapeKey()
@@ -19,7 +19,7 @@ end)
 test.Step(
   "Electric Duet Preview",
   function()
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/JESU.JOY")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/JESU.JOY", {no_validate=true})
     emu.wait(5) -- file load
     test.Snap("Electric Duet Preview")
     apple2.EscapeKey()
@@ -29,7 +29,7 @@ end)
 test.Step(
   "Font Preview",
   function()
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/FONTS/MONACO.EN")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/FONTS/MONACO.EN", {no_validate=true})
     emu.wait(5) -- file load
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "MONACO.EN", "window title should match")
     test.Snap("Font Preview")
@@ -40,7 +40,7 @@ end)
 test.Step(
   "Text Preview",
   function()
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/LOREM.IPSUM")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/LOREM.IPSUM", {no_validate=true})
     emu.wait(5) -- file load
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "LOREM.IPSUM", "window title should match")
     test.Snap("Text Preview")

@@ -11,7 +11,7 @@ function SaveSettingsTest(name, filename, toggle_func)
   test.Step(
     name .. " - Prompt and Cancel",
     function()
-      a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. filename)
+      a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. filename, {no_validate=true})
       toggle_func()
       a2d.CloseWindow()
       a2dtest.WaitForAlert({match="Do you want to save"})
@@ -22,7 +22,7 @@ function SaveSettingsTest(name, filename, toggle_func)
   test.Step(
     name .. " - Prompt and OK and Cancel",
     function()
-      a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. filename)
+      a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. filename, {no_validate=true})
       toggle_func()
       a2d.CloseWindow()
       a2dtest.WaitForAlert({match="Do you want to save"})
@@ -35,7 +35,7 @@ function SaveSettingsTest(name, filename, toggle_func)
   test.Step(
     name .. " - Prompt and OK and OK",
     function()
-      a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. filename)
+      a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. filename, {no_validate=true})
       toggle_func()
       a2d.CloseWindow()
       a2dtest.WaitForAlert({match="Do you want to save"})

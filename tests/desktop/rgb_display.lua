@@ -16,24 +16,24 @@ test.Step(
   function()
     apple2.SetMonitorType(apple2.MONITOR_TYPE_VIDEO7)
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
     apple2.LeftArrowKey() -- change pattern
     apple2.ControlKey("D") -- Set Desktop Pattern
     a2d.OAShortcut("1") -- check RGB Color
     a2d.CloseWindow()
     test.Expect(apple2.IsColor(), "desktop should be in color")
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/MONARCH")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/MONARCH", {no_validate=true})
     emu.wait(5) -- loading time
     test.Expect(apple2.IsColor(), "image should be in in color")
     apple2.EscapeKey()
     a2d.WaitForRepaint()
     test.Expect(apple2.IsColor(), "desktop should still be in color")
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
     a2d.OAShortcut("1") -- uncheck RGB Color
     a2d.CloseWindow()
     test.Expect(apple2.IsMono(), "image should be in in monochrome")
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/MONARCH")
+    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA/MONARCH", {no_validate=true})
     emu.wait(5) -- loading time
     test.Expect(apple2.IsColor(), "image should be in in color")
     apple2.EscapeKey()

@@ -722,6 +722,7 @@ type_icons_table:
         ;; Small icons
         .addr   sm_gen
         .addr   sm_dir
+        .addr   sm_app
         ASSERT_ADDRESS_TABLE_SIZE type_icons_table, IconType::COUNT
 
 ;;; Used for multiple IconTK calls:
@@ -1725,6 +1726,7 @@ lnk_icon:
 
         DEFINE_ICON_RESOURCE sm_gen, generic_sm_icon, 2, 13, 7, generic_sm_mask
         DEFINE_ICON_RESOURCE sm_dir, folder_sm_icon, 2, 13, 6, folder_sm_mask
+        DEFINE_ICON_RESOURCE sm_app, app_sm_icon, 2, 13, 6, app_sm_mask
 generic_sm_icon:
         PIXELS  "..######......"
         PIXELS  "..#....###...."
@@ -1759,6 +1761,22 @@ folder_sm_mask:
         PIXELS  "##############"
         PIXELS  "##############"
         PIXELS  "##############"
+app_sm_icon:
+        PIXELS  "......##......"
+        PIXELS  "....##..##...."
+        PIXELS  "..##......##.."
+        PIXELS  "##......######"
+        PIXELS  "..##..###...##"
+        PIXELS  "....##..######"
+        PIXELS  "......##....##"
+app_sm_mask:
+        PIXELS  "......##......"
+        PIXELS  "....######...."
+        PIXELS  "..##########.."
+        PIXELS  "##############"
+        PIXELS  "..############"
+        PIXELS  "....##########"
+        PIXELS  "......##....##"
 
 ;;; ============================================================
 ;;; Icon Resources - Volume Type Icons

@@ -15,7 +15,7 @@ a2d.ConfigureRepaintTime(1)
 test.Step(
   "Joystick Limits",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/JOYSTICK")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/JOYSTICK", {no_validate=true})
 
     apple2.SetJoy1(0,0)
     test.Snap("verify indicator in top left")
@@ -42,12 +42,14 @@ end)
 test.Step(
   "Second Joystick",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/JOYSTICK")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/JOYSTICK", {no_validate=true})
 
     apple2.SetJoy1(64,64)
     test.Snap("verify single indicator")
     apple2.SetJoy2(192, 192)
     test.Snap("verify second indicator")
+
+    a2d.CloseWindow()
 end)
 
 --[[
@@ -57,7 +59,7 @@ end)
 test.Step(
   "Cursor visibility",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/JOYSTICK")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/JOYSTICK", {no_validate=true})
 
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
     a2d.InMouseKeysMode(function(m)
@@ -69,4 +71,6 @@ test.Step(
         apple2.ReleaseOA()
         emu.wait(1)
     end)
+
+    a2d.CloseWindow()
 end)

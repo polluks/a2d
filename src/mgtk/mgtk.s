@@ -4682,9 +4682,7 @@ rts4:   rts
 .proc ReadMousePos
         ldy     #READMOUSE
         jsr     CallMouse
-        bit     mouse_hooked_flag
-        bmi     do_scale_x
-
+    IF bit mouse_hooked_flag : NC
         ldx     mouse_firmware_hi
         lda     MOUSE_X_LO->$C000,x
         sta     mouse_x
@@ -4692,32 +4690,33 @@ rts4:   rts
         sta     mouse_x+1
         lda     MOUSE_Y_LO->$C000,x
         sta     mouse_y
+    END_IF
 
         ;; Scale X
-do_scale_x:
         ldy     mouse_scale_x
-        beq     do_scale_y
-:       asl     mouse_x
+    IF NOT ZERO
+      DO
+        asl     mouse_x
         rol     mouse_x+1
-        dey
-        bne     :-
+      WHILE dey : NOT ZERO
+    END_IF
 
         ;; Scale Y
-do_scale_y:
         ldy     mouse_scale_y
-        beq     done_scaling
+    IF NOT ZERO
         lda     mouse_y
-:       asl     a
-        dey
-        bne     :-
+      DO
+        asl     a
+      WHILE dey : NOT ZERO
         sta     mouse_y
+    END_IF
 
-done_scaling:
-        bit     mouse_hooked_flag
-        bmi     done
+    IF bit mouse_hooked_flag : NC
         lda     MOUSE_STATUS->$C000,x
         sta     mouse_status
-done:   rts
+    END_IF
+
+        rts
 .endproc ; ReadMousePos
 
 ;;; ============================================================
@@ -4759,8 +4758,7 @@ done:   rts
         bit     no_mouse_flag
         bmi     rts4
 
-        bit     mouse_hooked_flag
-        bmi     hooked
+    IF bit mouse_hooked_flag : NC
         pha
         ldx     mouse_firmware_hi ; set `proc_ptr` to $Cn00
         stx     proc_ptr+1
@@ -4771,8 +4769,9 @@ done:   rts
         pla
         ldy     mouse_operand
         jmp     (proc_ptr)
+    END_IF
 
-hooked: jmp     (mouse_hook)
+        jmp     (mouse_hook)
 .endproc ; CallMouse
 
 
@@ -9703,7 +9702,6 @@ kbd_mouse_next_status: .byte $00
 ;;; ============================================================
 ;;; X = xlo, Y = xhi, A = y
 
-
 .proc SetMousePos
         bit     mouse_hooked_flag
         bmi     no_firmware
@@ -10432,19 +10430,19 @@ set_clamps:
 set_clamp:
         sta     mouse_y
         stx     mouse_y+1
-        bit     mouse_hooked_flag
-        bmi     :+
+    IF bit mouse_hooked_flag : NC
         sta     CLAMP_MAX_LO
         stx     CLAMP_MAX_HI
-:
+    END_IF
+
         lda     #0
         sta     mouse_x
         sta     mouse_x+1
-        bit     mouse_hooked_flag
-        bmi     :+
+    IF bit mouse_hooked_flag : NC
         sta     CLAMP_MIN_LO
         sta     CLAMP_MIN_HI
-:
+    END_IF
+
         tya                     ; CLAMP_X or CLAMP_Y
         ldy     #CLAMPMOUSE
         jmp     CallMouse

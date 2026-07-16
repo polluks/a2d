@@ -15,8 +15,8 @@ local s6d2 = manager.machine.images[":sl6:cffa2:cffa2_ata:1:hdd:image"]
 ]]
 test.Variants(
   {
-    {"Quick Copy 65534 blocks", "quick"},
-    {"Disk Copy 65534 blocks", "disk"},
+    {"Smart Block Copy 65534 blocks", "quick"},
+    {"Full Disk Copy 65534 blocks", "disk"},
   },
   function(idx, name, what)
     if a2dtest.IsAlertShowing() then  -- duplicate volume
@@ -25,7 +25,7 @@ test.Variants(
 
     a2d.CopyDisk()
 
-    a2d.InvokeMenuItem(3, idx) -- Options > Quick Copy or Disk Copy
+    a2d.InvokeMenuItem(3, idx) -- Options > Smart Block Copy or Full Disk Copy
 
     -- select source
     apple2.UpArrowKey() -- S5D2

@@ -2,7 +2,7 @@
 .define res_string_status_loading_selector "Snelkoppeling starten..."
 .define res_string_alert_selector_unable_to_run "Kan het programma niet uitvoeren."
 .define res_string_menu_bar_item_file "Archief"
-.define res_string_menu_bar_item_startup "Opstart"
+.define res_string_menu_bar_item_startup "Herstart"
 .define res_string_menu_item_run_a_program "Een programma uitvoeren..."
 .define res_char_menu_item_run_a_program_shortcut 'E'
 .define res_string_menu_item_slot_pattern "Slot #"

@@ -2,8 +2,8 @@
 .define res_string_menu_bar_item_facilities "opcii"
 .define res_string_dc_menu_item_quit "izhod"
 .define res_char_dc_menu_item_quit_shortcut 'Q'
-.define res_string_menu_item_quick_copy "byrzo kopirane"
-.define res_string_dc_menu_item_disk_copy "kopirane na disk"
+.define res_string_menu_item_quick_copy "inteligentno blokowo kopie"
+.define res_string_dc_menu_item_disk_copy "pylno kopie diska"
 .define res_string_button_read_drive "pro~eti u-wata"
 .define res_char_button_read_drive_shortcut 'R'
 .define res_string_label_slot_drive_name "slot, u-wo, ime"

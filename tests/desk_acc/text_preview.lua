@@ -14,7 +14,7 @@ a2d.ConfigureRepaintTime(2)
 test.Step(
   "Escape exits text preview",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES/TOGGLE.ME")
+    a2d.OpenPath("/TESTS/FILE.TYPES/TOGGLE.ME", {no_validate=true})
     local window_id = a2dtest.GetFrontWindowID()
     apple2.EscapeKey()
     a2d.WaitForRepaint()
@@ -27,7 +27,7 @@ end)
 test.Step(
   "Space toggles modes",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES/TOGGLE.ME")
+    a2d.OpenPath("/TESTS/FILE.TYPES/TOGGLE.ME", {no_validate=true})
 
     apple2.SpaceKey() -- toggle modes
     a2d.WaitForRepaint()
@@ -51,7 +51,7 @@ end)
 test.Step(
   "Click toggles modes",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES/TOGGLE.ME")
+    a2d.OpenPath("/TESTS/FILE.TYPES/TOGGLE.ME", {no_validate=true})
     test.ExpectMatch(a2dtest.OCRScreen(), "TOGGLE%.ME .* Proportional",
                 "Proportional label baseline should align with window title")
 
@@ -104,7 +104,7 @@ end)
 test.Step(
   "Short file keeps scrollbar inactive",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES/SHORT.TEXT")
+    a2d.OpenPath("/TESTS/FILE.TYPES/SHORT.TEXT", {no_validate=true})
     local hscroll, vscroll = a2dtest.GetFrontWindowScrollOptions()
     test.ExpectEquals(vscroll & mgtk.scroll.option_active, 0, "scrollbar should be inactive")
     apple2.SpaceKey() -- toggle modes
@@ -134,7 +134,7 @@ end)
 test.Step(
   "Long file and scrolling",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES/LONG.TEXT")
+    a2d.OpenPath("/TESTS/FILE.TYPES/LONG.TEXT", {no_validate=true})
     local hscroll, vscroll = a2dtest.GetFrontWindowScrollOptions()
     test.ExpectNotEquals(vscroll & mgtk.scroll.option_active, 0, "scrollbar should be active")
 
@@ -200,7 +200,7 @@ end)
 test.Step(
   "Touching thumb doesn't cause repaint",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES/LONG.TEXT")
+    a2d.OpenPath("/TESTS/FILE.TYPES/LONG.TEXT", {no_validate=true})
 
     local up_x, up_y = a2dtest.GetFrontWindowUpScrollArrowCoords()
 
@@ -237,7 +237,7 @@ end)
 test.Step(
   "Scroll is proportional",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES/LONG.TEXT")
+    a2d.OpenPath("/TESTS/FILE.TYPES/LONG.TEXT", {no_validate=true})
 
     local up_x, up_y = a2dtest.GetFrontWindowUpScrollArrowCoords()
 
@@ -278,7 +278,7 @@ test.Step(
     end)
 
     -- Disable ZIP Chip
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED", {no_validate=true})
     apple2.Type("N") -- Normal Speed
     a2d.CloseWindow()
 
@@ -290,7 +290,7 @@ test.Step(
     a2d.CloseWindow()
 
     -- Enable ZIP Chip
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/SYSTEM.SPEED", {no_validate=true})
     apple2.Type("F") -- Fast Speed
     a2d.CloseWindow()
 end)
@@ -302,7 +302,7 @@ end)
 test.Step(
   "Tabs",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES/TABS")
+    a2d.OpenPath("/TESTS/FILE.TYPES/TABS", {no_validate=true})
     test.Snap("verify all lines displayed correctly")
     a2d.CloseWindow()
 end)
@@ -317,7 +317,7 @@ end)
 test.Step(
   "Scroll edge case",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES/SUDOKU.STORY")
+    a2d.OpenPath("/TESTS/FILE.TYPES/SUDOKU.STORY", {no_validate=true})
     apple2.SpaceKey() -- toggle to Fixed
     a2d.WaitForRepaint()
     for i = 1, 15 do
@@ -343,7 +343,7 @@ end)
 test.Step(
   "Toggling and scrollbar",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES/TOGGLE.ME")
+    a2d.OpenPath("/TESTS/FILE.TYPES/TOGGLE.ME", {no_validate=true})
     apple2.SpaceKey() -- toggle to Fixed
     a2d.WaitForRepaint()
     local hscroll, vscroll = a2dtest.GetFrontWindowScrollOptions()
@@ -368,7 +368,7 @@ end)
 test.Step(
   "File bigger than 64K",
   function()
-    a2d.OpenPath("/TESTS/PREVIEW/TEXT/MORE.THAN.64K")
+    a2d.OpenPath("/TESTS/PREVIEW/TEXT/MORE.THAN.64K", {no_validate=true})
     emu.wait(20)
     a2d.OASADown()
 

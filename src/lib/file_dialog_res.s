@@ -22,11 +22,13 @@ pensize_normal: .byte   1, 1
 pensize_frame:  .byte   kBorderDX, kBorderDY
         DEFINE_RECT_FRAME dialog_frame_rect, kFilePickerDlgWidth, kFilePickerDlgHeight
 
-;;; Multi-glyph symbols used to prefix volumes, folders and files
+;;; Multi-glyph symbols used to prefix volumes, folders, apps and files
 str_folder:
         PASCAL_STRING {kGlyphFolderLeft, kGlyphFolderRight}
 str_file:
         PASCAL_STRING {kGlyphFileLeft, kGlyphFileRight}
+str_app:
+        PASCAL_STRING {kGlyphAppLeft, kGlyphAppRight}
 str_vol:
         PASCAL_STRING {kGlyphDiskLeft, kGlyphDiskRight}
 

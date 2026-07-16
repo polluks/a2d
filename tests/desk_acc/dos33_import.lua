@@ -1,12 +1,11 @@
 --[[ BEGINCONFIG ========================================
 
-DISKARGS="-hard1 $HARDIMG -flop1 dos33_floppy.dsk"
+MODELARGS="-sl1 ramfactor -sl2 mouse -sl7 cffa2"
+DISKARGS="-hard1 $HARDIMG -flop1 dos33_floppy.dsk -flop2 SD073c.dsk"
 
 ======================================== ENDCONFIG ]]
 
 a2d.ConfigureRepaintTime(1)
-
-a2d.OpenPath("/A2.DESKTOP/EXTRAS")
 
 --[[
   Select nothing. Verify that the OK button is disabled.
@@ -21,7 +20,7 @@ a2d.OpenPath("/A2.DESKTOP/EXTRAS")
 test.Step(
   "Drive selection - OK button - Shortcut",
   function()
-    a2d.SelectAndOpen("DOS33.IMPORT")
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/DOS33.IMPORT", {no_validate=true})
     test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled ")
 
     a2dtest.ExpectNothingChanged(apple2.ReturnKey)
@@ -44,7 +43,7 @@ end)
 test.Step(
   "Drive selection - OK button - Click",
   function()
-    a2d.SelectAndOpen("DOS33.IMPORT")
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/DOS33.IMPORT", {no_validate=true})
     apple2.DownArrowKey() -- select drive
     local dialog_x, dialog_y = a2dtest.GetFrontWindowContentRect()
     a2d.InMouseKeysMode(function(m)
@@ -63,9 +62,9 @@ end)
 test.Step(
   "Drive selection - Cancel button - Shortcut",
   function()
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/DOS33.IMPORT", {no_validate=true})
     apple2.DownArrowKey() -- select drive
 
-    a2d.SelectAndOpen("DOS33.IMPORT")
     local count = a2dtest.GetWindowCount()
     apple2.EscapeKey()
     test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "Cancel", "Cancel button should flash")
@@ -79,9 +78,9 @@ end)
 test.Step(
   "Drive selection - Cancel button - Click",
   function()
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/DOS33.IMPORT", {no_validate=true})
     apple2.DownArrowKey() -- select drive
 
-    a2d.SelectAndOpen("DOS33.IMPORT")
     local count = a2dtest.GetWindowCount()
     local dialog_x, dialog_y = a2dtest.GetFrontWindowContentRect()
     a2d.InMouseKeysMode(function(m)
@@ -100,7 +99,7 @@ end)
 test.Step(
   "File selection - Import button - Shortcut",
   function()
-    a2d.SelectAndOpen("DOS33.IMPORT")
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/DOS33.IMPORT", {no_validate=true})
     apple2.DownArrowKey() -- select drive
     apple2.ReturnKey()
     emu.wait(10) -- floppy catalog
@@ -119,7 +118,7 @@ end)
 test.Step(
   "File selection - Cancel button - Shortcut",
   function()
-    a2d.SelectAndOpen("DOS33.IMPORT")
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/DOS33.IMPORT", {no_validate=true})
     apple2.DownArrowKey() -- select drive
     apple2.ReturnKey()
     emu.wait(10) -- floppy catalog
@@ -130,3 +129,54 @@ test.Step(
     test.ExpectNotEquals(a2dtest.GetWindowCount(), count, "dialog should have closed")
 end)
 
+--[[
+  Add a shortcut for DOS33.IMPORT. Open a folder bringing total icon count close to
+  127. Import multiple files. Click OK.
+]]
+test.Step(
+  "Too many icons after import",
+  function()
+    a2d.AddShortcut("/A2.DESKTOP/EXTRAS/DOS33.IMPORT")
+    a2d.CreateFolder("/RAM1/DIR")
+
+    a2d.OpenPath("/RAM1/DIR")
+
+    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.RUN_BASIC_HERE)
+    apple2.WaitForBasicSystem()
+    apple2.TypeLine("10 FOR I = 1 TO "..(127-#apple2.GetProDOSDeviceList()))
+    apple2.TypeLine("20 PRINT CHR$(4)\"CREATE F\"I")
+    apple2.TypeLine("30 NEXT")
+    apple2.TypeLine("RUN")
+    apple2.TypeLine("BYE")
+    a2d.WaitForDesktopReady()
+
+    a2d.OAShortcut("1") -- run DOS33.IMPORT
+    emu.wait(10) -- drive scan
+    apple2.DownArrowKey() -- select drive
+    apple2.ReturnKey()
+    emu.wait(10) -- floppy catalog
+    apple2.DownArrowKey() -- select file
+    apple2.ReturnKey()
+    emu.wait(10) -- floppy read
+    a2d.CloseWindow()
+
+    a2dtest.WaitForAlert({match="window must be closed"})
+    a2d.DialogOK()
+    emu.wait(5)
+    test.ExpectEquals(a2dtest.GetWindowCount(), 0, "window should have closed")
+end)
+
+--[[
+  Insert SD073c.dsk - formatted as DOS 3.3 but with a non-standard VTOC.
+  Select the disk. Click OK. Verify an alert is shown.
+]]
+test.Step(
+  "Non-DOS 3.3 VTOC",
+  function()
+    a2d.OpenPath("/A2.DESKTOP/EXTRAS/DOS33.IMPORT", {no_validate=true})
+    apple2.DownArrowKey() -- select drive
+    apple2.DownArrowKey() -- select drive
+    apple2.ReturnKey()
+    a2dtest.WaitForAlert({match="catalog could not be read"})
+    apple2.ReturnKey()
+end)

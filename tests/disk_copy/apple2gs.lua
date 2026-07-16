@@ -18,7 +18,7 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "RGB Color vs. IIgs Control Panel",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
     a2d.OAShortcut("1") -- check RGB Color
     a2d.CloseWindow()
 
@@ -42,7 +42,7 @@ test.Step(
     -- cleanup
     a2d.OAShortcut("Q")
     a2d.WaitForDesktopReady()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
     a2d.OAShortcut("1") -- uncheck RGB Color
     a2d.CloseWindow()
 end)

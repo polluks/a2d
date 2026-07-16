@@ -21,7 +21,7 @@ test.Step(
     a2d.Reboot()
     a2d.WaitForDesktopReady()
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
+    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
     apple2.RightArrowKey()
     apple2.RightArrowKey()
     apple2.ControlKey("D") -- Set Desktop Pattern
