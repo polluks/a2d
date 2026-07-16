@@ -2284,7 +2284,7 @@ PRNGMathLoop1:
 PRNGMathLoop2:
         cmp     HexTrackCount0Base
         bmi     ExitMathLoop2
-        clc
+        sec
         sbc     HexTrackCount0Base
         jmp     PRNGMathLoop2
 
@@ -2337,10 +2337,8 @@ CPLLoop:
 
 ;;; ============================================================
 
-        ;; TODO: Analysis - WTF is going on here?? This *seems* like an attempt to convert from BCD to binary, but it's... not.  It's kinda wonky.
 .proc Hex2BCDSorta
         stx     Hex2BCDSaveX
-        ;; TODO: Analysis - The return values from this function seem bizarre and inexplicable.  Better analysis needs to be done on this code.
         sty     Hex2BCDSaveY
 
         ldx     #$00
@@ -2348,7 +2346,7 @@ DivideBy10:
         cmp     #$0a
         bmi     TenOrLess
         inx
-        clc
+        sec
         sbc     #$0a
         jmp     DivideBy10
 
