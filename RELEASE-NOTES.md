@@ -148,6 +148,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Eyes: Reduce cursor flickering.
 * International: Reduce cursor flickering.
 * Joystick: Reduce cursor flickering.
+* CD Remote: Fix shuffle play randomization.
 
 ### Misc
 

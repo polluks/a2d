@@ -767,6 +767,7 @@ ExitInitDriveDisc:
 
         ;; Read and process any Keyboard inputs from the user
 CheckUserInput:
+        inc     RandomSeed
         jsr     JUMP_TABLE_SYSTEM_TASK
         JUMP_TABLE_MGTK_CALL MGTK::GetEvent, aux::event_params
         jsr     CopyEventDataToMain
