@@ -4229,7 +4229,7 @@ finish:
 
         ;; Compute rows to draw
         lda     cursor_pos::ycoord
-        clc
+        sec
         sbc     cursor_hotspot_y
         sta     cursor_y1
         clc
