@@ -1791,9 +1791,26 @@ sigtable_ieee488:       .byte   4, $05, $50, $07, $38, $0B, $FF, $0C, $CF
         ;; Put routine in place
         jsr     SwapRoutine
 
+        ;; On IIgs, slow mode
+        jsr     IsIIgs
+        php
+    IF CC
+        lda     CYAREG          ; bit=7 = fast mode
+        pha                     ; save
+        and     #$7F            ; mask it off
+        sta     CYAREG          ; update it
+    END_IF
+
         ;; Try to invoke Z80
         ldy     #0
         sta     ($06),y
+
+        ;; On IIgs, restore mode
+        plp
+    IF CC
+        pla
+        sta     CYAREG
+    END_IF
 
         ;; Restore memory
         jsr     SwapRoutine
@@ -2129,10 +2146,7 @@ write:  sta     $C080,x         ; self-modified to $C0n0
 ;;; ============================================================
 
 .proc CheckIIgsMemory
-        bit     ROMIN2          ; Check ROM - is this a IIgs?
-        CALL    IDROUTINE, C=1
-        bit     LCBANK1
-        bit     LCBANK1
+        jsr     IsIIgs
     IF CC
         .pushcpu
         .setcpu "65816"
@@ -2231,6 +2245,19 @@ slot:
 
 .endproc ; CheckSlinkyMemory
 
+;;; ============================================================
+
+;;; Calls `IDROUTINE` with carry set; returns carry clear if
+;;; IIgs. Assumes we're running with LCBank1 banked in, and
+;;; restores that state afterwards.
+;;; Output: C=0 if IIgs, C=1 otherwise
+.proc IsIIgs
+        bit     ROMIN2          ; Check ROM - is this a IIgs?
+        CALL    IDROUTINE, C=1
+        bit     LCBANK1
+        bit     LCBANK1
+        rts
+.endproc ; IsIIgs
 
 ;;; ============================================================
 
@@ -2310,10 +2337,7 @@ p65C02: RETURN  AX=#str_65C02
 p6502:  RETURN  AX=#str_6502
 
         ;; Distinguish 65802 and 65816 by machine ID
-p658xx: bit     ROMIN2
-        CALL    IDROUTINE, C=1
-        bit     LCBANK1
-        bit     LCBANK1
+p658xx: jsr     IsIIgs
     IF CC
         RETURN  AX=#str_65816   ; Only IIgs supports 65816
     END_IF
