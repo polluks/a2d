@@ -327,8 +327,7 @@ tick_counter:
       END_IF
 
         ;; Non-menu keys
-        lda     event_params::key
-        jsr     ToUpperCase
+        CALL    ToUpperCase, A=event_params::key
         cmp     #CHAR_DOWN      ; Apple-Down (Open)
         jeq     CmdOpenFromKeyboard
         cmp     #CHAR_UP        ; Apple-Up (Open Parent)
@@ -13112,8 +13111,7 @@ ok:     RETURN  A=#0
     DO
         jsr     SystemTask
         jsr     GetNextEvent
-        BREAK_IF A = #MGTK::EventKind::button_down
-    WHILE A <> #MGTK::EventKind::key_down
+    WHILE A <> #MGTK::EventKind::button_down AND A <> #MGTK::EventKind::key_down
 
         MGTK_CALL MGTK::CloseWindow, winfo_about_dialog
         jsr     ClearUpdates ; following CloseWindow

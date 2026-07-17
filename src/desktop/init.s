@@ -903,8 +903,7 @@ name_buf:       .res    ::kDAMenuItemSize, 0
 
 end:
         ;; No separator if it is last
-        lda     apple_menu
-    IF A = #kAppleMenuFixedItems
+    IF lda apple_menu : A = #kAppleMenuFixedItems
         dec     apple_menu
     END_IF
 
