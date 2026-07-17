@@ -121,6 +121,7 @@ Project Page: https://github.com/a2stuff/a2d
   * Detect Z-80 Appli-Card.
   * Detect 13-sector Disk II card.
   * Detect IEEE-488 interface card.
+  * Improve Z-80 card detection on IIgs.
 * DOS 3.3 Import
   * Fix keyboard shortcut handling.
   * Close window if too many icons present after import.
@@ -148,6 +149,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Eyes: Reduce cursor flickering.
 * International: Reduce cursor flickering.
 * Joystick: Reduce cursor flickering.
+* CD Remote: Fix shuffle play randomization.
 
 ### Misc
 
