@@ -2233,7 +2233,7 @@ FoundUnplayedTrack:
         lda     #$ff
         sta     (PlayedListPtr),y
         tya
-        jsr     Hex2BCDSorta
+        jsr     Hex2BCD
         sta     BCDRandomPickedTrk
 
         pla
@@ -2283,8 +2283,8 @@ PRNGMathLoop1:
 
 PRNGMathLoop2:
         cmp     HexTrackCount0Base
-        bmi     ExitMathLoop2
-        sec
+        bcc     ExitMathLoop2
+        sec                     ; original code was clc
         sbc     HexTrackCount0Base
         jmp     PRNGMathLoop2
 
@@ -2337,16 +2337,16 @@ CPLLoop:
 
 ;;; ============================================================
 
-.proc Hex2BCDSorta
+.proc Hex2BCD
         stx     Hex2BCDSaveX
         sty     Hex2BCDSaveY
 
         ldx     #$00
 DivideBy10:
         cmp     #$0a
-        bmi     TenOrLess
+        bcc     TenOrLess
         inx
-        sec
+        sec                     ; original code was clc
         sbc     #$0a
         jmp     DivideBy10
 
@@ -2369,7 +2369,7 @@ Hex2BCDSaveX    := *+1
 
 Hex2BCDTemp:
         .byte   $00
-.endproc ; Hex2BCDSorta
+.endproc ; Hex2BCD
 
 ;;; ============================================================
 
