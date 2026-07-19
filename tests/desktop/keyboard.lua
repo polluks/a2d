@@ -272,6 +272,7 @@ test.Step(
 
     apple2.Type("A")
     a2d.OAShortcut("O")
+    emu.wait(1)
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
     a2d.CloseAllWindows()
 end)

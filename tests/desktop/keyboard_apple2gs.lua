@@ -37,6 +37,7 @@ test.Variants(
 
       apple2.PressShift()
       apple2.TabKey()
+      emu.wait(1)
       apple2.ReleaseShift()
 
       a2d.WaitForRepaint()
