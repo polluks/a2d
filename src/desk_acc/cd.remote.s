@@ -2234,7 +2234,7 @@ FoundUnplayedTrack:
         lda     #$ff
         sta     (PlayedListPtr),y
         tya
-        jsr     Hex2BCDSorta
+        jsr     Hex2BCD
         sta     BCDRandomPickedTrk
 
         pla
@@ -2284,8 +2284,8 @@ PRNGMathLoop1:
 
 PRNGMathLoop2:
         cmp     HexTrackCount0Base
-        bmi     ExitMathLoop2
-        clc
+        bcc     ExitMathLoop2
+        sec                     ; original code was clc
         sbc     HexTrackCount0Base
         jmp     PRNGMathLoop2
 
@@ -2338,18 +2338,16 @@ CPLLoop:
 
 ;;; ============================================================
 
-        ;; TODO: Analysis - WTF is going on here?? This *seems* like an attempt to convert from BCD to binary, but it's... not.  It's kinda wonky.
-.proc Hex2BCDSorta
+.proc Hex2BCD
         stx     Hex2BCDSaveX
-        ;; TODO: Analysis - The return values from this function seem bizarre and inexplicable.  Better analysis needs to be done on this code.
         sty     Hex2BCDSaveY
 
         ldx     #$00
 DivideBy10:
         cmp     #$0a
-        bmi     TenOrLess
+        bcc     TenOrLess
         inx
-        clc
+        sec                     ; original code was clc
         sbc     #$0a
         jmp     DivideBy10
 
@@ -2372,7 +2370,7 @@ Hex2BCDSaveX    := *+1
 
 Hex2BCDTemp:
         .byte   $00
-.endproc ; Hex2BCDSorta
+.endproc ; Hex2BCD
 
 ;;; ============================================================
 
