@@ -1147,8 +1147,8 @@ local function ReadIcon(id)
   local icon_entries = DESKTOP_SYMBOLS["icon_entries"] | 0x010000
 
   local IconEntry = {
-    state = 0,
-    win_flags = 1,
+    flags = 0,
+    win_state = 1,
     iconx = 2,
     icony = 4,
     typ = 6,
@@ -1160,9 +1160,9 @@ local function ReadIcon(id)
   local addr = icon_entries + (id-1) * IconEntry.SIZE
 
   icon.id = id
-  icon.state = ram_u8(addr + IconEntry.state)
-  icon.window = ram_u8(addr + IconEntry.win_flags) & 0x0F
-  icon.flags = ram_u8(addr + IconEntry.win_flags) & 0xF0
+  icon.state = ram_u8(addr + IconEntry.win_state) & 0xF0
+  icon.window = ram_u8(addr + IconEntry.win_state) & 0x0F
+  icon.flags = ram_u8(addr + IconEntry.flags)
   icon.x = ram_s16(addr + IconEntry.iconx)
   icon.y = ram_s16(addr + IconEntry.icony)
   icon.name = apple2.GetPascalString(addr + IconEntry.name)

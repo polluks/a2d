@@ -327,8 +327,7 @@ tick_counter:
       END_IF
 
         ;; Non-menu keys
-        lda     event_params::key
-        jsr     ToUpperCase
+        CALL    ToUpperCase, A=event_params::key
         cmp     #CHAR_DOWN      ; Apple-Down (Open)
         jeq     CmdOpenFromKeyboard
         cmp     #CHAR_UP        ; Apple-Up (Open Parent)
@@ -539,7 +538,7 @@ offset_table:
         jsr     ComputeModifiers ; bit7 = OA, bit6 = SA
         and     #kEitherAppleModifierMask
       IF A = #kEitherAppleModifierMask
-        copy8   #$80, menu_modified_click_flag
+        SET_BIT7_FLAG menu_modified_click_flag
       END_IF
 
         jmp     MenuDispatch
@@ -5191,11 +5190,6 @@ ScrollUpdateWinfo := ScrollManager::ActivateCtlsSetThumbsWinfo
 
 ;;; ============================================================
 
-pending_alert:
-        .byte   0
-
-;;; ============================================================
-
 ;;; Input: A = unit number (masked or unmasked)
 ;;; Output: X = index in `DEVLST`
 ;;; Assert: unit is present in the list
@@ -6264,7 +6258,7 @@ no_win:
         ;; --------------------------------------------------
         ;; Create window and icons
 
-    IF bit copy_new_window_bounds_flag : NS
+    IF bit performing_window_restore_flag : NS
         ;; DeskTopSettings::kViewByXXX
         ldx     cached_window_id
         copy8   new_window_view_by, win_view_by_table-1,x
@@ -6286,7 +6280,7 @@ no_win:
 
         jsr     InitWindowIcons
 
-    IF bit copy_new_window_bounds_flag : NC
+    IF bit performing_window_restore_flag : NC
         jsr     _ComputeInitialWindowSize
         jsr     AdjustViewportForNewIcons
     END_IF
@@ -7287,7 +7281,7 @@ too_many_files:
         jsr     _DoClose
 
         ;; Show error, unless this is during window restore.
-    IF bit suppress_error_on_open_flag : NC
+    IF bit performing_window_restore_flag : NC
         ldax    #aux::str_warning_window_must_be_closed ; too many files to show
         ldy     active_window_id ; is a window open?
       IF ZERO
@@ -7435,7 +7429,7 @@ file_entry_to_file_record_mapping_table:
         MLI_CALL OPEN, open_params
     IF CS
         ;; Show error, unless this is during window restore.
-      IF bit suppress_error_on_open_flag : NC
+      IF bit performing_window_restore_flag : NC
         CALL    ShowAlertOption, X=#AlertButtonOptions::OK
       END_IF
 
@@ -7444,9 +7438,6 @@ file_entry_to_file_record_mapping_table:
 
         rts
 .endproc ; _DoOpen
-
-suppress_error_on_open_flag:
-        .byte   0
 
 ;;; --------------------------------------------------
 
@@ -7633,10 +7624,6 @@ vol_blocks_used:  .word   0
         add16   window_filerecord_table-2,x, deltam, filerecords_free_start
         rts
 .endproc ; RemoveWindowFileRecords
-
-
-copy_new_window_bounds_flag:
-        .byte   0
 
 ;;; ============================================================
 ;;; For a newly populated window (new or refreshed), adjust the
@@ -13112,8 +13099,7 @@ ok:     RETURN  A=#0
     DO
         jsr     SystemTask
         jsr     GetNextEvent
-        BREAK_IF A = #MGTK::EventKind::button_down
-    WHILE A <> #MGTK::EventKind::key_down
+    WHILE A <> #MGTK::EventKind::button_down AND A <> #MGTK::EventKind::key_down
 
         MGTK_CALL MGTK::CloseWindow, winfo_about_dialog
         jsr     ClearUpdates ; following CloseWindow
@@ -15255,10 +15241,15 @@ devlst_backup:
 trash_icon_num:  .byte   0
 
 ;;; ============================================================
+;;; Miscellaneous state flags
 
 ;;; High bit set if menu dispatch via mouse with option, clear otherwise.
 menu_modified_click_flag:
-        .byte   0
+        .byte   0               ; bit7
+
+;;; Set while windows are being restored
+performing_window_restore_flag:
+        .byte   0               ; bit7
 
 ;;; ============================================================
 ;;; Map IconType to other icon/details

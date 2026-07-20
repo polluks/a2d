@@ -20,7 +20,7 @@ test.Step(
     local disk = s6d1.filename
     s6d1:unload()
 
-    a2d.OpenPath("/WITH.FILES")
+    a2d.OpenPath("/WITH.FILES", {no_validate=true})
 
     a2d.OAShortcut("O") -- File > Open
 

@@ -80,9 +80,9 @@ invoked using BASIS.SYSTEM, if present.
 
 (in `init.s`)
 
-Loaded at $800, this does one-time initialization of the
-DeskTop. It is later overwritten when any desk accessories are
-run.
+Loaded at $800, this does one-time initialization of the DeskTop. It
+is later overwritten as general buffer space, when any desk
+accessories are run, the Format/Erase overlay is needed, etc.
 
 ### "DeskTop" Application
 
@@ -92,10 +92,13 @@ The main application includes:
 * `lc.s`
 * `res.s`
 
-DeskTop code is in the lower 48k of both Main and Aux banks, and the
-Aux language card areas. The main application logic is in Main, with
-Aux and LC memory used for Mouse/Graphics, Icon, Button, LineEdit, and
-Alert toolkits and resources.
+DeskTop application code is in the lower 48k of the Main bank. Aux
+memory is used for toolkits (MouseGraphics, Icons, Buttons, etc),
+Alert code, and resources like strings that need to be visible to
+these toolkits. Aux LC memory is used for resources and buffers that
+need to be visible to both Main memory (application logic) and Aux
+memory (toolkits), like dynamic strings drawn on string. A small bit
+of code resides in LC memory for relaying calls between Main and Aux.
 
 When running, memory use includes:
 
@@ -148,10 +151,10 @@ name) but is used for operations such as alternate view types.
 Interactive commands including disk format/erase, file
 copy/delete, and Shortcuts add/edit/delete/run all dynamically load
 main memory code overlays. When complete, any original code above
-$4000 is reloaded if needed.
+$5000 is reloaded if needed.
 
 Several of the overlays also use a common file selector dialog overlay
-`ovl_file_dialog.s` ($6000-$6FFF).
+`ovl_file_dialog.s` ($B600-$BEFF).
 
 #### Disk Format/Disk Erase
 
@@ -181,7 +184,7 @@ File dialog driver/customization for editing shortcuts. Uses the File Dialog ove
 
 #### File Copy
 
-`ovl_file_copy.s` (Main $B500-$B6FF)
+`ovl_file_copy.s` (Main $B500-$B5FF)
 
 File dialog driver for selecting copy destination. Uses the File Dialog overlay.
 
@@ -212,15 +215,15 @@ $__00 +-------------+       | * Alerts    |
       | Application |       |             |
       | Code        |       |             |
       |             |       |             |
-      |             |       |             |
-      |             |       | Font        |
-$8800 |             |       +-------------+
-      |             |       | MGTK        |
-      |             |       |             |
-      |             |       |             |
-      |             |       |             |
-$6000 |      +------+       |             |
-      |      | Ovl  |       |             |
+$9000 |      +------+       |             |
+      |      | Ovl  |       | Font        |
+      |      |      |       +-------------+ $8800
+      |      |      |       | MGTK        |
+      |      |      |       |             |
+      |      |      |       |             |
+      |      |      |       |             |
+      |      |      |       |             |
+      |      |      |       |             |
       |      |      |       |             |
 $5000 |      +------+       |             |
       |             |       |             |
@@ -258,3 +261,10 @@ $0000 +-------------+       +-------------+
 
 Memory use by the Disk Copy overlay is not shown. See
 [the Disk Copy README](../disk_copy/README.md).
+
+Desk Accessories can optionally utilize a 16K chunk of main memory,
+e.g. for loading large audio files. This overwrites a large portion of
+DeskTop's application code, which is reloaded from disk once the Desk
+Accessory closes. Code that could be invoked by the DA and any
+persistent state must be placed either before or after this overlay
+zone.

@@ -360,7 +360,7 @@ done:
 ;;; Populate volume icons
 
 .proc PopulateVolumeIcons
-        copy8   #0, main::pending_alert
+        copy8   #0, pending_alert
 
         CALL    ReadSetting, X=#DeskTopSettings::options
         and     #DeskTopSettings::kOptionsSkipCheck525
@@ -403,7 +403,7 @@ done:
        END_IF
       ELSE_IF A = #ERR_DUPLICATE_VOLUME
         ;; If duplicate, show a special error.
-        copy8   #kErrDuplicateVolName, main::pending_alert
+        copy8   #kErrDuplicateVolName, pending_alert
       END_IF
 
 next:
@@ -903,8 +903,7 @@ name_buf:       .res    ::kDAMenuItemSize, 0
 
 end:
         ;; No separator if it is last
-        lda     apple_menu
-    IF A = #kAppleMenuFixedItems
+    IF lda apple_menu : A = #kAppleMenuFixedItems
         dec     apple_menu
     END_IF
 
@@ -1001,7 +1000,8 @@ slot_string_table:
         .assert * >= (DIR_READ_DATA_BUFFER + kDirReadDataBufferSize), error, "data/code clash"
 
         ;; Display any pending error messages
-        lda     main::pending_alert
+        pending_alert := *+1
+        lda     #SELF_MODIFIED_BYTE
     IF NOT_ZERO
         tay
         CALL    ShowAlertOption, X=#AlertButtonOptions::OK
@@ -1013,6 +1013,7 @@ slot_string_table:
         ;; and we'll return to `main::MainLoop` c/o above
 
 .endproc ; FinalSetup
+pending_alert := FinalSetup::pending_alert
 
 ;;; ============================================================
 
@@ -1077,13 +1078,9 @@ slot_string_table:
         copy8   (data_ptr),y, new_window_maprect,x
       WHILE dey : dex : POS
 
-        lda     #$80
-        sta     main::copy_new_window_bounds_flag
-        sta     main::CreateFileRecordsForWindowImpl::suppress_error_on_open_flag
+        SET_BIT7_FLAG main::performing_window_restore_flag
         jsr     _MaybeOpenWindow
-        lda     #0
-        sta     main::copy_new_window_bounds_flag
-        sta     main::CreateFileRecordsForWindowImpl::suppress_error_on_open_flag
+        CLEAR_BIT7_FLAG main::performing_window_restore_flag
 
 next:   jsr     PopPointers
 

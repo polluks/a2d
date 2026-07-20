@@ -328,6 +328,8 @@ SETTINGS := $D380
 ;;;     if interpreter is BASIS.SYSTEM
 ;;;        copy8 #$80, INVOKER_BITSY_COMPAT
 ;;;     endif
+;;;   else
+;;;     copy8 #$00, INVOKER_INTERPRETER
 ;;;   endif
 ;;;   jsr INVOKER
 

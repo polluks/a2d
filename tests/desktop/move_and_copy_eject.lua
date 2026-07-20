@@ -42,7 +42,9 @@ test.Step(
     apple2.Type("FLOPPY2")
     a2d.DialogOK()
 
-    for i = 1, 3 do
+    -- This count can change if DeskTop's copy buffer changes size.
+    -- TODO: Make this dynamic somehow?
+    for i = 1, 4 do
       a2dtest.WaitForAlert({imatch="insert the disk: WITH%.FILES"})
       drive:unload()
       drive:load(src)
