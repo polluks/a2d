@@ -1152,8 +1152,7 @@ re_roll:
         tax
         pla                     ; A = lo
 
-        jsr     PopPointers
-        rts
+        jmp     PopPointers
 .endproc ; XYToBoardPtr
 
 ;;; ============================================================
@@ -1224,8 +1223,7 @@ re_roll:
         dey
 
         lda     count
-        jsr     PopPointers
-        rts
+        jmp     PopPointers
 
 .proc _Check
         jsr     GetCell
@@ -1279,8 +1277,7 @@ re_roll:
       WHILE inx : X < #kBoardWidth
     WHILE iny : Y < #kBoardHeight
 
-        jsr     PopPointers
-        rts
+        jmp     PopPointers
 .endproc ; IterateBoard
 
 ;;; ============================================================
@@ -1351,8 +1348,7 @@ re_roll:
         dey
 
         lda     count
-        jsr     PopPointers
-        rts
+        jmp     PopPointers
 
 .proc _Check
         jsr     GetCell
@@ -1384,8 +1380,7 @@ re_roll:
 
         PULL_XY
         lda     tmp
-        jsr     PopPointers
-        rts
+        jmp     PopPointers
 .endproc ; GetCell
 
 ;;; ============================================================
@@ -1408,8 +1403,7 @@ re_roll:
         sta     (ptr),y
 
         PULL_XY
-        jsr     PopPointers
-        rts
+        jmp     PopPointers
 .endproc ; IsMine
 
 ;;; ============================================================
