@@ -9,8 +9,9 @@ Project Page: https://github.com/a2stuff/a2d
 ### New Features
 
 * Add "Startup.Items" folder support.
+* Support dragging files onto ProDOS "interpreter" applications. ([#903](https://github.com/a2stuff/a2d/issues/903))
+* New Toy: Minesweeper.
 * New Screen Saver: Maze.
-* Show app icons for system files in file picker.
 
 ### General
 
@@ -25,10 +26,13 @@ Project Page: https://github.com/a2stuff/a2d
 * Improve appearance of watch cursor.
 * Ensure text caret is visible after key/click.
 * Reduce cursor flickering while menus are drawn.
+* Make mouse cursor responsive while drawing menus.
 * Reduce cursor flickering while list view rows are drawn.
 * Improve appearance of menu items with check marks.
 * Fix file picker behavior with more than 127 files.
 * Add small icons for system files.
+* Show app icons for system files in file picker.
+* Fix lo-res color display in DAs on the Apple IIc. ([#911](https://github.com/a2stuff/a2d/issues/911))
 
 ### Launcher
 
@@ -86,7 +90,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Add "Startup.Items" folder support.
 * When needed, ensure icon scrolled into view even if already selected.
 * Fix crash when repainting only header of scrolled window.
-* Support dragging files onto ProDOS "interpreter" applications. ([https://github.com/a2stuff/a2d/issues/903](#903))
+* Support dragging files onto ProDOS "interpreter" applications. ([#903](https://github.com/a2stuff/a2d/issues/903))
 * Fix crash when inspecting file with invalid dates.
 * Renamed "Startup" menu to "Restart"
 
@@ -106,7 +110,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Reduce cursor flickering during copy.
 * Fix copying all blocks on volumes with unusual sizes.
 * Fix overlapping labels during copy in some locales.
-* Fix crash on Apple IIc/IIc+ on mouse activity after some copies. ([https://github.com/a2stuff/a2d/issues/900](#900))
+* Fix crash on Apple IIc/IIc+ on mouse activity after some copies. ([#900](https://github.com/a2stuff/a2d/issues/900))
 * Rename "Quick Copy" to "Smart Block Copy" and "Disk Copy" to "Full Disk Copy".
 
 ### Desk Accessories
@@ -135,7 +139,8 @@ Project Page: https://github.com/a2stuff/a2d
   * Fix button labels in BG builds.
   * Reduce cursor flickering.
 * Sci.Calc: Fix ASIN/ACOS for 1/-1.
-* New Screen Saver: Maze
+* New Toy: Minesweeper.
+* New Screen Saver: Maze.
 * Text Preview: Show first 64K of larger files correctly.
 * Control Panels: Handle write protected disk when modifying settings.
 * Control Panel: Fix overlapping button labels in some locales.
@@ -148,7 +153,9 @@ Project Page: https://github.com/a2stuff/a2d
 * Lights Out: Add keyboard support: A..Y toggle lights.
 * Eyes: Reduce cursor flickering.
 * International: Reduce cursor flickering.
-* Joystick: Reduce cursor flickering.
+* Joystick
+  * Reduce cursor flickering.
+  * Don't show second joystick location on IIc. ([#909](https://github.com/a2stuff/a2d/issues/909))
 * CD Remote: Fix shuffle play randomization.
 
 ### Misc

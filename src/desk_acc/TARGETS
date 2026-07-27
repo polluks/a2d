@@ -26,6 +26,7 @@ rods.pattern                    Apple.Menu/Screen.Savers        optional
 bounce                          Apple.Menu/Toys                 optional
 eyes                            Apple.Menu/Toys                 optional
 lights.out                      Apple.Menu/Toys                 optional
+minesweeper                     Apple.Menu/Toys                 optional
 neko                            Apple.Menu/Toys                 optional
 puzzle                          Apple.Menu/Toys                 optional
 calculator                      Apple.Menu                      optional
@@ -39,6 +40,7 @@ benchmark                       Extras                          extra
 cd.remote                       Extras                          extra
 darkness                        Extras                          extra
 dos33.import                    Extras                          extra
+minesweeper.x                   Extras                          extra
 print.catalog                   Extras                          extra
 print.screen                    Extras                          extra
 round.corners                   Extras                          extra
