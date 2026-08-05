@@ -616,6 +616,7 @@ test.Step(
     enabled(ocr, "Close  ")
     enabled(ocr, "Close All")
     apple2.EscapeKey()
+    a2d.WaitForRepaint()
 end)
 
 test.Step(
@@ -633,5 +634,17 @@ test.Step(
     a2d.SelectPath("/A2.DESKTOP")
     a2d.OpenMenu(a2d.FILE_MENU)
     test.ExpectNotMatch(a2dtest.OCRScreen(), "Rename *^M", "rename shortcut should not be ^M")
+    apple2.EscapeKey()
+end)
+
+test.Step(
+  "Esc shows menu properly even if cursor over menu bar",
+  function()
+    a2d.InMouseKeysMode(function(m)
+        m.MoveToApproximately(400, 0)
+    end)
+    apple2.EscapeKey()
+    emu.wait(5)
+    test.ExpectMatch(a2dtest.OCRScreen(), "About This Apple II", "menu should still be showing")
     apple2.EscapeKey()
 end)

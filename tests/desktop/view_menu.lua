@@ -310,8 +310,11 @@ test.Step(
         m.ButtonDown()
         m.MoveToApproximately(vol_icon_x, vol_icon_y)
         m.ButtonUp()
-        emu.wait(0.25)
-        test.ExpectMatch(a2dtest.OCRScreen(), "Copying: 1 file", "drag to other volume icon should initiate copy")
+        util.WaitFor(
+          "progress displayed", function()
+            return a2dtest.OCRFrontWindowContent():match("Files remaining")
+        end)
+        test.ExpectMatch(a2dtest.OCRFrontWindowContent(), "Copying: 1 file", "drag to other volume icon should initiate copy")
     end)
     emu.wait(10) -- wait for copy
 
@@ -323,8 +326,11 @@ test.Step(
         a2d.WaitForRepaint()
         test.Snap("verify dragging over folder icon highlights")
         m.ButtonUp()
-        emu.wait(0.25)
-        test.ExpectMatch(a2dtest.OCRScreen(), "Moving: 1 file", "drop on folder icon should initiate move")
+        util.WaitFor(
+          "progress displayed", function()
+            return a2dtest.OCRFrontWindowContent():match("Files remaining")
+        end)
+        test.ExpectMatch(a2dtest.OCRFrontWindowContent(), "Moving: 1 file", "drop on folder icon should initiate move")
     end)
     emu.wait(10) -- wait for move
 
@@ -344,6 +350,10 @@ test.Step(
     a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
 
     apple2.DownArrowKey() -- select first item
+    util.WaitFor(
+      "selection to update", function()
+        return a2dtest.IsSelectionInFrontWindow()
+    end)
     local x, y = a2dtest.GetSelectedIconCoords()
 
     a2d.InMouseKeysMode(function(m)
@@ -650,10 +660,10 @@ test.Step(
     a2d.CloseAllWindows()
     a2d.OpenMenu(a2d.VIEW_MENU)
     local ocr = a2dtest.OCRScreen()
-    test.Expect(not ocr:match("as Icons"), "all menu items should be disabled")
-    test.Expect(not ocr:match("as Small Icons"), "all menu items should be disabled")
-    test.Expect(not ocr:match("by Name"), "all menu items should be disabled")
-    test.Expect(not ocr:match("by Date"), "all menu items should be disabled")
-    test.Expect(not ocr:match("by Size"), "all menu items should be disabled")
-    test.Expect(not ocr:match("by Type"), "all menu items should be disabled")
+    test.ExpectNotMatch(ocr, "as Icons", "all menu items should be disabled")
+    test.ExpectNotMatch(ocr, "as Small Icons", "all menu items should be disabled")
+    test.ExpectNotMatch(ocr, "by Name", "all menu items should be disabled")
+    test.ExpectNotMatch(ocr, "by Date", "all menu items should be disabled")
+    test.ExpectNotMatch(ocr, "by Size", "all menu items should be disabled")
+    test.ExpectNotMatch(ocr, "by Type", "all menu items should be disabled")
 end)
