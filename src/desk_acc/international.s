@@ -64,19 +64,32 @@
         kRow4 = kRow3 + 15
         kRow5 = kRow4 + 15
 
-        kLabelLeft = kMarginX
-        kFieldLeft = 160
-        kFieldWidth = kTextBoxTextHOffset * 2 + 7
+        kLabelWidth  = 130
+        kFieldWidth  = kTextBoxTextHOffset * 2 + 7
         kFieldHeight = kSystemFontHeight + 4
-        kSampleLeft = kFieldLeft + kFieldWidth + kMarginX
+        kSampleWidth = 50
+
+        kDOWLabelWidth = 130
+        kDOWButtonWidth = 60
+
+        kLabelLeft = kMarginX
+        kFieldLeft = kLabelLeft + kLabelWidth + kControlMarginX
+        kSampleLeft = kFieldLeft + kFieldWidth + kControlMarginX
+        kDOWLabelLeft = kMarginX
+        kDOWButtonLeft = kDOWLabelLeft + kDOWLabelWidth + kControlMarginX
+
+str_spaces:
+        PASCAL_STRING "  "
 
 .macro DEFINE_FIELD name, string, sample, row
         DEFINE_RECT_SZ .ident(.sprintf("%s_rect", .string(name))), kFieldLeft, row, kFieldWidth, kFieldHeight
         DEFINE_RECT_SZ .ident(.sprintf("%s_hilite", .string(name))), kFieldLeft+2, row+2, kFieldWidth-4, kSystemFontHeight
         DEFINE_POINT .ident(.sprintf("%s_char_pos", .string(name))), kFieldLeft+kTextBoxTextHOffset+1, row+2+kSystemFontHeight
         DEFINE_LABEL name, string,      kLabelLeft, row+2+kSystemFontHeight
-        DEFINE_LABEL .ident(.sprintf("%s_sample", .string(name))), .sprintf("%s  ", sample), kSampleLeft, row+2+kSystemFontHeight
+        DEFINE_LABEL .ident(.sprintf("%s_sample", .string(name))), sample, kSampleLeft, row+2+kSystemFontHeight
+        DEFINE_RECT_SZ .ident(.sprintf("%s_sample_rect", .string(name))), kSampleLeft, row+2, kSampleWidth, kSystemFontHeight
 .endmacro
+
         DEFINE_FIELD date, res_string_label_date_separator, "10/11/12", kRow1
         kDateSampleOffset1 = 3
         kDateSampleOffset2 = 6
@@ -98,9 +111,9 @@
         kOKButtonTop  = (kDialogHeight + 1) - kButtonHeight - kMarginY
         DEFINE_BUTTON ok_button, kDAWindowId, res_string_button_ok, kGlyphReturn, kOKButtonLeft, kOKButtonTop
 
-        DEFINE_LABEL first_dow, res_string_label_first_dow, kLabelLeft, kRow5+2+kSystemFontHeight
-        DEFINE_BUTTON sunday_button, kDAWindowId, res_string_weekday_abbrev_1, res_string_shortcut_apple_5, kFieldLeft, kRow5+3
-        DEFINE_BUTTON monday_button, kDAWindowId, res_string_weekday_abbrev_2, res_string_shortcut_apple_6, kFieldLeft+70, kRow5+3
+        DEFINE_LABEL first_dow, res_string_label_first_dow, kDOWLabelLeft, kRow5+2+kSystemFontHeight
+        DEFINE_BUTTON sunday_button, kDAWindowId, res_string_weekday_abbrev_1, res_string_shortcut_apple_5, kDOWButtonLeft, kRow5+3
+        DEFINE_BUTTON monday_button, kDAWindowId, res_string_weekday_abbrev_2, res_string_shortcut_apple_6, kDOWButtonLeft + kControlMarginX + kDOWButtonWidth, kRow5+3
 
 
 .params settextbg_black_params
@@ -595,13 +608,17 @@ char:   .byte   SELF_MODIFIED_BYTE
         sta     drawchar_params::char
         sta     date_sample_label_str+kDateSampleOffset1
         sta     date_sample_label_str+kDateSampleOffset2
+        MGTK_CALL MGTK::MoveTo, date_char_pos
         MGTK_CALL MGTK::ShieldCursor, date_hilite
         MGTK_CALL MGTK::PaintRect, date_hilite
-        MGTK_CALL MGTK::MoveTo, date_char_pos
         MGTK_CALL MGTK::DrawText, drawchar_params
+        MGTK_CALL MGTK::UnshieldCursor
+
         MGTK_CALL MGTK::SetTextBG, settextbg_white_params
         MGTK_CALL MGTK::MoveTo, date_sample_label_pos
+        MGTK_CALL MGTK::ShieldCursor, date_sample_rect
         MGTK_CALL MGTK::DrawString, date_sample_label_str
+        MGTK_CALL MGTK::DrawString, str_spaces
         MGTK_CALL MGTK::UnshieldCursor
         rts
     END_IF
@@ -610,13 +627,17 @@ char:   .byte   SELF_MODIFIED_BYTE
         CALL    ReadSetting, X=#DeskTopSettings::intl_time_sep
         sta     drawchar_params::char
         sta     time_sample_label_str+kTimeSampleOffset
+        MGTK_CALL MGTK::MoveTo, time_char_pos
         MGTK_CALL MGTK::ShieldCursor, time_hilite
         MGTK_CALL MGTK::PaintRect, time_hilite
-        MGTK_CALL MGTK::MoveTo, time_char_pos
         MGTK_CALL MGTK::DrawText, drawchar_params
+        MGTK_CALL MGTK::UnshieldCursor
+
         MGTK_CALL MGTK::SetTextBG, settextbg_white_params
         MGTK_CALL MGTK::MoveTo, time_sample_label_pos
+        MGTK_CALL MGTK::ShieldCursor, time_sample_rect
         MGTK_CALL MGTK::DrawString, time_sample_label_str
+        MGTK_CALL MGTK::DrawString, str_spaces
         MGTK_CALL MGTK::UnshieldCursor
         rts
     END_IF
@@ -625,13 +646,17 @@ char:   .byte   SELF_MODIFIED_BYTE
         CALL    ReadSetting, X=#DeskTopSettings::intl_deci_sep
         sta     drawchar_params::char
         sta     deci_sample_label_str+kDeciSampleOffset
+        MGTK_CALL MGTK::MoveTo, deci_char_pos
         MGTK_CALL MGTK::ShieldCursor, deci_hilite
         MGTK_CALL MGTK::PaintRect, deci_hilite
-        MGTK_CALL MGTK::MoveTo, deci_char_pos
         MGTK_CALL MGTK::DrawText, drawchar_params
+        MGTK_CALL MGTK::UnshieldCursor
+
         MGTK_CALL MGTK::SetTextBG, settextbg_white_params
         MGTK_CALL MGTK::MoveTo, deci_sample_label_pos
+        MGTK_CALL MGTK::ShieldCursor, deci_sample_rect
         MGTK_CALL MGTK::DrawString, deci_sample_label_str
+        MGTK_CALL MGTK::DrawString, str_spaces
         MGTK_CALL MGTK::UnshieldCursor
         rts
     END_IF
@@ -640,13 +665,17 @@ char:   .byte   SELF_MODIFIED_BYTE
         CALL    ReadSetting, X=#DeskTopSettings::intl_thou_sep
         sta     drawchar_params::char
         sta     thou_sample_label_str+kThouSampleOffset
+        MGTK_CALL MGTK::MoveTo, thou_char_pos
         MGTK_CALL MGTK::ShieldCursor, thou_hilite
         MGTK_CALL MGTK::PaintRect, thou_hilite
-        MGTK_CALL MGTK::MoveTo, thou_char_pos
         MGTK_CALL MGTK::DrawText, drawchar_params
+        MGTK_CALL MGTK::UnshieldCursor
+
         MGTK_CALL MGTK::SetTextBG, settextbg_white_params
         MGTK_CALL MGTK::MoveTo, thou_sample_label_pos
+        MGTK_CALL MGTK::ShieldCursor, thou_sample_rect
         MGTK_CALL MGTK::DrawString, thou_sample_label_str
+        MGTK_CALL MGTK::DrawString, str_spaces
         MGTK_CALL MGTK::UnshieldCursor
         rts
     END_IF

@@ -522,19 +522,23 @@ delta_bits:
 
         DEFINE_POINT model_pos, 130, 12
         DEFINE_POINT pdver_pos, 130, 23
-        DEFINE_POINT mem_pos, 130, 34
+
+        DEFINE_LABEL memory, res_string_memory_prefix, 130, 34
+        DEFINE_LABEL cpu, res_string_cpu_prefix, 260, 34
 
         DEFINE_POINT line1, 0, 37
         DEFINE_POINT line2, kDAWidth, 37
 
-        DEFINE_POINT pos_aux,   100, 50
-        DEFINE_POINT pos_slot1, 100, 61
-        DEFINE_POINT pos_slot2, 100, 72
-        DEFINE_POINT pos_slot3, 100, 83
-        DEFINE_POINT pos_slot4, 100, 94
-        DEFINE_POINT pos_slot5, 100, 105
-        DEFINE_POINT pos_slot6, 100, 116
-        DEFINE_POINT pos_slot7, 100, 127
+        kSlotPosX = 100
+
+        DEFINE_POINT pos_aux,   kSlotPosX, 50
+        DEFINE_POINT pos_slot1, kSlotPosX, 61
+        DEFINE_POINT pos_slot2, kSlotPosX, 72
+        DEFINE_POINT pos_slot3, kSlotPosX, 83
+        DEFINE_POINT pos_slot4, kSlotPosX, 94
+        DEFINE_POINT pos_slot5, kSlotPosX, 105
+        DEFINE_POINT pos_slot6, kSlotPosX, 116
+        DEFINE_POINT pos_slot7, kSlotPosX, 127
 
 ;;; ============================================================
 
@@ -683,9 +687,6 @@ str_slot_n:
         PASCAL_STRING res_string_slot_n_pattern
         kStrSlotNOffset = res_const_slot_n_pattern_offset1
 
-str_memory_prefix:
-        PASCAL_STRING res_string_memory_prefix
-
 str_memory_kb_suffix:
         PASCAL_STRING res_string_memory_kb_suffix ; memory size suffix for kilobytes
 str_memory_mb_suffix:
@@ -700,7 +701,6 @@ rw_banks:       .byte   0
 
 ;;; ============================================================
 
-str_cpu_prefix: PASCAL_STRING res_string_cpu_prefix
 str_6502:       PASCAL_STRING res_string_cpu_type_6502
 str_65C02:      PASCAL_STRING res_string_cpu_type_65C02
 str_65C02zip:   PASCAL_STRING res_string_cpu_type_65C02zip
@@ -1316,15 +1316,14 @@ egg:    .byte   0
 
         ;; Memory
 
-        JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::mem_pos
-        CALL    DrawStringFromMain, AX=#str_memory_prefix
+        JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::memory_label_pos
+        JUMP_TABLE_MGTK_CALL MGTK::DrawString, aux::memory_label_str
+
         CALL    DrawStringFromMain, AX=#str_from_int
-    IF bit memory_is_mb_flag : NS
-        CALL    DrawStringFromMain, AX=#str_memory_mb_suffix
-    ELSE
-        CALL    DrawStringFromMain, AX=#str_memory_kb_suffix
-    END_IF
-        CALL    DrawStringFromMain, AX=#str_cpu_prefix
+
+        ;; CPU
+        JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::cpu_label_pos
+        JUMP_TABLE_MGTK_CALL MGTK::DrawString, aux::cpu_label_str
         jsr     CPUId
         jsr     DrawStringFromMain
 
@@ -1337,6 +1336,7 @@ egg:    .byte   0
 
         JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::pos_aux
         CALL    DrawStringRightFromMain, AX=#str_aux
+        JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::pos_aux
         ldax    #str_80col
         ldy     rw_banks
     IF Y <> #1
@@ -1345,7 +1345,6 @@ egg:    .byte   0
         CALL    DrawStringFromMain
         CALL    DrawStringFromMain, AX=#str_ramworks_prefix
         CALL    DrawStringFromMain, AX=#str_ramworks_memory
-        CALL    DrawStringFromMain, AX=#str_memory_kb_suffix
 
         ;; Slots 1-7
 
@@ -1356,12 +1355,14 @@ egg:    .byte   0
         lda     slot
         asl
         tax
-        copy16  slot_pos_table,x, slot_pos
-        JUMP_TABLE_MGTK_CALL MGTK::MoveTo, 0, slot_pos
+        copy16  slot_pos_table,x, slot_pos1
+        copy16  slot_pos_table,x, slot_pos2
+        JUMP_TABLE_MGTK_CALL MGTK::MoveTo, 0, slot_pos1
         lda     slot
         ora     #'0'
         sta     str_slot_n + kStrSlotNOffset
         CALL    DrawStringRightFromMain, AX=#str_slot_n
+        JUMP_TABLE_MGTK_CALL MGTK::MoveTo, 0, slot_pos2
 
         ;; Possibilities:
         ;; * ProDOS thinks there's a card - may be firmware or no firmware
@@ -2003,7 +2004,8 @@ write:  sta     $C080,x         ; self-modified to $C0n0
       DO
         asl16   tmp             ; * 64
       WHILE dey : NOT_ZERO
-        CALL IntToStringWithSeparators, AX=tmp
+        CALL    IntToStringWithSeparators, AX=tmp
+        CALL    AppendMemorySuffix, AX=#str_memory_kb_suffix
         COPY_STRING str_from_int, str_ramworks_memory
 
         ;; Other
@@ -2028,7 +2030,13 @@ write:  sta     $C080,x         ; self-modified to $C0n0
         SET_BIT7_FLAG memory_is_mb_flag
     END_IF
 
-        TAIL_CALL IntToStringWithSeparators, AX=memory
+        CALL IntToStringWithSeparators, AX=memory
+    IF bit memory_is_mb_flag : NS
+        CALL    AppendMemorySuffix, AX=#str_memory_mb_suffix
+    ELSE
+        CALL    AppendMemorySuffix, AX=#str_memory_kb_suffix
+    END_IF
+        rts
 .endproc ; IdentifyMemory
 
 ;;; ============================================================
@@ -2263,10 +2271,10 @@ slot:
 ;;; ============================================================
 
 str_from_int:
-        PASCAL_STRING "000,000"
+        PASCAL_STRING "000,000XB"
 
 str_ramworks_memory:
-        PASCAL_STRING "000,000"
+        PASCAL_STRING "000,000XB"
 
 ;;; ============================================================
 ;;; Identify CPU - string pointer returned in A,X
@@ -2595,18 +2603,37 @@ ShowSmartPortDeviceNames := ShowSmartPortDeviceNamesImpl::start
 .proc DrawStringRightFromMain
         jsr     CopyStringFromMain
     IF NOT ZERO
-        params = $06
-        str := $06
-        width := $08
-        copy16  #aux::buf_string, str
-        JUMP_TABLE_MGTK_CALL MGTK::StringWidth, params
-        sub16   #0, width, params+MGTK::Point::xcoord
-        copy16  #0, params+MGTK::Point::ycoord
-        JUMP_TABLE_MGTK_CALL MGTK::Move, params
-        JUMP_TABLE_MGTK_CALL MGTK::DrawString, aux::buf_string
+        JUMP_TABLE_MGTK_CALL MGTK::DrawStringRight, aux::buf_string
     END_IF
         rts
 .endproc ; DrawStringRightFromMain
+
+;;; ============================================================
+
+;;; Appends passed suffix to `str_from_int`
+;;; Input: A,X = suffix string
+;;; Modifies $06/$07
+.proc AppendMemorySuffix
+        ptr := $06
+        stax    $06
+
+        ldy     #0
+        lda     (ptr),y
+        sta     len
+
+        ldx     str_from_int
+        ldy     #0
+    DO
+        iny
+        inx
+        lda     (ptr),y
+        sta     str_from_int,x
+    WHILE Y <> len
+        stx     str_from_int
+        rts
+
+len:    .byte   0
+.endproc ; AppendMemorySuffix
 
 ;;; ============================================================
 

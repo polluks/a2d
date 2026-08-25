@@ -96,10 +96,12 @@ str_type:
 str_auxtype:
         PASCAL_STRING "0000"
 
-        kTextBoxLeft = 145
         kTextBoxWidth = 40
         kTypeY = 15
         kAuxtypeY = 32
+
+        kTextBoxLeft = kDialogWidth/2
+        kLabelX = kTextBoxLeft-2
 
         DEFINE_LINE_EDIT type_line_edit_rec, kDAWindowId, str_type, kTextBoxLeft, kTypeY, kTextBoxWidth, 2
         DEFINE_LINE_EDIT_PARAMS type_le_params, type_line_edit_rec
@@ -109,8 +111,8 @@ str_auxtype:
         DEFINE_LINE_EDIT_PARAMS auxtype_le_params, auxtype_line_edit_rec
         DEFINE_RECT_SZ auxtype_rect, kTextBoxLeft, kAuxtypeY, kTextBoxWidth, kTextBoxHeight-1
 
-        DEFINE_LABEL type, res_string_label_type, kTextBoxLeft-2, kTypeY+kSystemFontHeight+1
-        DEFINE_LABEL auxtype, res_string_label_auxtype, kTextBoxLeft-2, kAuxtypeY+kSystemFontHeight+1
+        DEFINE_LABEL type, res_string_label_type, kLabelX, kTypeY+kSystemFontHeight+1
+        DEFINE_LABEL auxtype, res_string_label_auxtype, kLabelX, kAuxtypeY+kSystemFontHeight+1
 
 ;;; ============================================================
 ;;; Alerts
@@ -500,10 +502,10 @@ yes:    RETURN  C=0
         MGTK_CALL MGTK::SetPenSize, pensize_normal
 
         MGTK_CALL MGTK::MoveTo, type_label_pos
-        CALL    DrawStringRight, AX=#type_label_str
+        MGTK_CALL MGTK::DrawStringRight, type_label_str
 
         MGTK_CALL MGTK::MoveTo, auxtype_label_pos
-        CALL    DrawStringRight, AX=#auxtype_label_str
+        MGTK_CALL MGTK::DrawStringRight, auxtype_label_str
 
         MGTK_CALL MGTK::FrameRect, type_rect
         MGTK_CALL MGTK::FrameRect, auxtype_rect
@@ -541,23 +543,6 @@ yes:    RETURN  C=0
 
 digits: .byte   "0123456789ABCDEF"
 .endproc ; GetDigits
-
-;;; ============================================================
-
-.proc DrawStringRight
-        params := $06
-        str := params
-        width := params+2
-
-        stax    str
-        stax    @addr
-        MGTK_CALL MGTK::StringWidth, params
-        sub16   #0, width, params+MGTK::Point::xcoord
-        copy16  #0, params+MGTK::Point::ycoord
-        MGTK_CALL MGTK::Move, params
-        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
-        rts
-.endproc ; DrawStringRight
 
 ;;; ============================================================
 
