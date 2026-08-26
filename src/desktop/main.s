@@ -11621,18 +11621,18 @@ src_path_slash_index:
     ELSE
         FORMAT_MESSAGE 1, aux::str_file_count_plural_format
     END_IF
-        MGTK_CALL MGTK::DrawString, text_input_buf
+        MGTK_CALL MGTK::DrawStringForward, text_input_buf
         rts
 .endproc ; DrawFileCountWithSuffix
 
 ;;; `file_count` must be populated
 .proc DrawProgressDialogFilesRemaining
         MGTK_CALL MGTK::MoveTo, progress_dialog_remaining_pos
-        MGTK_CALL MGTK::DrawString, aux::str_files_remaining
+        MGTK_CALL MGTK::DrawStringForward, aux::str_files_remaining
 
         CALL    IntToStringWithSeparators, AX=file_count
-        MGTK_CALL MGTK::DrawString, str_from_int
-        MGTK_CALL MGTK::DrawString, str_4_spaces
+        MGTK_CALL MGTK::DrawStringForward, str_from_int
+        MGTK_CALL MGTK::DrawStringForward, str_4_spaces
 
         ;; Update progress bar
         sub16   total_count, file_count, progress_muldiv_params::numerator
@@ -13820,7 +13820,7 @@ ignore: RETURN  C=1
         jsr     Multiply_16_8_16
         addax   #kProgressDialogLabelBaseY, progress_dialog_label_pos::ycoord
         MGTK_CALL MGTK::MoveTo, progress_dialog_label_pos
-        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
+        MGTK_CALL MGTK::DrawStringForward, SELF_MODIFIED, @addr
         rts
 .endproc ; DrawProgressDialogLabel
 
@@ -14385,6 +14385,9 @@ params:  .res    3
     ELSE_IF A = #DDL_LRIGHT
         sub16   #kDialogLabelRightX, result, dialog_label_pos::xcoord
     END_IF
+.if kBuildIsRTL
+        sub16   #kPromptDialogWidth, dialog_label_pos::xcoord, dialog_label_pos::xcoord
+.endif
 
         ;; y = base + aux::kDialogLabelHeight * line
         row := *+1
@@ -14421,7 +14424,7 @@ params:  .res    3
         copy16  #kDialogLabelDefaultX, dialog_label_pos::xcoord
 
         MGTK_CALL MGTK::ShieldCursor, tmp_rect
-        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
+        MGTK_CALL MGTK::DrawStringForward, SELF_MODIFIED, @addr
         TAIL_CALL UnshieldCursor
 .endproc ; DrawDialogLabel
 

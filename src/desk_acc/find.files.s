@@ -134,10 +134,15 @@ grafport_win:   .tag    MGTK::GrafPort
         kControlsGap = kControlMarginX + 1
         kMarginX = kModalDialogInsetX
 
+.if kBuildIsRTL
+        kFindLeft = kInputLeft + kInputWidth + kLabelHOffset
+        kInputLeft = kModalDialogInsetX
+.else
         kFindLeft = kModalDialogInsetX
         kInputLeft = kFindLeft + kFindWidth + kLabelHOffset
+.endif
 
-        DEFINE_LABEL find, res_string_label_find, kFindLeft, 20
+        DEFINE_LABEL find, res_string_label_find, kFindLeft, 20, kFindWidth
         DEFINE_RECT_SZ input_rect, kInputLeft, kControlsTop, kInputWidth, kTextBoxHeight - 1
 
         DEFINE_BUTTON search_button, kDAWindowId, res_string_button_search, kGlyphReturn, kDAWidth - kMarginX - kButtonWidth*2 - kControlsGap + 2, kControlsTop
@@ -502,7 +507,7 @@ done:   jmp     InputLoop
         MGTK_CALL MGTK::FrameRect, input_rect
 
         MGTK_CALL MGTK::MoveTo, find_label_pos
-        MGTK_CALL MGTK::DrawString, find_label_str
+        MGTK_CALL MGTK::DrawStringForward, find_label_str
 
         BTK_CALL BTK::Draw, search_button
         BTK_CALL BTK::Draw, cancel_button

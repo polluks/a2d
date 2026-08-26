@@ -326,7 +326,7 @@ done:   jmp     InputLoop
 
 ;;; ============================================================
 
-        DEFINE_LABEL prompt, res_string_select_disk, 20, 17
+        DEFINE_LABEL prompt, res_string_select_disk, 20, 17, kDAWidth - 40
 
 .proc DrawWindow
         MGTK_CALL MGTK::GetWinPort, getwinport_params
@@ -340,7 +340,7 @@ done:   jmp     InputLoop
         MGTK_CALL MGTK::SetPenSize, pensize_normal
 
         MGTK_CALL MGTK::MoveTo, prompt_label_pos
-        MGTK_CALL MGTK::DrawString, prompt_label_str
+        MGTK_CALL MGTK::DrawStringForward, prompt_label_str
 
         BTK_CALL BTK::Draw, ok_button
         BTK_CALL BTK::Draw, cancel_button
@@ -489,7 +489,7 @@ window_id:      .byte   kDAWindowId
 port:           .addr   grafport_win
 .endparams
 
-        DEFINE_LABEL disk_vol, res_string_disk_volume_prefix, 20, 19
+        DEFINE_LABEL disk_vol, res_string_disk_volume_prefix, 20, 19, (kDAWidth + 1) - kModalDialogInsetX*2 - kButtonWidth*2 - kButtonsGap*2
 
 .params entry_muldiv_params
 number:         .word   0                     ; (in) populated dynamically
@@ -671,12 +671,12 @@ done:   jmp     InputLoop
         MGTK_CALL MGTK::FrameRect, progress_frame
 
         MGTK_CALL MGTK::MoveTo, disk_vol_label_pos
-        MGTK_CALL MGTK::DrawString, disk_vol_label_str
+        MGTK_CALL MGTK::DrawStringForward, disk_vol_label_str
 
         lda     control_block+ControlBlock::volume_number
         ldx     #0
         jsr     To3DigitString
-        MGTK_CALL MGTK::DrawString, str_from_int
+        MGTK_CALL MGTK::DrawStringForward, str_from_int
 
         BTK_CALL BTK::Draw, import_button
         BTK_CALL BTK::Draw, close_button

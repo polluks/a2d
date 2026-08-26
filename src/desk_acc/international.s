@@ -72,11 +72,19 @@
         kDOWLabelWidth = 130
         kDOWButtonWidth = 60
 
+.if kBuildIsRTL
+        kLabelLeft = kFieldLeft + kFieldWidth + kControlMarginX
+        kFieldLeft = kSampleLeft + kSampleWidth + kControlMarginX
+        kSampleLeft = kMarginX
+        kDOWLabelLeft = kDOWButtonLeft + kControlMarginX*2 + kDOWButtonWidth*2
+        kDOWButtonLeft = kMarginX
+.else
         kLabelLeft = kMarginX
         kFieldLeft = kLabelLeft + kLabelWidth + kControlMarginX
         kSampleLeft = kFieldLeft + kFieldWidth + kControlMarginX
         kDOWLabelLeft = kMarginX
         kDOWButtonLeft = kDOWLabelLeft + kDOWLabelWidth + kControlMarginX
+.endif
 
 str_spaces:
         PASCAL_STRING "  "
@@ -85,9 +93,10 @@ str_spaces:
         DEFINE_RECT_SZ .ident(.sprintf("%s_rect", .string(name))), kFieldLeft, row, kFieldWidth, kFieldHeight
         DEFINE_RECT_SZ .ident(.sprintf("%s_hilite", .string(name))), kFieldLeft+2, row+2, kFieldWidth-4, kSystemFontHeight
         DEFINE_POINT .ident(.sprintf("%s_char_pos", .string(name))), kFieldLeft+kTextBoxTextHOffset+1, row+2+kSystemFontHeight
-        DEFINE_LABEL name, string,      kLabelLeft, row+2+kSystemFontHeight
-        DEFINE_LABEL .ident(.sprintf("%s_sample", .string(name))), sample, kSampleLeft, row+2+kSystemFontHeight
+        DEFINE_LABEL name, string,      kLabelLeft, row+2+kSystemFontHeight, kLabelWidth
+        DEFINE_LABEL .ident(.sprintf("%s_sample", .string(name))), sample, kSampleLeft, row+2+kSystemFontHeight, kSampleWidth
         DEFINE_RECT_SZ .ident(.sprintf("%s_sample_rect", .string(name))), kSampleLeft, row+2, kSampleWidth, kSystemFontHeight
+
 .endmacro
 
         DEFINE_FIELD date, res_string_label_date_separator, "10/11/12", kRow1
@@ -101,19 +110,19 @@ str_spaces:
         kThouSampleOffset = 3
 
         kOptionDisplayX = 260
-        DEFINE_BUTTON date_mdy_button, kDAWindowId, res_string_label_mdy, res_string_shortcut_apple_1, kOptionDisplayX, 15
-        DEFINE_BUTTON date_dmy_button, kDAWindowId, res_string_label_dmy, res_string_shortcut_apple_2, kOptionDisplayX, 26
+        DEFINE_BUTTON date_mdy_button, kDAWindowId, res_string_label_mdy, res_string_shortcut_apple_1, kOptionDisplayX, 15, 120
+        DEFINE_BUTTON date_dmy_button, kDAWindowId, res_string_label_dmy, res_string_shortcut_apple_2, kOptionDisplayX, 26, 120
 
-        DEFINE_BUTTON clock_12hour_button, kDAWindowId, res_string_label_clock_12hour, res_string_shortcut_apple_3, kOptionDisplayX, 44
-        DEFINE_BUTTON clock_24hour_button, kDAWindowId, res_string_label_clock_24hour, res_string_shortcut_apple_4, kOptionDisplayX, 55
+        DEFINE_BUTTON clock_12hour_button, kDAWindowId, res_string_label_clock_12hour, res_string_shortcut_apple_3, kOptionDisplayX, 44, 120
+        DEFINE_BUTTON clock_24hour_button, kDAWindowId, res_string_label_clock_24hour, res_string_shortcut_apple_4, kOptionDisplayX, 55, 120
 
         kOKButtonLeft = (kDialogWidth + 1) - kButtonWidth - kMarginX
         kOKButtonTop  = (kDialogHeight + 1) - kButtonHeight - kMarginY
         DEFINE_BUTTON ok_button, kDAWindowId, res_string_button_ok, kGlyphReturn, kOKButtonLeft, kOKButtonTop
 
-        DEFINE_LABEL first_dow, res_string_label_first_dow, kDOWLabelLeft, kRow5+2+kSystemFontHeight
-        DEFINE_BUTTON sunday_button, kDAWindowId, res_string_weekday_abbrev_1, res_string_shortcut_apple_5, kDOWButtonLeft, kRow5+3
-        DEFINE_BUTTON monday_button, kDAWindowId, res_string_weekday_abbrev_2, res_string_shortcut_apple_6, kDOWButtonLeft + kControlMarginX + kDOWButtonWidth, kRow5+3
+        DEFINE_LABEL first_dow, res_string_label_first_dow, kDOWLabelLeft, kRow5+2+kSystemFontHeight, kDOWLabelWidth
+        DEFINE_BUTTON sunday_button, kDAWindowId, res_string_weekday_abbrev_1, res_string_shortcut_apple_5, kDOWButtonLeft, kRow5+3, kDOWButtonWidth
+        DEFINE_BUTTON monday_button, kDAWindowId, res_string_weekday_abbrev_2, res_string_shortcut_apple_6, kDOWButtonLeft + kControlMarginX + kDOWButtonWidth, kRow5+3, kDOWButtonWidth
 
 
 .params settextbg_black_params
@@ -482,19 +491,19 @@ dialog_result:  .byte   0
         MGTK_CALL MGTK::SetPenSize, pensize_normal
 
         MGTK_CALL MGTK::MoveTo, date_label_pos
-        MGTK_CALL MGTK::DrawString, date_label_str
+        MGTK_CALL MGTK::DrawStringForward, date_label_str
         MGTK_CALL MGTK::FrameRect, date_rect
 
         MGTK_CALL MGTK::MoveTo, time_label_pos
-        MGTK_CALL MGTK::DrawString, time_label_str
+        MGTK_CALL MGTK::DrawStringForward, time_label_str
         MGTK_CALL MGTK::FrameRect, time_rect
 
         MGTK_CALL MGTK::MoveTo, deci_label_pos
-        MGTK_CALL MGTK::DrawString, deci_label_str
+        MGTK_CALL MGTK::DrawStringForward, deci_label_str
         MGTK_CALL MGTK::FrameRect, deci_rect
 
         MGTK_CALL MGTK::MoveTo, thou_label_pos
-        MGTK_CALL MGTK::DrawString, thou_label_str
+        MGTK_CALL MGTK::DrawStringForward, thou_label_str
         MGTK_CALL MGTK::FrameRect, thou_rect
 
         CALL    DrawField, A=#Field::date
@@ -509,7 +518,7 @@ dialog_result:  .byte   0
         BTK_CALL BTK::RadioDraw, clock_24hour_button
 
         MGTK_CALL MGTK::MoveTo, first_dow_label_pos
-        MGTK_CALL MGTK::DrawString, first_dow_label_str
+        MGTK_CALL MGTK::DrawStringForward, first_dow_label_str
         BTK_CALL BTK::RadioDraw, sunday_button
         BTK_CALL BTK::RadioDraw, monday_button
 
@@ -617,8 +626,8 @@ char:   .byte   SELF_MODIFIED_BYTE
         MGTK_CALL MGTK::SetTextBG, settextbg_white_params
         MGTK_CALL MGTK::MoveTo, date_sample_label_pos
         MGTK_CALL MGTK::ShieldCursor, date_sample_rect
-        MGTK_CALL MGTK::DrawString, date_sample_label_str
-        MGTK_CALL MGTK::DrawString, str_spaces
+        MGTK_CALL MGTK::DrawStringForward, date_sample_label_str
+        MGTK_CALL MGTK::DrawStringForward, str_spaces
         MGTK_CALL MGTK::UnshieldCursor
         rts
     END_IF
@@ -636,8 +645,8 @@ char:   .byte   SELF_MODIFIED_BYTE
         MGTK_CALL MGTK::SetTextBG, settextbg_white_params
         MGTK_CALL MGTK::MoveTo, time_sample_label_pos
         MGTK_CALL MGTK::ShieldCursor, time_sample_rect
-        MGTK_CALL MGTK::DrawString, time_sample_label_str
-        MGTK_CALL MGTK::DrawString, str_spaces
+        MGTK_CALL MGTK::DrawStringForward, time_sample_label_str
+        MGTK_CALL MGTK::DrawStringForward, str_spaces
         MGTK_CALL MGTK::UnshieldCursor
         rts
     END_IF
@@ -655,8 +664,8 @@ char:   .byte   SELF_MODIFIED_BYTE
         MGTK_CALL MGTK::SetTextBG, settextbg_white_params
         MGTK_CALL MGTK::MoveTo, deci_sample_label_pos
         MGTK_CALL MGTK::ShieldCursor, deci_sample_rect
-        MGTK_CALL MGTK::DrawString, deci_sample_label_str
-        MGTK_CALL MGTK::DrawString, str_spaces
+        MGTK_CALL MGTK::DrawStringForward, deci_sample_label_str
+        MGTK_CALL MGTK::DrawStringForward, str_spaces
         MGTK_CALL MGTK::UnshieldCursor
         rts
     END_IF
@@ -674,8 +683,8 @@ char:   .byte   SELF_MODIFIED_BYTE
         MGTK_CALL MGTK::SetTextBG, settextbg_white_params
         MGTK_CALL MGTK::MoveTo, thou_sample_label_pos
         MGTK_CALL MGTK::ShieldCursor, thou_sample_rect
-        MGTK_CALL MGTK::DrawString, thou_sample_label_str
-        MGTK_CALL MGTK::DrawString, str_spaces
+        MGTK_CALL MGTK::DrawStringForward, thou_sample_label_str
+        MGTK_CALL MGTK::DrawStringForward, str_spaces
         MGTK_CALL MGTK::UnshieldCursor
         rts
     END_IF

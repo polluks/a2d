@@ -135,18 +135,24 @@ nextwinfo:      .addr   0
 
         DEFINE_BUTTON cancel_button, kDAWindowId, res_string_button_cancel, res_string_button_cancel_shortcut, kMarginX, kDAHeight - kMarginY - kButtonHeight + 1
 
-        DEFINE_LABEL alert_sound, res_string_label_alert, kMarginX, kMarginY+kTextHeight
+.if kBuildIsRTL
+        kLabelLeft = kListLeft + kListWidth
+        kListLeft = kMarginX
+.else
+        kLabelLeft = kMarginX
+        kListLeft = kLabelLeft + kLabelWidth
+.endif
+
+        DEFINE_LABEL alert_sound, res_string_label_alert, kLabelLeft, kMarginY+kTextHeight, kLabelWidth
         kLabelWidth = 105
 
         kScrollBarWidth = 20
         kListRows = 6
-        kListLeft = kMarginX + kLabelWidth
         kListTop = kMarginY + 1
-        kListRight  = kDAWidth - kMarginX - kScrollBarWidth - 1
+        kListWidth = kDAWidth - kMarginX*2 - kLabelWidth
+        kListInnerWidth = kListWidth - kScrollBarWidth - 1
         kListHeight = kListItemHeight * kListRows - 1
         kListBottom = kListTop + kListHeight
-
-        DEFINE_RECT listbox_rect, kListLeft, kListTop, kListRight, kListBottom
 
 ;;; ============================================================
 ;;; List Box
@@ -158,7 +164,7 @@ kListBoxWindowId = kDAWindowId + 1
                 kListBoxWindowId, \
                 kListLeft + kDALeft, \
                 kListTop + kDATop, \
-                kListRight - kListLeft, \
+                kListInnerWidth, \
                 kListHeight, \
                 DEFAULT_FONT
         DEFINE_LIST_BOX listbox_rec, winfo_listbox, \
@@ -422,7 +428,7 @@ grafport_win:       .tag    MGTK::GrafPort
         MGTK_CALL MGTK::SetPenSize, pensize_normal
 
         MGTK_CALL MGTK::MoveTo, alert_sound_label_pos
-        MGTK_CALL MGTK::DrawString, alert_sound_label_str
+        MGTK_CALL MGTK::DrawStringForward, alert_sound_label_str
 
         BTK_CALL BTK::Draw, cancel_button
         BTK_CALL BTK::Draw, ok_button
