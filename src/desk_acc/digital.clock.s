@@ -112,9 +112,7 @@ parsed: .tag    ParsedDateTime
         ;; Compare
         ldx     #.sizeof(DateTime)-1
     DO
-        lda     datetime,x
-        cmp     last,x
-        bne     diff
+        IF u8 datetime,x <> last,x GOTO diff
     WHILE dex : POS
         rts                     ; no change
 
@@ -165,8 +163,7 @@ last:   .tag    DateTime
         ldx     #SELF_MODIFIED_BYTE
         CALL    DrawVectorChar, A=str_time,x
 
-        lda     idx
-        BREAK_IF A = str_time
+        BREAK_IF u8 idx = str_time
     WHILE inc idx : NOT_ZERO
 
         rts
@@ -176,8 +173,7 @@ last:   .tag    DateTime
 
 ;;; A = char
 .proc DrawVectorChar
-        cmp     #' '
-        jeq     advance
+        IF A = #' ' JUMP advance
 
         ptr := $06
 

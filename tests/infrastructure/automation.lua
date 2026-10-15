@@ -1,5 +1,3 @@
-a2d.ConfigureRepaintTime(1)
-
 test.Step(
   "MGTK",
   function()
@@ -57,14 +55,14 @@ test.Step(
 
     print("-----------------------")
 
-    a2d.OpenPath("/A2.DESKTOP")
+    desktop.OpenWindow("/A2.DESKTOP")
 
     DumpWindows()
 
 
     print("-----------------------")
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/TOYS", {leave_parent=true})
+    desktop.OpenWindow("/A2.DESKTOP/APPLE.MENU/TOYS", {leave_parent=true})
 
     DumpWindows()
 
@@ -73,15 +71,15 @@ end)
 test.Step(
   "IconTK",
   function()
-    a2d.SelectPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
+    desktop.SelectPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
     test.Snap("BS?")
-    for i,icon in ipairs(a2d.GetSelectedIcons()) do
+    for i,icon in ipairs(desktop.GetSelectedIcons()) do
       print("sel# " .. i .. "  icon# " .. icon.id .. " = " .. icon.name)
     end
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU")
-    a2d.SelectAll()
-    for i,icon in ipairs(a2d.GetSelectedIcons()) do
+    desktop.OpenWindow("/A2.DESKTOP/APPLE.MENU")
+    desktop.SelectAll()
+    for i,icon in ipairs(desktop.GetSelectedIcons()) do
       print("sel# " .. i .. "  icon# " .. icon.id .. " = " .. icon.name)
     end
 end)

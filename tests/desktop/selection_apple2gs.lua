@@ -7,8 +7,6 @@ RESOLUTION="704x462"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 -- Smoke tests for verifying shift works as a modifier on the IIgs
 
 --[[
@@ -18,20 +16,19 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "click second volume icon",
   function()
-    a2d.Select("A")
+    desktop.Select("A")
     local x, y = a2dtest.GetSelectedIconCoords()
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
 
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "single icon selected")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 1, "single icon selected")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x, y)
         apple2.PressShift()
         m.Click()
-        a2d.WaitForRepaint()
+        a2dtest.WaitForSystemTask()
         apple2.ReleaseShift()
-        emu.wait(1)
     end)
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 2, "selection should be extended")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 2, "selection should be extended")
 end)
 
 
@@ -43,10 +40,10 @@ end)
 test.Step(
   "mod-drag-select a second volume icon",
   function()
-    a2d.Select("A")
+    desktop.Select("A")
     local x, y = a2dtest.GetSelectedIconCoords()
 
-    a2d.Select("A2.DESKTOP")
+    desktop.Select("A2.DESKTOP")
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x-20, y-10)
@@ -55,7 +52,7 @@ test.Step(
         m.MoveByApproximately(40, 30)
         m.ButtonUp()
         apple2.ReleaseShift()
-        emu.wait(1)
+        a2dtest.WaitForSystemTask()
     end)
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 2, "selection should have been extended")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 2, "selection should have been extended")
 end)

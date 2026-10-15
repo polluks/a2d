@@ -5,7 +5,6 @@ DISKARGS="-flop3 $HARDIMG -flop4 floppy_with_files.2mg"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
 local s7d1 = manager.machine.images[":sl7:superdrive:fdc:0:35hd"]
 
 --[[
@@ -38,15 +37,15 @@ test.Variants(
   },
   function(idx, name, prompts, rename)
     --setup
-    a2d.AddShortcut("/WITH.FILES/LOREM.IPSUM") -- not on startup disk
-    emu.wait(2)
+    desktop.AddShortcut("/WITH.FILES/LOREM.IPSUM") -- not on startup disk
+    a2dtest.WaitForSystemTask()
 
-    a2d.ToggleOptionCopyToRAMCard() -- Enable
-    a2d.Reboot()
+    desktop.ToggleOptionCopyToRAMCard() -- Enable
+    desktop.Reboot()
     a2d.WaitForDesktopReady({timeout=240})
 
     if rename then
-      a2d.RenamePath("/A2.DESKTOP", "A2D")
+      desktop.RenamePath("/A2.DESKTOP", "A2D")
     end
 
     local drive, current
@@ -57,15 +56,17 @@ test.Variants(
       drive:unload()
     end
 
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_EDIT_A_SHORTCUT)
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_EDIT_A_SHORTCUT)
     -- Pick a shortcut
     apple2.DownArrowKey()
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
     -- Twiddle a setting
     a2d.OAShortcut("4")
     a2d.OAShortcut("5")
 
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     if prompts > 0 then
       a2dtest.WaitForAlert({match="save the changes"})
@@ -78,18 +79,18 @@ test.Variants(
       drive:load(current)
       a2d.DialogOK()
     end
-    emu.wait(10)
+    a2dtest.WaitForSystemTask()
     a2dtest.ExpectAlertNotShowing()
 
     -- TODO: Verify that changes were saved
 
     -- cleanup
-    a2d.CheckAllDrives()
+    desktop.CheckAllDrives()
     if rename then
-      a2d.RenamePath("/A2D", "A2.DESKTOP")
+      desktop.RenamePath("/A2D", "A2.DESKTOP")
     end
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    a2d.EraseVolume("RAM4")
-    a2d.Reboot()
+    desktop.DeletePath("/A2.DESKTOP/LOCAL")
+    desktop.EraseVolume("RAM4")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)

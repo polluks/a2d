@@ -221,10 +221,7 @@ nextwinfo:      .addr   0
 pensize_normal: .byte   1, 1
 pensize_frame:  .byte   kBorderDX, kBorderDY
 
-        DEFINE_POINT pos_title_string, winfo::kWidth / 2, 17
-
-str_selector_title:
-        PASCAL_STRING res_string_selector_name
+        DEFINE_LABEL title, res_string_selector_name, winfo::kWidth / 2, 17, kLabelCentered
 
         ;; Options control metrics
         kEntryPickerCols = 3
@@ -340,7 +337,7 @@ entry:
    IF ZERO
 quick_run_desktop:
         CALL    GetFileInfo, AX=#str_desktop_2
-        jcs     done_keys
+        bcs     done_keys
         jmp     RunDesktop
    END_IF
 
@@ -366,14 +363,12 @@ quick_run_desktop:
     END_IF
 
 check_key:
-        cmp     #kShortcutRunDeskTop ; If key is down, try launching DeskTop
-        beq     quick_run_desktop
+        IF A = #kShortcutRunDeskTop GOTO quick_run_desktop ; If key is down, try launching DeskTop
 
         sec
         sbc     #'1'            ; 1-8 run that selector entry
         bmi     done_keys
-        cmp     num_primary_run_list_entries
-        bcs     done_keys
+        IF A >= num_primary_run_list_entries GOTO done_keys
         sta     invoke_index
         jsr     GetSelectorListEntryAddr
 
@@ -442,58 +437,22 @@ done_keys:
         ;; --------------------------------------------------
         ;; Set up Startup menu
 
-        lda     quick_boot_slot
-    IF NOT ZERO
+    IF u8 quick_boot_slot <> #0
         ldy     slot_table
       DO
-        cmp     slot_table,y
-        jeq     StartupSlot
+        IF A = slot_table,y JUMP StartupSlot
       WHILE dey : NOT_ZERO
     END_IF
 
         copy8   slot_table, startup_menu
 
-        lda     slot_x1
+    .repeat 7, slot
+        lda     .ident(.sprintf("slot_x%d", slot+1))
         ora     #$30            ; number to ASCII digit
-        sta     str_slot_x1 + kStrSlotXOffset
-        sta     mi_x1 + kMenuItemShortcutOffset
-        sta     mi_x1 + kMenuItemShortcutOffset + 1
-
-        lda     slot_x2
-        ora     #$30            ; number to ASCII digit
-        sta     str_slot_x2 + kStrSlotXOffset
-        sta     mi_x2 + kMenuItemShortcutOffset
-        sta     mi_x2 + kMenuItemShortcutOffset + 1
-
-        lda     slot_x3
-        ora     #$30            ; number to ASCII digit
-        sta     str_slot_x3 + kStrSlotXOffset
-        sta     mi_x3 + kMenuItemShortcutOffset
-        sta     mi_x3 + kMenuItemShortcutOffset + 1
-
-        lda     slot_x4
-        ora     #$30            ; number to ASCII digit
-        sta     str_slot_x4 + kStrSlotXOffset
-        sta     mi_x4 + kMenuItemShortcutOffset
-        sta     mi_x4 + kMenuItemShortcutOffset + 1
-
-        lda     slot_x5
-        ora     #$30            ; number to ASCII digit
-        sta     str_slot_x5 + kStrSlotXOffset
-        sta     mi_x5 + kMenuItemShortcutOffset
-        sta     mi_x5 + kMenuItemShortcutOffset + 1
-
-        lda     slot_x6
-        ora     #$30            ; number to ASCII digit
-        sta     str_slot_x6 + kStrSlotXOffset
-        sta     mi_x6 + kMenuItemShortcutOffset
-        sta     mi_x6 + kMenuItemShortcutOffset + 1
-
-        lda     slot_x7
-        ora     #$30            ; number to ASCII digit
-        sta     mi_x7 + kMenuItemShortcutOffset
-        sta     mi_x7 + kMenuItemShortcutOffset + 1
-        sta     str_slot_x7 + kStrSlotXOffset
+        sta     .ident(.sprintf("str_slot_x%d", slot+1)) + kStrSlotXOffset
+        sta     .ident(.sprintf("mi_x%d", slot+1)) + kMenuItemShortcutOffset
+        sta     .ident(.sprintf("mi_x%d", slot+1)) + kMenuItemShortcutOffset + 1
+    .endrepeat
 
         ;; Copy pattern from settings
         tmp_pattern := $00
@@ -501,7 +460,7 @@ done_keys:
     DO
         jsr     ReadSetting
         sta     tmp_pattern - DeskTopSettings::pattern,x
-    WHILE dex : X <> #AS_BYTE(DeskTopSettings::pattern-1)
+    WHILE dex : X <> #AS_BYTE{DeskTopSettings::pattern-1}
 
         MGTK_CALL MGTK::SetDeskPat, tmp_pattern
 
@@ -518,8 +477,7 @@ done_keys:
         jsr     ShowClock
         MGTK_CALL MGTK::FlushEvents
 
-        lda     startdesktop_params::slot_num
-    IF ZERO
+    IF u8 startdesktop_params::slot_num = #0
         CALL    ReadSetting, X=#DeskTopSettings::options
         ora     #DeskTopSettings::kOptionsShowShortcuts
         jsr     WriteSetting
@@ -535,8 +493,7 @@ done_keys:
         inc     scalemouse_params::y_exponent
     END_IF
         ;; Also doubled if a IIc
-        lda     ZIDBYTE         ; ZIDBYTE=0 for IIc / IIc+
-    IF ZERO
+    IF u8 ZIDBYTE = #0          ; ZIDBYTE=0 for IIc / IIc+
         inc     scalemouse_params::x_exponent
         inc     scalemouse_params::y_exponent
     END_IF
@@ -615,15 +572,13 @@ retry:  CALL    GetFileInfo, AX=#str_desktop_2
 CheckAndClearUpdates:
     DO
         MGTK_CALL MGTK::PeekEvent, event_params
-        lda     event_params::kind
-        BREAK_IF A <> #MGTK::EventKind::update
+        BREAK_IF u8 event_params::kind <> #MGTK::EventKind::update
 
         MGTK_CALL MGTK::GetEvent, event_params
         FALL_THROUGH_TO ClearUpdates
 
 ClearUpdates:
-        lda     event_params::window_id
-        REDO_IF A <> #winfo::kDialogId
+        REDO_IF u8 event_params::window_id <> #winfo::kDialogId
 
         MGTK_CALL MGTK::BeginUpdate, beginupdate_params
         REDO_IF NOT_ZERO        ; obscured
@@ -676,25 +631,18 @@ menu_addr_table:
 ;;; ============================================================
 
 .proc HandleKey
-        lda     event_params::modifiers
-        bne     has_modifiers
-        lda     event_params::key
-        cmp     #CHAR_ESCAPE
-        beq     menukey
+    IF u8 event_params::modifiers = #0
+        IF u8 event_params::key = #CHAR_ESCAPE GOTO menukey
 
 other:  jmp     HandleNonmenuKey
+    END_IF
 
 has_modifiers:
         lda     event_params::key
         jsr     ToUpperCase
-        cmp     #CHAR_ESCAPE
-        beq     menukey
-        cmp     #kShortcutRunProgram
-        beq     menukey
-        cmp     #'9'+1
-        bcs     other
-        cmp     #'1'
-        bcc     other
+        IF A = #CHAR_ESCAPE GOTO menukey
+        IF A = #kShortcutRunProgram GOTO menukey
+        IF A >= #'9'+1 OR A < #'1' GOTO other
 
 menukey:
         sta     menu_params::which_key
@@ -791,9 +739,7 @@ dispatch:
     END_IF
 
         RTS_IF A <> #MGTK::Area::content
-
-        lda     findwindow_params::window_id
-        RTS_IF A <> #winfo::kDialogId
+        RTS_IF u8 findwindow_params::window_id <> #winfo::kDialogId
 
         CALL    GetWindowPort, A=#winfo::kDialogId
         copy8   #winfo::kDialogId, screentowindow_params::window_id
@@ -825,7 +771,7 @@ done:   rts
         bne     done            ; `kAlertResultCancel` = 1
         REDO_IF ZERO            ; `kAlertResultTryAgain` = 0
         END_IF
-        jmp     RunDesktop
+        TAIL_CALL RunDesktop
        DONE
 
       END_IF
@@ -838,7 +784,7 @@ done:   rts
         jsr     DetectDoubleClick
     IF NC
         BTK_CALL BTK::Flash, ok_button
-        jmp     TryInvokeSelectedIndex
+        TAIL_CALL TryInvokeSelectedIndex
     END_IF
 ret:    rts
 .endproc ; HandleButtonDown
@@ -1146,8 +1092,8 @@ backup_devlst:
         MGTK_CALL MGTK::FrameRect, rect_frame
         MGTK_CALL MGTK::SetPenSize, pensize_normal
 
-        MGTK_CALL MGTK::MoveTo, pos_title_string
-        MGTK_CALL MGTK::DrawStringCentered, str_selector_title
+        MGTK_CALL MGTK::MoveTo, title_label_pos
+        MGTK_CALL MGTK::DrawStringCentered, title_label_str
 
         MGTK_CALL MGTK::FrameRect, entry_picker_rect
 
@@ -1249,49 +1195,26 @@ hi:     .byte   0
 .proc DrawEntryCallback
         ptr := $06
 
+        ;; Prefix - number or just spaces
         pha
-        jsr     GetSelectorListEntryAddr
-        stax    ptr
-        ldy     #0
-        lda     (ptr),y         ; length
-
-        ;; Copy string into buffer
-        tay
-    DO
-        copy8   (ptr),y, entry_string_buf+3,y
-    WHILE dey : NOT_ZERO
-
-        ;; Increase length by 3
-        ldy     #0
-        lda     (ptr),y
-        clc
-        adc     #3
-        sta     text_params::length
-
-        pla
-    IF A >= #8                  ; first 8?
-        ;; Prefix with spaces
-        lda     #' '
-        sta     entry_string_buf+1
-        sta     entry_string_buf+2
-        sta     entry_string_buf+3
-    ELSE
-        ;; Prefix with number
+    IF A < #8
+        ;; Assert: C=0
         adc     #'1'
-        sta     entry_string_buf+1
+    ELSE
         lda     #' '
-        sta     entry_string_buf+2
-        sta     entry_string_buf+3
     END_IF
+        sta     str_prefix+1
+        MGTK_CALL MGTK::DrawString, str_prefix
 
-        ;; Draw the string
-        MGTK_CALL MGTK::DrawText, text_params
+        ;; Entry name
+        pla
+        jsr     GetSelectorListEntryAddr
+        stax    @addr
+        MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
 
-.params text_params
-data:   .addr   entry_string_buf+1
-length: .byte   SELF_MODIFIED_BYTE
-.endparams
+str_prefix:     PASCAL_STRING "   "
+
 .endproc ; DrawEntryCallback
 
 ;;; ============================================================
@@ -1343,7 +1266,7 @@ rest:
         ;; Figure out entry path, given entry options and overrides
     IF bit invoked_during_boot_flag : NC
         bit     BUTN0           ; if Open-Apple is down, skip RAMCard copy
-        jmi     use_entry_path
+        bmi     use_entry_path
 
         ;; Is there a RAMCard at all?
         jsr     GetCopiedToRAMCardFlag
@@ -1438,8 +1361,7 @@ retry:
         jsr     ShowAlert
         tax
         pla
-        cmp     #ERR_VOL_NOT_FOUND
-        bne     fail
+        IF A <> #ERR_VOL_NOT_FOUND GOTO fail
         txa
         ASSERT_NOT_EQUALS ::kAlertResultCancel, 0
         bne     fail            ; `kAlertResultCancel` = 1
@@ -1453,7 +1375,9 @@ fail:
         ;; --------------------------------------------------
         ;; Check file type
 
-        ;; Ensure it's BIN, SYS, S16 or BAS (if BS is present)
+        ;; Ensure it's a type we can run directly (BIN, SYS, S16)
+        ;; or we have an interpreter for it (BAS, INT, AWP, ASP, ADB)
+        ;; or a fallback interpreter (BASIS.SYSTEM)
 
         lda     #0
         sta     INVOKER_INTERPRETER
@@ -1463,7 +1387,7 @@ fail:
     IF A = #FT_LINK
         jsr     ReadLinkFile
         bcs     err
-        bcc     retry
+        bcc     retry           ; success - get target file's info
     END_IF
 
     IF A = #FT_BASIC
@@ -1490,12 +1414,7 @@ fail:
         jmp     ClearSelectedIndex
     END_IF
 
-        cmp     #FT_BINARY
-        beq     check_path
-        cmp     #FT_SYSTEM
-        beq     check_path
-        cmp     #FT_S16
-        beq     check_path
+        IF A = #FT_BINARY OR A = #FT_SYSTEM OR A = #FT_S16 GOTO check_path
 
         jsr     CheckBasisSystem ; Is fallback BASIS.SYSTEM present?
     IF EQ
@@ -1516,9 +1435,7 @@ err:
 check_path:
         ldy     INVOKER_PREFIX
     DO
-        lda     INVOKER_PREFIX,y
-        cmp     #'/'
-        beq     :+
+        IF u8 INVOKER_PREFIX,y = #'/' GOTO found_slash
     WHILE dey : NOT_ZERO
 
         CALL    ShowAlert, A=#AlertID::insert_source_disk
@@ -1526,7 +1443,8 @@ check_path:
         bne     ClearSelectedIndex ; `kAlertResultCancel` = 1
         jmp     retry
 
-:       dey
+found_slash:
+        dey
         tya
         pha
         iny
@@ -1606,15 +1524,11 @@ check_path:
         plp
         bcs     err
 
-        lda     read_params::trans_count
-        cmp     #kLinkFilePathLengthOffset
-        bcc     err
+        IF u8 read_params::trans_count < #kLinkFilePathLengthOffset GOTO err
 
         ldx     #kCheckHeaderLength-1
     DO
-        lda     read_buf,x
-        cmp     check_header,x
-        bne     err
+        IF u8 read_buf,x <> check_header,x GOTO err
     WHILE dex : POS
 
         COPY_STRING read_buf + kLinkFilePathLengthOffset, INVOKER_PREFIX
@@ -1664,9 +1578,7 @@ str_basix_system:
         path_length := *+1
         ldx     #SELF_MODIFIED_BYTE
       DO
-        lda     interp_path,x
-        cmp     #'/'
-        beq     found_slash
+        IF u8 interp_path,x = #'/' GOTO found_slash
       WHILE dex : NOT_ZERO
 
 no_bs:  copy8   #0, interp_path ; null out the path
@@ -1784,14 +1696,12 @@ str_extras_awlaunch:
         copy8   (path_addr),y, len
         tay
     DO
-        lda     (path_addr),y
-        BREAK_IF A = #'/'
+        BREAK_IF u8 (path_addr),y = #'/'
     WHILE dey : NOT_ZERO
 
         dey
     DO
-        lda     (path_addr),y
-        BREAK_IF A = #'/'
+        BREAK_IF u8 (path_addr),y = #'/'
     WHILE dey : NOT_ZERO
 
         dey
@@ -1845,12 +1755,14 @@ len:    .byte   0
 ;;; Returns 0 if the periodic tasks were run.
 
 .proc SystemTask
+
+TestInterceptSystemTask:
+
         kMaxCounter = $E0       ; arbitrary
 
         inc     loop_counter
         inc     loop_counter
-        lda     loop_counter
-    IF A >= #kMaxCounter
+    IF u8 loop_counter >= #kMaxCounter
         copy8   #0, loop_counter
 
         jsr     ShowClock

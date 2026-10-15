@@ -5,8 +5,6 @@ DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv -flop1 floppy_with_files.2mg"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(1)
-
 function GetCreatedModifiedDates()
   local ocr = a2dtest.OCRScreen()
   local _, _, created_date = ocr:find("Created: +([^\n]*)")
@@ -23,34 +21,38 @@ end
 test.Step(
   "copy volume to folder, verify dates",
   function()
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.SelectPath("/RAM1/FOLDER")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_GET_INFO)
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.SelectPath("/RAM1/FOLDER")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_GET_INFO)
+    a2dtest.WaitForSystemTask()
     local created_date, modified_date = GetCreatedModifiedDates()
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/WITH.FILES")
+    desktop.SelectPath("/WITH.FILES")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     print("letting time advance 1 minute...")
     emu.wait(120) -- let minutes advance
 
-    a2d.SelectPath("/RAM1/FOLDER")
+    desktop.SelectPath("/RAM1/FOLDER")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    emu.wait(10)
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/RAM1/FOLDER")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_GET_INFO)
+    desktop.SelectPath("/RAM1/FOLDER")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_GET_INFO)
+    a2dtest.WaitForSystemTask()
 
     local new_created_date, new_modified_date = GetCreatedModifiedDates()
     test.ExpectEquals(new_created_date, created_date, "creation date should be unchanged")
     test.ExpectNotEquals(new_modified_date, modified_date, "modification date should be updated")
 
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -62,23 +64,27 @@ end)
 test.Step(
   "file dates match original",
   function()
-    a2d.SelectPath("/TESTS/COPYING/DATES/C.92.M.93")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_GET_INFO)
+    desktop.SelectPath("/TESTS/COPYING/DATES/C.92.M.93")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_GET_INFO)
+    a2dtest.WaitForSystemTask()
     local created_date, modified_date = GetCreatedModifiedDates()
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
-    a2d.CopyPath("/TESTS/COPYING/DATES", "/RAM1")
-    a2d.SelectPath("/RAM1/DATES/C.92.M.93")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_GET_INFO)
+    desktop.CopyPath("/TESTS/COPYING/DATES", "/RAM1")
+    desktop.SelectPath("/RAM1/DATES/C.92.M.93")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_GET_INFO)
+    a2dtest.WaitForSystemTask()
 
     local new_created_date, new_modified_date = GetCreatedModifiedDates()
     test.ExpectEquals(new_created_date, created_date, "creation date should match original")
     test.ExpectEquals(new_modified_date, modified_date, "modification date should match original")
 
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -91,32 +97,40 @@ end)
 test.Step(
   "folder dates match original",
   function()
-    a2d.SelectPath("/TESTS/COPYING/DATES")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_GET_INFO)
+    desktop.SelectPath("/TESTS/COPYING/DATES")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_GET_INFO)
+    a2dtest.WaitForSystemTask()
     local folder_created_date, folder_modified_date = GetCreatedModifiedDates()
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/TESTS/COPYING/DATES/C.16.M.16")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_GET_INFO)
+    desktop.SelectPath("/TESTS/COPYING/DATES/C.16.M.16")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_GET_INFO)
+    a2dtest.WaitForSystemTask()
     local file_created_date, file_modified_date = GetCreatedModifiedDates()
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
-    a2d.CopyPath("/TESTS/COPYING/DATES", "/RAM1")
+    desktop.CopyPath("/TESTS/COPYING/DATES", "/RAM1")
 
-    a2d.SelectPath("/RAM1/DATES")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_GET_INFO)
+    desktop.SelectPath("/RAM1/DATES")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_GET_INFO)
+    a2dtest.WaitForSystemTask()
     local new_created_date, new_modified_date = GetCreatedModifiedDates()
     test.ExpectEquals(new_created_date, folder_created_date, "creation date should match original")
     test.ExpectEquals(new_modified_date, folder_modified_date, "modification date should match original")
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/RAM1/DATES/C.16.M.16")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_GET_INFO)
+    desktop.SelectPath("/RAM1/DATES/C.16.M.16")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_GET_INFO)
+    a2dtest.WaitForSystemTask()
     local new_created_date, new_modified_date = GetCreatedModifiedDates()
     test.ExpectEquals(new_created_date, file_created_date, "creation date should match original")
     test.ExpectEquals(new_modified_date, file_modified_date, "modification date should match original")
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)

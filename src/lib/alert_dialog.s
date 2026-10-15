@@ -227,7 +227,7 @@ start:
 
 .ifdef AD_EJECTABLE
         bit     ejectable_flag
-        jmi     done_buttons
+        bmi     done_buttons
 .endif
 
         bit     alert_params::buttons ; high bit clear = OK only
@@ -309,7 +309,7 @@ advance:
         add16_8 alert_params::text, #1, textwidth_params::data
 .endif
 
-    IF cmp16 textwidth_params::width, #kWrapWidth : LT
+    IF u16 textwidth_params::width < #kWrapWidth
         ;; Yes, record possible split position, maybe continue.
         ldy     test_pos
         sty     split_pos
@@ -359,7 +359,7 @@ event_loop:
 .ifdef AD_EJECTABLE
     IF bit ejectable_flag : NS
         jsr     WaitForDiskOrEsc
-        jeq     finish_ok
+        beq     finish_ok
         jmp     finish_cancel
     END_IF
 .endif ; AD_EJECTABLE
@@ -367,11 +367,8 @@ event_loop:
         jsr     SystemTask
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_kind
-        cmp     #MGTK::EventKind::button_down
-        jeq     HandleButtonDown
-
-        cmp     #MGTK::EventKind::key_down
-        bne     event_loop
+        IF A = #MGTK::EventKind::button_down JUMP HandleButtonDown
+        IF A <> #MGTK::EventKind::key_down GOTO event_loop
 
         ;; --------------------------------------------------
         ;; Key Down
@@ -429,16 +426,13 @@ do_try_again:
         jmp     finish
     END_IF
 
-        cmp     #CHAR_RETURN    ; also allow Return as default
-        beq     do_try_again
+        IF A = #CHAR_RETURN GOTO do_try_again   ; also allow Return as default
         jmp     event_loop
 
 check_only_ok:
-        cmp     #CHAR_ESCAPE    ; also allow Escape as default
-        beq     do_ok
+        IF A = #CHAR_ESCAPE GOTO do_ok   ; also allow Escape as default
 check_ok:
-        cmp     #CHAR_RETURN
-        jne     event_loop
+        IF A <> #CHAR_RETURN GOTO event_loop
 
 do_ok:  BTK_CALL BTK::Flash, ok_button
 finish_ok:

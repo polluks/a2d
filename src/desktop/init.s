@@ -254,7 +254,7 @@ done:
     DO
         jsr     ReadSetting
         sta     tmp_pattern - DeskTopSettings::pattern,x
-    WHILE dex : X <> #AS_BYTE(DeskTopSettings::pattern-1)
+    WHILE dex : X <> #AS_BYTE{DeskTopSettings::pattern-1}
 
         MGTK_CALL MGTK::SetZP1, setzp_params_nopreserve
         MGTK_CALL MGTK::SetDeskPat, tmp_pattern
@@ -545,7 +545,7 @@ next:
         lda     (slot_ptr),y    ; $CnFE: Status Byte
         bmi     append          ; bit 7 - Medium is removable
 next:
-    WHILE inc index : lda DEVCNT : A >= index ; continue while index <= DEVCNT
+    WHILE inc index : u8 DEVCNT >= index ; continue while index <= DEVCNT
 
         lda     count
         sta     main::removable_device_table
@@ -601,9 +601,8 @@ append:
         .byte   SPCall::Status
         .addr   status_params
         bcs     next            ; call failed - skip it!
-        lda     dib_buffer+SPDIB::Device_Type_Code
-        cmp     #SPDeviceType::Disk525
-        beq     next            ; is 5.25 - skip it!
+
+        IF u8 dib_buffer+SPDIB::Device_Type_Code = #SPDeviceType::Disk525 GOTO next ; is 5.25 - skip it!
 
         ;; Append the device
         inc     count
@@ -649,7 +648,7 @@ unit_num:
         BREAK_IF A = count
 
         ;; Copy entry name into place
-        jsr     main::ATimes16
+        jsr     main::ATimes16  ; A = `index`
         addax   #selector_list_data_buf + kSelectorListEntriesOffset, ptr1
         CALL    main::ATimes16, A=index
         addax   #run_list_entries, ptr2
@@ -672,7 +671,7 @@ unit_num:
     END_IF
 
         ;; No separator if it is last
-    IF lda selector_menu : A = #kSelectorMenuFixedItems
+    IF u8 selector_menu = #kSelectorMenuFixedItems
         dec     selector_menu
     END_IF
         jmp     end_of_scope
@@ -749,10 +748,7 @@ not_found:
         ;; Does the directory exist?
         MLI_CALL GET_FILE_INFO, get_file_info_params
         jcs     end
-
-        lda     get_file_info_params::file_type
-        cmp     #FT_DIRECTORY
-        jne     end
+        IF u8 get_file_info_params::file_type <> #FT_DIRECTORY JUMP end
 
         MLI_CALL OPEN, open_params
         lda     open_params::ref_num
@@ -798,13 +794,9 @@ process_block:
         lda     (dir_ptr),y
     IF A = #kDAFileType         ; DA? (must match type/auxtype)
         ldy     #FileEntry::aux_type
-        lda     (dir_ptr),y
-        cmp     #<kDAFileAuxType
-        bne     next_entry
+        IF u8 (dir_ptr),y <> #<kDAFileAuxType GOTO next_entry
         iny
-        lda     (dir_ptr),y
-        cmp     #>kDAFileAuxType
-        bne     next_entry
+        IF u8 (dir_ptr),y <> #>kDAFileAuxType GOTO next_entry
     END_IF
 
         ;; Allow anything else
@@ -857,18 +849,14 @@ process_block:
 
 next_entry:
         ;; Room for more DAs?
-        lda     desk_acc_num
-        cmp     #kMaxDeskAccCount
-        bcs     close_dir
+        IF u8 desk_acc_num >= #kMaxDeskAccCount GOTO close_dir
 
         ;; Any more entries in dir?
-        lda     entry_num
-        cmp     file_count
-        beq     close_dir
+        IF u8 entry_num = file_count GOTO close_dir
 
         ;; Any more entries in block?
         inc     entry_in_block
-    IF lda entry_in_block : A = entries_per_block
+    IF u8 entry_in_block = entries_per_block
         MLI_CALL READ, read_params
         copy16  #read_dir_buffer + 4, dir_ptr
 
@@ -903,7 +891,7 @@ name_buf:       .res    ::kDAMenuItemSize, 0
 
 end:
         ;; No separator if it is last
-    IF lda apple_menu : A = #kAppleMenuFixedItems
+    IF u8 apple_menu = #kAppleMenuFixedItems
         dec     apple_menu
     END_IF
 
@@ -1029,9 +1017,8 @@ pending_alert := FinalSetup::pending_alert
         jsr     main::save_restore_windows::Close
 
         ;; Validate file format version byte
-        lda     main::save_restore_windows::desktop_file_data_buf
-        cmp     #kDeskTopFileVersion
-        jne     exit
+        ucmp8   main::save_restore_windows::desktop_file_data_buf, #kDeskTopFileVersion
+        bne     exit
 
         copy16  #main::save_restore_windows::desktop_file_data_buf+1, data_ptr
 
@@ -1050,8 +1037,7 @@ pending_alert := FinalSetup::pending_alert
         ;; Is there a matching volume icon? (If not, skip)
         ldx     #1              ; past leading '/'
       DO
-        lda     INVOKER_PREFIX+1,x
-        BREAK_IF A = #'/'       ; look for next '/'
+        BREAK_IF u8 INVOKER_PREFIX+1,x = #'/' ; look for next '/'
       WHILE inx : X <> INVOKER_PREFIX
 
         dex

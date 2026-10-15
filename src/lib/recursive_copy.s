@@ -183,8 +183,7 @@ loop:
         bit     entry_err_flag  ; don't recurse if the copy failed
         bmi     loop
 
-        lda     file_entry + FileEntry::file_type
-        cmp     #FT_DIRECTORY
+        ucmp8   file_entry + FileEntry::file_type, #FT_DIRECTORY
         bne     loop            ; and don't recurse unless it's a directory
 
         ;; Recurse into child directory
@@ -351,8 +350,7 @@ retry:  MLI_CALL READ, read_src_dir_entry_params
     END_IF
 
         inc     entry_index_in_block
-        lda     entry_index_in_block
-    IF A >= entries_per_block
+    IF u8 entry_index_in_block >= entries_per_block
         ;; Advance to first entry in next "block"
         copy8   #0, entry_index_in_block
 retry2: MLI_CALL READ, read_padding_bytes_params
@@ -399,7 +397,7 @@ eof:    RETURN  A=#$FF
         jsr     _OpenSrcDir
 
 :
-    IF cmp16 entry_index_in_dir, target_index : LT
+    IF u16 entry_index_in_dir < target_index
         jsr     _ReadFileEntry
         jmp     :-
     END_IF
@@ -478,8 +476,7 @@ eof:    RETURN  A=#$FF
     IF NOT_ZERO
         tay
       DO
-        lda     (path_ptr),y
-        cmp     #'/'
+        ucmp8   (path_ptr),y, #'/'
         beq     :+
       WHILE dey : NOT_ZERO
         iny
@@ -667,7 +664,7 @@ retry:  MLI_CALL GET_FILE_INFO, dst_file_info_params
 
         ;; Does it fit? (free >= needed)
 
-    IF cmp16 dst_vol_blocks_free, src_file_info_params::blocks_used : LT
+    IF u16 dst_vol_blocks_free < src_file_info_params::blocks_used
         ;; Not enough room
         jmp     OpHandleNoSpace
     END_IF
@@ -882,8 +879,7 @@ _OpenDstOrFail := _OpenDstImpl::fail_ok
 .endif
 
         ;; Is there less than a full block? If so, just write it.
-        lda     read_src_params::trans_count+1
-        cmp     #.hibyte(BLOCK_SIZE)
+        ucmp8   read_src_params::trans_count+1, #.hibyte(BLOCK_SIZE)
         bcc     do_write        ; ...and done!
 
         ;; Otherwise we'll go block-by-block, treating all zeros
@@ -981,8 +977,7 @@ ret:    rts
 .endif
 
         ;; If source is volume, create directory instead
-        lda     create_params::storage_type
-    IF A = #ST_VOLUME_DIRECTORY
+    IF u8 create_params::storage_type = #ST_VOLUME_DIRECTORY
         copy8   #ST_LINKED_DIRECTORY, create_params::storage_type
     END_IF
 

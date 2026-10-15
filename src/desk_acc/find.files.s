@@ -203,23 +203,27 @@ num_entries := listbox_rec::num_items
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         LETK_CALL LETK::Idle, le_params
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
+
         jsr     GetNextEvent
+      IF A = #kEventKindMouseMoved
+        jsr     HandleMouseMove
+      ELSE_IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      END_IF
 
-        cmp     #kEventKindMouseMoved
-        jeq     HandleMouseMove
-
-        cmp     #MGTK::EventKind::button_down
-        jeq     HandleDown
-
-        cmp     #MGTK::EventKind::key_down
-        beq     HandleKey
-
-        bne     InputLoop       ; always
+    FOREVER
 .endproc ; InputLoop
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
+
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
 
         MGTK_CALL MGTK::CloseWindow, winfo_results
@@ -240,7 +244,7 @@ num_entries := listbox_rec::num_items
 
     IF A IN #CHAR_UP, #CHAR_DOWN
         LBTK_CALL LBTK::Key, lb_params
-        jmp     InputLoop
+        rts
     END_IF
 
     IF X <> #0
@@ -249,17 +253,17 @@ num_entries := listbox_rec::num_items
         jsr     ToUpperCase
 
         cmp     #kShortcutCloseWindow
-        jeq     Exit
+        beq     Exit
 
       IF A = #'O'
         lda     selected_index
-        bmi     InputLoop
+        RTS_IF NS
         sta     show_index
         jmp     Exit
       END_IF
 
         LETK_CALL LETK::Key, le_params
-        jmp     InputLoop
+        rts
     END_IF
 
         ;; Not modified
@@ -279,7 +283,7 @@ num_entries := listbox_rec::num_items
         bcs     ignore
 allow:  LETK_CALL LETK::Key, le_params
 ignore:
-        jmp     InputLoop
+        rts
 .endproc ; HandleKey
 
 ;;; ============================================================
@@ -302,26 +306,17 @@ yes:    RETURN  C=0
 ;;; Output: C=0 if valid, C=1 otherwise
 .proc IsSearchChar
         ;; Valid characters are . 0-9 A-Z a-z ? *
-        cmp     #'*'            ; Wildcard
-        beq     insert
-        cmp     #'?'            ; Wildcard
-        beq     insert
-        cmp     #'.'            ; Filename char (here and below)
-        beq     insert
-        cmp     #'0'
-        bcc     ignore
-        cmp     #'9'+1
-        bcc     insert
-        cmp     #'A'
-        bcc     ignore
-        cmp     #'Z'+1
-        bcc     insert
+        IF A = #'*' GOTO insert ; Wildcard
+        IF A = #'?' GOTO insert ; Wildcard
+        IF A = #'.' GOTO insert ; Filename char (here and below)
+        IF A < #'0' GOTO ignore
+        IF A < #'9'+1 GOTO insert
+        IF A < #'A' GOTO ignore
+        IF A < #'Z'+1 GOTO insert
 
 .if kBuildSupportsLowercase
-        cmp     #'a'
-        bcc     ignore
-        cmp     #'z'+1
-        bcs     ignore
+        IF A < #'a' GOTO ignore
+        IF A >= #'z'+1 GOTO ignore
 .else
         bcs     ignore          ; always
 .endif
@@ -342,15 +337,12 @@ ignore: RETURN  C=1
         MGTK_CALL MGTK::PeekEvent, event_params
         MGTK_CALL MGTK::FlushEvents
 
-        lda     event_params::kind
-        cmp     #MGTK::EventKind::key_down
-        bne     nope
+    IF u8 event_params::kind = #MGTK::EventKind::key_down
         lda     event_params::key
-        cmp     #CHAR_ESCAPE
-        bne     nope
-        rts
+        RTS_IF A = #CHAR_ESCAPE
+    END_IF
 
-nope:   RETURN  A=#0
+        RETURN  A=#0
 .endproc ; CheckEvents
 
 ;;; ============================================================
@@ -367,7 +359,7 @@ path_length:
         LBTK_CALL LBTK::Init, lb_params
         jsr     PrepDrawIncrementalResults
 
-    IF lda path_length : A = #1
+    IF u8 path_length = #1
         JSR_TO_MAIN ::main::InitVolumes
         JSR_TO_MAIN ::main::NextVolume
         bcs     finish
@@ -399,18 +391,16 @@ search:
         sty     lb_params::new_size
         LBTK_CALL LBTK::SetSize, lb_params ; update scrollbar
 
-        lda     path_length
-    IF A = #1
-        lda     num_entries
-        cmp     #kMaxFilePaths
-        beq     finish
+    IF u8 path_length = #1
+      IF u8 num_entries <> #kMaxFilePaths
         JSR_TO_MAIN ::main::NextVolume
         bcc     search
+      END_IF
     END_IF
 
 finish:
         MGTK_CALL MGTK::SetCursor, SELF_MODIFIED, cursor_addr
-        jmp     InputLoop
+        rts
 
 .endproc ; DoSearch
 
@@ -418,9 +408,9 @@ finish:
 
 .proc HandleDown
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::which_area
-        cmp     #MGTK::Area::content
-        jne     done
+    IF u8 findwindow_params::which_area <> #MGTK::Area::content
+        jmp     done
+    END_IF
 
         lda     findwindow_params::window_id
     IF A = #kResultsWindowId
@@ -434,30 +424,28 @@ finish:
        END_IF
       END_IF
 
-        jmp     InputLoop
+        rts
     END_IF
 
-        cmp     #kDAWindowId
-        bne     done
-
+    IF A = #kDAWindowId
         ;; Click in DA content area
         copy8   #kDAWindowId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
 
         MGTK_CALL MGTK::InRect, search_button::rect
-    IF NOT_ZERO
+      IF NOT_ZERO
         BTK_CALL BTK::Track, search_button
         bmi     done
         jmp     DoSearch
-    END_IF
+      END_IF
 
         MGTK_CALL MGTK::InRect, cancel_button::rect
-    IF NOT_ZERO
+      IF NOT_ZERO
         BTK_CALL BTK::Track, cancel_button
         bmi     done
         jmp     Exit
-    END_IF
+      END_IF
 
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
         MGTK_CALL MGTK::InRect, input_rect
@@ -466,7 +454,10 @@ finish:
         COPY_STRUCT screentowindow_params::window, le_params::coords
         LETK_CALL LETK::Click, le_params
 
-done:   jmp     InputLoop
+        FALL_THROUGH_TO done
+    END_IF
+
+done:   rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -482,7 +473,7 @@ done:   jmp     InputLoop
     ELSE
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
     END_IF
-        jmp     InputLoop
+        rts
 .endproc ; HandleMouseMove
 
 ;;; ============================================================
@@ -619,8 +610,6 @@ offset: .addr   0
 
         MLIEntry := MLI
         block_buffer := $1A00
-
-entry:
 
 .scope
         ptr := $06
@@ -987,8 +976,7 @@ OpenDone:
     END_IF
 
         ;; Does the file match the search pattern?
-        lda     pattern         ; Skip if pattern is empty
-    IF NOT_ZERO
+    IF u8 pattern <> #0         ; Skip if pattern is empty
         jsr     IsMatch
         bcc     exit            ; No match
     END_IF
@@ -1021,9 +1009,9 @@ OpenDone:
         jsr     DrawNextResultFromMain
 
         ;; If we've hit max number of entries, terminate operation.
-        lda     num_entries
-        cmp     #kMaxFilePaths
-        jeq     Terminate
+    IF u8 num_entries = #kMaxFilePaths
+        jmp     Terminate
+    END_IF
 
 exit:   rts
 .endproc ; VisitFile
@@ -1041,8 +1029,7 @@ exit:   rts
         ;; on the stack above and below for safety.
         kMaxRecursionDepth = 16
 
-        lda     Depth
-    IF A < #kMaxRecursionDepth
+    IF u8 Depth < #kMaxRecursionDepth
         jmp     RecursDir       ; enumerate all entries in sub-dir.
     END_IF
 

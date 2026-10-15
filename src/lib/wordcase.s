@@ -21,8 +21,7 @@
 done:   rts
       END_IF
 
-        lda     (ptr),y
-        cmp     #'A'
+        ucmp8   (ptr),y, #'A'
         bcs     check_alpha
         dey
         REDO_IF POS             ; always
@@ -31,7 +30,7 @@ check_alpha:
         iny
         lda     (ptr),y
       IF a >= #'A'
-        ora     #AS_BYTE(~CASE_MASK) ; guarded by `kBuildSupportsLowercase`
+        ora     #AS_BYTE{~CASE_MASK} ; guarded by `kBuildSupportsLowercase`
         sta     (ptr),y
       END_IF
     WHILE dey : POS             ; always

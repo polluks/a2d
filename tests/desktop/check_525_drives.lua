@@ -8,8 +8,6 @@ DISKARGS="\
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(1)
-
 --[[
   Start desktop. Verify 5 volumes are present. Toggle option to not
   check 5.25" volumes on startup. Restart. Verify 3 volumes are
@@ -18,23 +16,23 @@ a2d.ConfigureRepaintTime(1)
 test.Step(
   "Option to not poll 5.25 drives at startup",
   function()
-    a2d.CloseAllWindows()
-    a2d.SelectAll()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 6, "5 volumes + trash should be selected")
+    desktop.CloseAllWindows()
+    desktop.SelectAll()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 6, "5 volumes + trash should be selected")
 
-    a2d.ToggleOptionSkipChecking525Drives()
-    a2d.Reboot()
+    desktop.ToggleOptionSkipChecking525Drives()
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 
-    a2d.CloseAllWindows()
-    a2d.SelectAll()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 4, "3 volumes + trash should be selected")
+    desktop.CloseAllWindows()
+    desktop.SelectAll()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 4, "3 volumes + trash should be selected")
 
-    a2d.CheckAllDrives()
-    a2d.SelectAll()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 6, "5 volumes + trash should be selected")
+    desktop.CheckAllDrives()
+    desktop.SelectAll()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 6, "5 volumes + trash should be selected")
 
     -- cleanup
-    a2d.ToggleOptionSkipChecking525Drives()
-    a2d.CloseAllWindows()
+    desktop.ToggleOptionSkipChecking525Drives()
+    desktop.CloseAllWindows()
 end)

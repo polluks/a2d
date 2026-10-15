@@ -26,8 +26,6 @@ DISKARGS="\
   * aplcdsc is: "SONYCD-ROMCDU-80" (Sony CD-ROM CDU-8002)
 ]]
 
-a2d.ConfigureRepaintTime(5)
-
 -- Callback called with func to invoke menu item; pass false if
 -- no volumes selected, true if volumes selected (affects menu item)
 function FormatEraseTest(name, func)
@@ -37,14 +35,16 @@ function FormatEraseTest(name, func)
       name .. " - Erase",
     },
     function(idx)
-      a2d.CloseAllWindows()
-      a2d.ClearSelection()
+      desktop.CloseAllWindows()
+      desktop.ClearSelection()
       func(
         function(vol_selected)
           if vol_selected then
-            a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK+idx-1)
+            a2d.InvokeMenuItem(desktop.SPECIAL_MENU, desktop.SPECIAL_FORMAT_DISK+idx-1)
+            a2dtest.WaitForSystemTask()
           else
-            a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK-2+idx-1)
+            a2d.InvokeMenuItem(desktop.SPECIAL_MENU, desktop.SPECIAL_FORMAT_DISK-2+idx-1)
+            a2dtest.WaitForSystemTask()
           end
       end)
   end)
@@ -63,6 +63,8 @@ FormatEraseTest(
     end
     test.Snap("verify selection rect covers name, doesn't overlap border")
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
+
     test.Snap("verify long names erased after device selection")
 
     test.ExpectIMatch(a2dtest.OCRScreen(), "SONYCD%-ROMCDU%-80",

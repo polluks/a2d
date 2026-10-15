@@ -245,8 +245,7 @@ str_self_filename:
         MLI_CALL GET_PREFIX, get_prefix_params
         MLI_CALL GET_FILE_INFO, file_info_params
     IF CC
-        lda     file_info_params + 7 ; storage_type
-      IF A = #ST_LINKED_DIRECTORY
+      IF u8 file_info_params + 7  = #ST_LINKED_DIRECTORY ; storage_type
         copy8   #7, file_info_params + 0 ; SET_FILE_INFO param_count
         copy16  #$8000, file_info_params + 5 ; aux_type
         MLI_CALL SET_FILE_INFO, file_info_params
@@ -278,7 +277,7 @@ startupitems_dir:
 .proc CreateStartupItemsDir
         MLI_CALL CREATE, create_startupitemsdir_params
         rts
-.endproc ; CreateLocalDir
+.endproc ; CreateStartupItemsDir
 
 ;;; ============================================================
 
@@ -301,30 +300,25 @@ startupitems_dir:
     END_IF
 
         ;; IIc?
-        lda     ZIDBYTE         ; $00 = IIc or later
-    IF ZERO
+    IF u8 ZIDBYTE = #0          ; $00 = IIc or later
         CALL    set_bit, A=#DeskTopSettings::kSysCapIsIIc
 
         ;; IIc Plus?
-        lda     ZIDBYTE2        ; ROM version
-      IF A = #$05               ; IIc Plus = $05
+      IF u8 ZIDBYTE2 = #$05     ; ROM version, IIc Plus = $05
         CALL    set_bit, A=#DeskTopSettings::kSysCapIsIIcPlus
       END_IF
         jmp     done_machid
     END_IF
 
         ;; Laser 128?
-        lda     IDBYTELASER128
-    IF A = #$AC
+    IF u8 IDBYTELASER128 = #$AC
         CALL    set_bit, A=#DeskTopSettings::kSysCapIsLaser128
         jmp     done_machid
     END_IF
 
         ;; Macintosh IIe Option Card?
-        lda     ZIDBYTE
-    IF A = #$E0                 ; Enhanced IIe
-        lda     IDBYTEMACIIE
-      IF A = #$02               ; Mac IIe Option Card
+    IF u8 ZIDBYTE = #$E0        ; Enhanced IIe
+      IF u8 IDBYTEMACIIE = #$02 ; Mac IIe Option Card
         CALL    set_bit, A=#DeskTopSettings::kSysCapIsIIeCard
         jmp     done_machid
       END_IF
@@ -438,8 +432,7 @@ OpFinishDirectory       := RemoveDstPathSegment
         lda     KBD
         bpl     ret
         sta     KBDSTRB
-        cmp     #$80|CHAR_ESCAPE
-        beq     cancel
+        IF A = #$80|CHAR_ESCAPE GOTO cancel
 ret:    rts
 
 cancel: lda     #kErrCancel
@@ -579,10 +572,7 @@ str_slash_desktop:
         lda     unit_num        ; not masked
 
         ;; Special case for RAM.DRV.SYSTEM/RAMAUX.SYSTEM.
-        cmp     #kRamDrvSystemUnitNum
-        beq     test_unit_num
-        cmp     #kRamAuxSystemUnitNum
-        beq     test_unit_num
+        IF A = #kRamDrvSystemUnitNum OR A = #kRamAuxSystemUnitNum GOTO test_unit_num
 
         ;; Smartport?
         jsr     FindSmartportDispatchAddress ; handles unmasked unit num
@@ -723,9 +713,7 @@ test_unit_num:
         copy8   (ptr),y, filename_buf,y
       WHILE dey : POS
         jsr     CopyFile
-        inc     filenum
-        lda     filenum
-    WHILE A <> #kNumFilenames
+    WHILE u8 ++filenum <> #kNumFilenames
 
         jsr     UpdateProgress
         FALL_THROUGH_TO FinishDeskTopCopy
@@ -844,8 +832,7 @@ test_unit_num:
     IF NOT_ZERO
         lda     #'/'
       DO
-        cmp     src_path,x
-        beq     done
+        IF A = src_path,x GOTO done
       WHILE dex : NOT_ZERO
         inx
 
@@ -881,8 +868,7 @@ done:   dex
 
         lda     #'/'
       DO
-        cmp     dst_path,x
-        beq     done
+        IF A = dst_path,x GOTO done
       WHILE dex : NOT_ZERO
         inx
 
@@ -936,8 +922,7 @@ done:   dex
         jsr     AppendFilenameToSrcPath
         MLI_CALL GET_FILE_INFO, get_file_info_params
     IF CS
-        cmp     #ERR_FILE_NOT_FOUND
-        beq     cleanup
+        IF A = #ERR_FILE_NOT_FOUND GOTO cleanup
         jmp     DidNotCopy
     END_IF
 
@@ -974,6 +959,7 @@ noop:
 ;;; DeskTop.system itself is used as a sentinel, as it is the last
 ;;; file copied to the folder.
 
+;;; Output: C=0 if file is present (and big enough we trust it)
 .proc CheckDesktopOnDevice
         ;; `path_buf` = `dst_path`
         COPY_STRING dst_path, path_buf
@@ -991,7 +977,7 @@ noop:
         ;; ... and get info
         MLI_CALL GET_FILE_INFO, get_file_info_params4
     IF CC
-        cmp16   #2, get_file_info_params4::blocks_used
+        ucmp16  #2, get_file_info_params4::blocks_used
         ;; Ensure at least something was written to the file
         ;; (uses 1 block at creation)
     END_IF
@@ -1204,7 +1190,7 @@ entry_dir_name:
 .proc PreparePathsFromEntryPaths
 
         ;; Copy `entry_path2` to `pathname_src`
-        ldy     #AS_BYTE(-1)
+        ldy     #AS_BYTE{-1}
     DO
         iny
         copy8   entry_path2,y, GenericCopy::pathname_src,y
@@ -1447,14 +1433,8 @@ str_not_completed:
         MLI_CALL CLOSE, close_everything_params
         pla
 
-        cmp     #GenericCopy::kErrCancel
-        jeq     FinishAndInvoke
-
-        cmp     #ERR_OVERRUN_ERROR
-        jeq     ShowNoSpacePrompt
-
-        cmp     #ERR_VOLUME_DIR_FULL
-        jeq     ShowNoSpacePrompt
+        IF A = #GenericCopy::kErrCancel GOTO FinishAndInvoke
+        IF A = #ERR_OVERRUN_ERROR OR A = #ERR_VOLUME_DIR_FULL GOTO ShowNoSpacePrompt
 
         ;; Show generic error
         pha
@@ -1467,20 +1447,19 @@ str_not_completed:
 
         ;; Wait for keyboard
         sta     KBDSTRB
-loop:   lda     KBD
-        bpl     loop
+    DO
+        lda     KBD
+        REDO_IF NC
         sta     KBDSTRB
 
-        cmp     #$80|kShortcutMonitor ; Easter Egg: If 'M', enter monitor
-        beq     monitor
+        IF A = #$80|kShortcutMonitor GOTO monitor ; Easter Egg: If 'M', enter monitor
 
 .if kBuildSupportsLowercase
         cmp     #$80|TO_LOWER(kShortcutMonitor)
         beq     monitor
 .endif
 
-        cmp     #$80|CHAR_RETURN
-        bne     loop
+    WHILE A <>#$80|CHAR_RETURN
 
         jmp     FinishAndInvoke
 .endproc ; HandleErrorCode
@@ -1620,12 +1599,9 @@ start:  bit     LCBANK2
         ;; Create file (if needed)
         copy16  DATELO, create_params::create_date
         copy16  TIMELO, create_params::create_time
-        MLI_CALL CREATE, create_params
-    IF CS
-        cmp     #ERR_DUPLICATE_FILENAME
-        bne     done
-    END_IF
 
+        MLI_CALL CREATE, create_params
+    IF CC OR A = #ERR_DUPLICATE_FILENAME
         ;; Populate it
         MLI_CALL OPEN, open_params
         lda     open_params::ref_num
@@ -1633,8 +1609,9 @@ start:  bit     LCBANK2
         sta     close_params::ref_num
         MLI_CALL WRITE, write_params
         MLI_CALL CLOSE, close_params
+    END_IF
 
-done:   rts
+        rts
 
 .endproc ; PreserveQuitCodeImpl
 PreserveQuitCode        := PreserveQuitCodeImpl::start
@@ -1675,8 +1652,7 @@ found:
         CALL    VTABZ, A=#kVtabRamNotEmptyMsg
         CALL    CoutString, AX=#str_ram_not_empty
         jsr     WaitEnterEscape
-        cmp     #$80|CHAR_ESCAPE
-        beq     quit
+        IF A = #$80|CHAR_ESCAPE GOTO quit
         jsr     HOME
 
 ret:    rts
@@ -1730,8 +1706,7 @@ str_ram_not_empty:
         lda     KBD
       WHILE NC
         sta     KBDSTRB
-        BREAK_IF A = #$80|CHAR_ESCAPE
-    WHILE A <> #$80|CHAR_RETURN
+    WHILE A <> #$80|CHAR_ESCAPE AND A <> #$80|CHAR_RETURN
         rts
 .endproc ; WaitEnterEscape
 

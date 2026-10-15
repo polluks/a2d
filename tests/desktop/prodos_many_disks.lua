@@ -35,8 +35,6 @@ DISKARGS="\
   "
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
   Configure a system with 14 devices. Launch and then exit DeskTop.
   Load another ProDOS app that enumerates devices. Verify that all
@@ -46,7 +44,7 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "No S0,D1 device gets created",
   function()
-    a2d.Quit()
+    desktop.Quit()
     apple2.WaitForBitsy()
 
     local list = apple2.GetProDOSDeviceList()

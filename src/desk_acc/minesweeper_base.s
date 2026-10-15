@@ -93,8 +93,6 @@ name:   PASCAL_STRING res_string_window_title
 
 pencopy:        .byte   MGTK::pencopy
 notpencopy:     .byte   MGTK::notpencopy
-penBIC:         .byte   MGTK::penBIC
-
 
 kHPadding = 0
 kVPadding = 0
@@ -344,39 +342,30 @@ game_over_flag: .byte   0       ; bit7
 ;;; Input loop and processing
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         MGTK_CALL MGTK::GetEvent, event_params
 
         lda     event_params::kind
-    IF A = #MGTK::EventKind::button_down OR A = #MGTK::EventKind::apple_key
+      IF A = #MGTK::EventKind::button_down OR A = #MGTK::EventKind::apple_key
         jsr     OnClick
-        jmp     InputLoop
-    END_IF
-
-    IF A = #MGTK::EventKind::key_down
+      ELSE_IF A = #MGTK::EventKind::key_down
         jsr     OnKey
-        jmp     InputLoop
-    END_IF
+      END_IF
 
-        jmp     InputLoop
+    FOREVER
 .endproc ; InputLoop
 
 ;;; ============================================================
 
 .proc OnClick
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::window_id
-    IF A = #kDAWindowId
+    IF u8 findwindow_params::window_id = #kDAWindowId
         lda     findwindow_params::which_area
 
-        cmp     #MGTK::Area::close_box
-        beq     DoClose
-
-        cmp     #MGTK::Area::dragbar
-        beq     DoDrag
-
-        cmp     #MGTK::Area::content
-        beq     DoClick
+        IF A = #MGTK::Area::close_box GOTO DoClose
+        IF A = #MGTK::Area::dragbar GOTO DoDrag
+        IF A = #MGTK::Area::content GOTO DoClick
     END_IF
         rts
 .endproc ; OnClick
@@ -459,7 +448,7 @@ game_over_flag: .byte   0       ; bit7
         ;; NOTE: `sub16` is used not `sub16_8` so that N flag is set
         sub16  xcoord, #kHPadding, xcoord
         RTS_IF NEG
-        ldx     #AS_BYTE(-1)
+        ldx     #AS_BYTE{-1}
       DO
         inx
         sub16  xcoord, #kTileWidth, xcoord
@@ -468,7 +457,7 @@ game_over_flag: .byte   0       ; bit7
 
         sub16   ycoord, #kVPadding, ycoord
         RTS_IF NEG
-        ldy     #AS_BYTE(-1)
+        ldy     #AS_BYTE{-1}
       DO
         iny
         sub16   ycoord, #kTileHeight, ycoord
@@ -504,7 +493,7 @@ game_over_flag: .byte   0       ; bit7
         ;; unknown -> flag
        IF A = #kCellUnknown
         lda     state
-        and     #AS_BYTE(~kCellFlagsMask)
+        and     #AS_BYTE{~kCellFlagsMask}
         ora     #kCellFlag
         jmp     store_and_redraw
        END_IF
@@ -512,7 +501,7 @@ game_over_flag: .byte   0       ; bit7
         ;; flag -> question
        IF A = #kCellFlag
         lda     state
-        and     #AS_BYTE(~kCellFlagsMask)
+        and     #AS_BYTE{~kCellFlagsMask}
         ora     #kCellQuestion
         jmp     store_and_redraw
        END_IF
@@ -520,7 +509,7 @@ game_over_flag: .byte   0       ; bit7
         ;; question -> unknown
        IF A = #kCellQuestion
         lda     state
-        and     #AS_BYTE(~kCellFlagsMask)
+        and     #AS_BYTE{~kCellFlagsMask}
         ora     #kCellUnknown
         jmp     store_and_redraw
        END_IF
@@ -601,7 +590,7 @@ store_and_redraw:
         ;; ----------------------------------------
         ;; Every non-mine revealed?
 
-        RTS_IF ecmp16 num_hidden, #kNumMines : NE
+        RTS_IF u16 num_hidden <> #kNumMines
 
         jsr     PlaySound
 
@@ -636,8 +625,6 @@ store_and_redraw:
 
         SET_BIT7_FLAG game_over_flag
         rts
-
-count:  .word   0
 
 .endproc ; CheckVictory
 
@@ -1259,7 +1246,7 @@ re_roll:
         inc     count
     END_IF
         rts
-.endproc ;  _Check
+.endproc ; _Check
 
 .endproc ; CountMines
 
@@ -1387,7 +1374,7 @@ re_roll:
         inc     count
     END_IF
         rts
-.endproc ;  _Check
+.endproc ; _Check
 
 .endproc ; CountFlags
 
@@ -1436,7 +1423,7 @@ re_roll:
         PULL_XY
         jsr     PopPointers
         rts
-.endproc ; IsMine
+.endproc ; SetCell
 
 ;;; ============================================================
 ;;; Pushes two words from $6/$8 to stack; preserves A,X,Y
@@ -1453,7 +1440,7 @@ re_roll:
         sta     hi
 
         ;; Copy 4 bytes from $8 to stack
-        ldx     #AS_BYTE(-4)
+        ldx     #AS_BYTE{-4}
     DO
         lda     $06 + 4,x
         pha

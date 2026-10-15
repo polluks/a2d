@@ -4,8 +4,6 @@ DISKARGS="-hard1 $HARDIMG -flop1 prodos_floppy1.dsk"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
   Configure a system with DeskTop booting from slot 7 and a floppy
   drive in slot 6. Place a ProDOS formatted disk without `PRODOS` in
@@ -18,9 +16,9 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "exits 80 column mode",
   function()
-    a2d.AddShortcut("/A2.DESKTOP/READ.ME")
-    a2d.ToggleOptionShowShortcutsOnStartup()
-    a2d.Reboot()
+    desktop.AddShortcut("/A2.DESKTOP/READ.ME")
+    desktop.ToggleOptionShowShortcutsOnStartup()
+    desktop.Reboot()
 
     util.WaitFor(
       "Starting Shortcuts", function()
@@ -37,8 +35,8 @@ test.Step(
     a2d.WaitForDesktopReady()
     apple2.Type("D")
     a2d.WaitForDesktopReady()
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    a2d.Reboot()
+    desktop.DeletePath("/A2.DESKTOP/LOCAL")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)
 

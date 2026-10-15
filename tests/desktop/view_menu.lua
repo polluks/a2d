@@ -3,9 +3,7 @@
 MODELARGS="-sl1 ramfactor -sl2 mouse -sl7 cffa2"
 DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv"
 
-  ======================================== ENDCONFIG ]]
-
-a2d.ConfigureRepaintTime(2)
+======================================== ENDCONFIG ]]
 
 --[[
   Open folder with files. View > by Date. Verify that DeskTop does not
@@ -14,11 +12,11 @@ a2d.ConfigureRepaintTime(2)
 test.Step(
   "View by Date - doesn't hang",
   function()
-    a2d.OpenPath("/A2.DESKTOP")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_DATE)
-    a2d.WaitForRepaint()
+    desktop.OpenWindow("/A2.DESKTOP")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_DATE)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify no hang")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -28,11 +26,11 @@ end)
 test.Step(
   "View by Date - Y2K",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_DATE)
-    a2d.WaitForRepaint()
+    desktop.OpenWindow("/TESTS/FILE.TYPES")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_DATE)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify dates after 1999 show correctly")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -42,12 +40,12 @@ end)
 test.Step(
   "View by Date - Secondarily sorted by time",
   function()
-    a2d.OpenPath("/TESTS/VIEW/BY.DATE")
-    a2d.GrowWindowBy(300, 0)
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_DATE)
-    a2d.WaitForRepaint()
+    desktop.OpenWindow("/TESTS/VIEW/BY.DATE")
+    desktop.GrowWindowBy(300, 0)
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_DATE)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify same dates sort by time")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -57,11 +55,11 @@ end)
 test.Step(
   "View by Name - Empty folder doesn't crash",
   function()
-    a2d.OpenPath("/TESTS/VIEW/BY.NAME/EMPTY")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.WaitForRepaint()
+    desktop.OpenWindow("/TESTS/VIEW/BY.NAME/EMPTY")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
     a2dtest.ExpectNotHanging()
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -71,11 +69,11 @@ end)
 test.Step(
   "View by Name - Folder with 1 file paints correctly",
   function()
-    a2d.OpenPath("/TESTS/VIEW/BY.NAME/ONE.FILE")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.WaitForRepaint()
+    desktop.OpenWindow("/TESTS/VIEW/BY.NAME/ONE.FILE")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify paints correctly")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -88,9 +86,9 @@ end)
 test.Step(
   "View by Name - Long month names can be scrolled into view",
   function()
-    a2d.OpenPath("/TESTS/VIEW/BY.NAME/LONG.MONTHS")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.WaitForRepaint()
+    desktop.OpenWindow("/TESTS/VIEW/BY.NAME/LONG.MONTHS")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
     local arrow_x, arrow_y = a2dtest.GetFrontWindowRightScrollArrowCoords()
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(arrow_x, arrow_y)
@@ -99,7 +97,7 @@ test.Step(
         end
     end)
     test.Snap("verify date not cut off on right")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -110,12 +108,13 @@ end)
 test.Step(
   "View by Name - Child windows resized to fit",
   function()
-    a2d.OpenPath("/TESTS/VIEW/BY.NAME")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.SelectAndOpen("LONG.MONTHS")
-    a2d.WaitForRepaint()
+    desktop.OpenWindow("/TESTS/VIEW/BY.NAME")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
+    desktop.SelectAndOpen("LONG.MONTHS")
+    a2dtest.WaitForSystemTask()
     test.Snap("verify no horizontal scrollbar")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -127,22 +126,24 @@ end)
 test.Step(
   "View by Name - No crash",
   function()
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     local vol_icon_x, vol_icon_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.OpenPath("/TESTS")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
+    desktop.OpenWindow("/TESTS")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(vol_icon_x, vol_icon_y)
         m.DoubleClick()
     end)
-    a2d.SelectAndOpen("APPLE.MENU")
-    a2d.SelectAndOpen("CONTROL.PANELS")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.CloseWindow()
+    desktop.SelectAndOpen("APPLE.MENU")
+    desktop.SelectAndOpen("CONTROL.PANELS")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
+    desktop.CloseWindow()
     a2dtest.ExpectNotHanging()
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -153,12 +154,13 @@ end)
 test.Step(
   "View by Name - Selection unchanged in volume",
   function()
-    a2d.OpenPath("/A2.DESKTOP")
-    a2d.SelectAndOpen("APPLE.MENU")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.MoveWindowBy(0,100)
+    desktop.OpenWindow("/A2.DESKTOP")
+    desktop.SelectAndOpen("APPLE.MENU")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
+    desktop.MoveWindowBy(0,100)
     test.Snap("verify selection still in volume window")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -169,16 +171,17 @@ end)
 test.Step(
   "View by Name - Selection unchanged in folder",
   function()
-    a2d.OpenPath("/A2.DESKTOP")
-    a2d.SelectAndOpen("APPLE.MENU")
+    desktop.OpenWindow("/A2.DESKTOP")
+    desktop.SelectAndOpen("APPLE.MENU")
     apple2.DownArrowKey()
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.MoveWindowBy(0,100)
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
+    desktop.MoveWindowBy(0,100)
     test.Snap("verify selection still in folder window")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
-a2d.AddShortcut("/A2.DESKTOP")
+desktop.AddShortcut("/A2.DESKTOP")
 
 --[[
   Repeat for the Shortcuts > Add, Edit, Delete, and Run a Shortcut
@@ -197,12 +200,14 @@ test.Variants(
     "Repaint after Run Shortcut",
   },
   function(idx)
-    a2d.OpenPath("/A2.DESKTOP")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, idx)
+    desktop.OpenWindow("/A2.DESKTOP")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, idx)
+    a2dtest.WaitForSystemTask()
     a2d.DialogCancel()
     test.Snap("verify window correctly repaints")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -213,11 +218,12 @@ end)
 test.Step(
   "View by Name - Ordering",
   function()
-    a2d.OpenPath("/TESTS/VIEW/BY.NAME/A1.B1.A.B")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.GrowWindowBy(100,20)
+    desktop.OpenWindow("/TESTS/VIEW/BY.NAME/A1.B1.A.B")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
+    desktop.GrowWindowBy(100,20)
     test.Snap("verify order is A, A1, B, B1")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -228,15 +234,16 @@ end)
 test.Step(
   "View by Type - Ordering",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_TYPE)
+    desktop.OpenWindow("/TESTS/FILE.TYPES")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_TYPE)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify sorted by type alpha then $XX")
     for i=1,20 do
       apple2.DownArrowKey()
-      a2d.WaitForRepaint()
+      a2dtest.WaitForSystemTask()
     end
     test.Snap("verify sorted by type alpha then $XX")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -247,15 +254,16 @@ end)
 test.Step(
   "View by Size - Ordering",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_SIZE)
+    desktop.OpenWindow("/TESTS/FILE.TYPES")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_SIZE)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify sorted large to small then dirs")
     for i=1,20 do
       apple2.DownArrowKey()
-      a2d.WaitForRepaint()
+      a2dtest.WaitForSystemTask()
     end
     test.Snap("verify sorted large to small then dirs")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -276,35 +284,36 @@ end)
 test.Step(
   "Icons in list can be selected and dragged",
   function()
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     local vol_icon_x, vol_icon_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.OpenPath("/TESTS/VIEW/DRAGGING")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
+    desktop.OpenWindow("/TESTS/VIEW/DRAGGING")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
 
     local window_x,window_y = a2dtest.GetFrontWindowContentRect()
 
-    a2d.ClearSelection()
+    desktop.ClearSelection()
     test.ExpectNotIMatch(a2dtest.OCRScreen({invert=true}), "FILE", "file should not be selected")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(window_x+11, window_y+21)
         m.Click()
-        a2d.WaitForRepaint()
+        a2dtest.WaitForSystemTask()
         m.MoveByApproximately(20, 20)
     end)
     test.ExpectIMatch(a2dtest.OCRScreen({invert=true}), "FILE", "clicking bitmap should select")
 
-    a2d.ClearSelection()
+    desktop.ClearSelection()
     test.ExpectNotIMatch(a2dtest.OCRScreen({invert=true}), "FILE", "file should not be selected")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(window_x+35, window_y+21)
         m.Click()
-        a2d.WaitForRepaint()
+        a2dtest.WaitForSystemTask()
         m.MoveByApproximately(20, 20)
     end)
     test.ExpectIMatch(a2dtest.OCRScreen({invert=true}), "FILE", "clicking name should select")
 
-    a2d.ClearSelection()
+    desktop.ClearSelection()
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(window_x+35, window_y+21)
         m.ButtonDown()
@@ -316,14 +325,14 @@ test.Step(
         end)
         test.ExpectMatch(a2dtest.OCRFrontWindowContent(), "Copying: 1 file", "drag to other volume icon should initiate copy")
     end)
-    emu.wait(10) -- wait for copy
+    a2dtest.WaitForSystemTask() -- wait for copy
 
-    a2d.ClearSelection()
+    desktop.ClearSelection()
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(window_x+35, window_y+18)
         m.ButtonDown()
         m.MoveByApproximately(0, 12)
-        a2d.WaitForRepaint()
+        emu.wait(1) -- during drag
         test.Snap("verify dragging over folder icon highlights")
         m.ButtonUp()
         util.WaitFor(
@@ -332,9 +341,9 @@ test.Step(
         end)
         test.ExpectMatch(a2dtest.OCRFrontWindowContent(), "Moving: 1 file", "drop on folder icon should initiate move")
     end)
-    emu.wait(10) -- wait for move
+    a2dtest.WaitForSystemTask() -- wait for move
 
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -346,14 +355,15 @@ end)
 test.Step(
   "Icons in list view don't move",
   function()
-    a2d.OpenPath("/TESTS/VIEW/DRAGGING")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
+    desktop.OpenWindow("/TESTS/VIEW/DRAGGING")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
 
     apple2.DownArrowKey() -- select first item
     util.WaitFor(
       "selection to update", function()
         return a2dtest.IsSelectionInFrontWindow()
-    end)
+      end, {wait=0.25})
     local x, y = a2dtest.GetSelectedIconCoords()
 
     a2d.InMouseKeysMode(function(m)
@@ -367,12 +377,12 @@ test.Step(
             m.ButtonDown()
             m.MoveByApproximately(100, 0)
             m.ButtonUp()
-            a2d.WaitForRepaint()
+            a2dtest.WaitForSystemTask()
             m.Home()
         end)
     end)
 
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -384,12 +394,13 @@ end)
 test.Step(
   "Rename causes refresh",
   function()
-    a2d.OpenPath("/TESTS/VIEW/RENAME.REFRESH")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.Select("ANTEATER")
-    a2d.RenameSelection("YAK")
+    desktop.OpenWindow("/TESTS/VIEW/RENAME.REFRESH")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
+    desktop.Select("ANTEATER")
+    desktop.RenameSelection("YAK")
     test.Snap("verify selection retained, in order, and in view")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -403,15 +414,16 @@ end)
 test.Step(
   "Rename causes refresh with two windows",
   function()
-    a2d.OpenPath("/TESTS/VIEW")
-    a2d.SelectAndOpen("RENAME.REFRESH")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.Select("BUNYIP")
-    a2d.CycleWindows()
-    a2d.MoveWindowBy(0,100)
-    a2d.RenameSelection("ZEBRA")
+    desktop.OpenWindow("/TESTS/VIEW")
+    desktop.SelectAndOpen("RENAME.REFRESH")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
+    desktop.Select("BUNYIP")
+    desktop.CycleWindows()
+    desktop.MoveWindowBy(0,100)
+    desktop.RenameSelection("ZEBRA")
     test.Snap("verify selection retained, in order, and in view")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -424,22 +436,24 @@ end)
 test.Step(
   "Folder icons stay dimmed",
   function()
-    a2d.OpenPath("/TESTS")
-    a2d.SelectAndOpen("ALIASES")
-    a2d.CycleWindows()
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
+    desktop.OpenWindow("/TESTS")
+    desktop.SelectAndOpen("ALIASES")
+    desktop.CycleWindows()
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
 
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "one icon should be selected")
-    test.ExpectEqualsIgnoreCase(a2d.GetSelectedIcons()[1].name, "ALIASES", "clicked icon should be selected")
-    test.Expect(a2d.GetSelectedIcons()[1].dimmed, "selected icon should be dimmed")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 1, "one icon should be selected")
+    test.ExpectEqualsIgnoreCase(desktop.GetSelectedIcons()[1].name, "ALIASES", "clicked icon should be selected")
+    test.Expect(desktop.GetSelectedIcons()[1].dimmed, "selected icon should be dimmed")
 
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_AS_ICONS)
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_AS_ICONS)
+    a2dtest.WaitForSystemTask()
 
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "one icon should be selected")
-    test.ExpectEqualsIgnoreCase(a2d.GetSelectedIcons()[1].name, "ALIASES", "clicked icon should be selected")
-    test.Expect(a2d.GetSelectedIcons()[1].dimmed, "selected icon should be dimmed")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 1, "one icon should be selected")
+    test.ExpectEqualsIgnoreCase(desktop.GetSelectedIcons()[1].name, "ALIASES", "clicked icon should be selected")
+    test.Expect(desktop.GetSelectedIcons()[1].dimmed, "selected icon should be dimmed")
 
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -450,20 +464,22 @@ end)
 test.Step(
   "Volume icons stay dimmed",
   function()
-    a2d.OpenPath("/TESTS")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
+    desktop.OpenWindow("/TESTS")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
 
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "one icon should be selected")
-    test.ExpectEqualsIgnoreCase(a2d.GetSelectedIcons()[1].name, "TESTS", "volume icon should be selected")
-    test.Expect(a2d.GetSelectedIcons()[1].dimmed, "selected icon should be dimmed")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 1, "one icon should be selected")
+    test.ExpectEqualsIgnoreCase(desktop.GetSelectedIcons()[1].name, "TESTS", "volume icon should be selected")
+    test.Expect(desktop.GetSelectedIcons()[1].dimmed, "selected icon should be dimmed")
 
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_AS_ICONS)
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_AS_ICONS)
+    a2dtest.WaitForSystemTask()
 
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "one icon should be selected")
-    test.ExpectEqualsIgnoreCase(a2d.GetSelectedIcons()[1].name, "TESTS", "volume icon should be selected")
-    test.Expect(a2d.GetSelectedIcons()[1].dimmed, "selected icon should be dimmed")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 1, "one icon should be selected")
+    test.ExpectEqualsIgnoreCase(desktop.GetSelectedIcons()[1].name, "TESTS", "volume icon should be selected")
+    test.Expect(desktop.GetSelectedIcons()[1].dimmed, "selected icon should be dimmed")
 
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -475,21 +491,22 @@ end)
 test.Step(
   "Volumes default to icon",
   function()
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     local vol_icon_x, vol_icon_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.OpenPath("/TESTS")
+    desktop.OpenWindow("/TESTS")
     test.Snap("verify icon view")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.SelectAndOpen("FILE.TYPES")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
+    desktop.SelectAndOpen("FILE.TYPES")
     test.Snap("verify name view")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(vol_icon_x, vol_icon_y)
         m.DoubleClick()
-        a2d.WaitForRepaint()
+        a2dtest.WaitForSystemTask()
     end)
     test.Snap("verify icon view")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -502,15 +519,17 @@ end)
 test.Step(
   "Folders in Apple menu",
   function()
-    a2d.OpenPath("/A2.DESKTOP")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_AS_SMALL_ICONS)
-    a2d.SelectAndOpen("APPLE.MENU")
-    a2d.SelectAndOpen("CONTROL.PANELS")
+    desktop.OpenWindow("/A2.DESKTOP")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_AS_SMALL_ICONS)
+    a2dtest.WaitForSystemTask()
+    desktop.SelectAndOpen("APPLE.MENU")
+    desktop.SelectAndOpen("CONTROL.PANELS")
     test.Snap("verify small icon view")
-    a2d.CycleWindows()
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.CONTROL_PANELS)
+    desktop.CycleWindows()
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.CONTROL_PANELS)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify small icon view")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -523,29 +542,32 @@ end)
 test.Step(
   "Volume icon selection and multiple view switches",
   function()
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     local vol_icon_x, vol_icon_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.OpenPath("/TESTS")
-    a2d.InMouseKeysMode(function(m)
-        m.MoveToApproximately(vol_icon_x, vol_icon_y)
-        m.Click()
-    end)
-    a2d.SelectAll()
+    desktop.OpenWindow("/TESTS")
 
-    local count = #a2d.GetSelectedIcons()
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    test.ExpectEquals(#a2d.GetSelectedIcons(), count, "icons should still be selected")
+    desktop.ClearSelectionAndFocusDesktop()
+    desktop.SelectAll()
+    a2dtest.WaitForSystemTask()
+
+    local count = #desktop.GetSelectedIcons()
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), count, "icons should still be selected")
 
     a2d.OAShortcut("I") -- File > Get Info
-    emu.wait(10)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify File > Get File Info show volume info")
     a2d.DialogCancel()
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_AS_ICONS)
+    a2dtest.WaitForSystemTask()
 
-    test.ExpectEquals(#a2d.GetSelectedIcons(), count, "icons should still be selected")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_AS_ICONS)
+    a2dtest.WaitForSystemTask()
 
-    a2d.CloseAllWindows()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), count, "icons should still be selected")
+
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -556,12 +578,13 @@ end)
 test.Step(
   "File icon selection retained",
   function()
-    a2d.OpenPath("/A2.DESKTOP")
-    a2d.SelectAll()
-    local count = #a2d.GetSelectedIcons()
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    test.ExpectEquals(#a2d.GetSelectedIcons(), count, "icons should still be selected")
-    a2d.CloseAllWindows()
+    desktop.OpenWindow("/A2.DESKTOP")
+    desktop.SelectAll()
+    local count = #desktop.GetSelectedIcons()
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), count, "icons should still be selected")
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -573,22 +596,22 @@ end)
 test.Step(
   "Selection order retained",
   function()
-    a2d.OpenPath("/TESTS/VIEW/SELECTION.ORDER")
+    desktop.OpenWindow("/TESTS/VIEW/SELECTION.ORDER")
 
-    a2d.Select("ONE")
+    desktop.Select("ONE")
     local x1, y1 = a2dtest.GetSelectedIconCoords()
-    a2d.Select("TWO")
+    desktop.Select("TWO")
     local x2, y2 = a2dtest.GetSelectedIconCoords()
-    a2d.Select("THREE")
+    desktop.Select("THREE")
     local x3, y3 = a2dtest.GetSelectedIconCoords()
-    a2d.Select("FOUR")
+    desktop.Select("FOUR")
     local x4, y4 = a2dtest.GetSelectedIconCoords()
-    a2d.Select("FIVE")
+    desktop.Select("FIVE")
     local x5, y5 = a2dtest.GetSelectedIconCoords()
-    a2d.Select("SIX")
+    desktop.Select("SIX")
     local x6, y6 = a2dtest.GetSelectedIconCoords()
 
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x1, y1)
@@ -604,12 +627,15 @@ test.Step(
         m.MoveToApproximately(x6, y6)
         m.OAClick()
     end)
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.SORT_DIRECTORY)
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_AS_ICONS)
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.SORT_DIRECTORY)
+    a2dtest.WaitForSystemTask()
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_AS_ICONS)
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectAll()
-    local icons = a2d.GetSelectedIcons()
+    desktop.SelectAll()
+    local icons = desktop.GetSelectedIcons()
     test.ExpectEquals(#icons, 6, "five icons should be selected")
     test.ExpectEqualsIgnoreCase(icons[1].name, "ONE", "selection order should be retained")
     test.ExpectEqualsIgnoreCase(icons[2].name, "TWO", "selection order should be retained")
@@ -618,7 +644,7 @@ test.Step(
     test.ExpectEqualsIgnoreCase(icons[5].name, "FIVE", "selection order should be retained")
     test.ExpectEqualsIgnoreCase(icons[6].name, "SIX", "selection order should be retained")
 
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -629,20 +655,21 @@ end)
 test.Step(
   "Volume icon selection",
   function()
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     local vol_icon_x, vol_icon_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.OpenPath("/TESTS")
+    desktop.OpenWindow("/TESTS")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(vol_icon_x, vol_icon_y)
         m.Click()
     end)
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
 
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "one icon should be selected")
-    test.ExpectEqualsIgnoreCase(a2d.GetSelectedIcons()[1].name, "A2.DESKTOP", "clicked icon should be selected")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 1, "one icon should be selected")
+    test.ExpectEqualsIgnoreCase(desktop.GetSelectedIcons()[1].name, "A2.DESKTOP", "clicked icon should be selected")
 
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -653,12 +680,12 @@ end)
 test.Step(
   "View menu item states",
   function()
-    a2d.OpenPath("/TESTS")
-    a2d.OpenMenu(a2d.VIEW_MENU)
+    desktop.OpenWindow("/TESTS")
+    a2d.OpenMenu(desktop.VIEW_MENU)
     test.Snap("verify 'as Icons' is checked")
     apple2.EscapeKey()
-    a2d.CloseAllWindows()
-    a2d.OpenMenu(a2d.VIEW_MENU)
+    desktop.CloseAllWindows()
+    a2d.OpenMenu(desktop.VIEW_MENU)
     local ocr = a2dtest.OCRScreen()
     test.ExpectNotMatch(ocr, "as Icons", "all menu items should be disabled")
     test.ExpectNotMatch(ocr, "as Small Icons", "all menu items should be disabled")
@@ -666,4 +693,27 @@ test.Step(
     test.ExpectNotMatch(ocr, "by Date", "all menu items should be disabled")
     test.ExpectNotMatch(ocr, "by Size", "all menu items should be disabled")
     test.ExpectNotMatch(ocr, "by Type", "all menu items should be disabled")
+end)
+
+--[[
+  File > New Folder. View > by Date / Size / Type. File > Rename
+  Give it a new name. Verify that the icon is correctly "small" style
+  and cannot be dragged.
+]]
+test.Step(
+  "Rename in list view doesn't lose icon flags",
+  function()
+    for i, item in ipairs({
+      desktop.VIEW_AS_ICONS, desktop.VIEW_AS_SMALL_ICONS,
+      desktop.VIEW_BY_NAME, desktop.VIEW_BY_DATE, desktop.VIEW_BY_SIZE, desktop.VIEW_BY_TYPE }) do
+      desktop.OpenWindow("/RAM1")
+      desktop.CreateFolder("SAMPLE.FOLDER")
+      a2d.InvokeMenuItem(desktop.VIEW_MENU, item)
+      a2dtest.WaitForSystemTask()
+      local flags = desktop.GetSelectedIcons()[1].flags
+      desktop.RenameSelection("SOME.NEW.NAME")
+      -- TODO: Would be better to test behavior rather than internal state.
+      test.ExpectEquals(desktop.GetSelectedIcons()[1].flags, flags, "flags should not have changed")
+      desktop.EraseVolume("RAM1")
+    end
 end)

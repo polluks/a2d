@@ -47,8 +47,7 @@ pencopy:        .byte   MGTK::pencopy
 
 pensize:        .byte   2, 1
 
-        DEFINE_POINT pt1, 0, 0
-        DEFINE_POINT pt2, 0, 0
+        DEFINE_LINE line, 0, 0, 0, 0
 
         DEFINE_POINT pt_center, kScreenWidth/2, kScreenHeight/2
         DEFINE_POINT pt_m, 0, 0
@@ -108,29 +107,27 @@ parsed: .tag    ParsedDateTime
         sta     tindex
         sta     tfives
     DO
-        ldx     tindex
-        txa
+        lda     tindex
         asl
         tax
 
-        copy16  ticks_outer_xs,x, pt1::xcoord
-        copy16  ticks_outer_ys,x, pt1::ycoord
+        copy16  ticks_outer_xs,x, line::start::xcoord
+        copy16  ticks_outer_ys,x, line::start::ycoord
 
-        lda     tfives
-      IF ZERO
-        copy16  ticks_inner2_xs,x, pt2::xcoord
-        copy16  ticks_inner2_ys,x, pt2::ycoord
+      IF u8 tfives = #0
+        copy16  ticks_inner2_xs,x, line::end::xcoord
+        copy16  ticks_inner2_ys,x, line::end::ycoord
         copy8   #4, tfives
       ELSE
-        copy16  ticks_inner1_xs,x, pt2::xcoord
-        copy16  ticks_inner1_ys,x, pt2::ycoord
+        copy16  ticks_inner1_xs,x, line::end::xcoord
+        copy16  ticks_inner1_ys,x, line::end::ycoord
         dec     tfives
       END_IF
 
-        MGTK_CALL MGTK::MoveTo, pt1
-        MGTK_CALL MGTK::LineTo, pt2
+        MGTK_CALL MGTK::MoveTo, line::start
+        MGTK_CALL MGTK::LineTo, line::end
 
-    WHILE inc tindex : lda tindex : A <> #60
+    WHILE u8 ++tindex <> #60
 
         rts
 
@@ -148,9 +145,7 @@ tfives: .byte   0
         ;; Compare
         ldx     #.sizeof(DateTime)-1
     DO
-        lda     datetime,x
-        cmp     last,x
-        bne     diff
+        IF u8 datetime,x <> last,x GOTO diff
     WHILE dex : POS
         rts                     ; no change
 

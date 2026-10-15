@@ -208,19 +208,26 @@ pupil_rect:
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
+
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params::kind
-        cmp     #MGTK::EventKind::button_down
-        beq     HandleDown
-        cmp     #MGTK::EventKind::key_down
-        beq     HandleKey
-        cmp     #MGTK::EventKind::no_event
-        beq     HandleNoEvent
-        jmp     InputLoop
+      IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      ELSE_IF A = #MGTK::EventKind::no_event
+        jsr     HandleNoEvent
+      END_IF
+
+    FOREVER
 .endproc ; InputLoop
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         MGTK_CALL MGTK::CloseWindow, winfo
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
         rts
@@ -234,14 +241,12 @@ pupil_rect:
         ldx     event_params::modifiers
     IF NOT_ZERO
         jsr     ToUpperCase
-        cmp     #kShortcutCloseWindow
-        beq     Exit
-        bne     InputLoop       ; always
+        IF A = #kShortcutCloseWindow GOTO Exit
+        rts
     END_IF
 
-        cmp     #CHAR_ESCAPE
-        beq     Exit
-        bne     InputLoop       ; always
+        IF A = #CHAR_ESCAPE GOTO Exit
+        rts
 .endproc ; HandleKey
 
 ;;; ============================================================
@@ -250,17 +255,13 @@ pupil_rect:
         copy16  event_params::xcoord, findwindow_params::mousex
         copy16  event_params::ycoord, findwindow_params::mousey
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        bne     InputLoop
+        RTS_IF u8 findwindow_params::window_id <> #kDAWindowId
+
         lda     findwindow_params::which_area
-        cmp     #MGTK::Area::close_box
-        beq     HandleClose
-        cmp     #MGTK::Area::dragbar
-        jeq     HandleDrag
-        cmp     #MGTK::Area::content
-        jeq     HandleGrow
-        jmp     InputLoop
+        IF A = #MGTK::Area::close_box GOTO HandleClose
+        IF A = #MGTK::Area::dragbar   JUMP HandleDrag
+        IF A = #MGTK::Area::content   JUMP HandleGrow
+        rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -269,7 +270,7 @@ pupil_rect:
         MGTK_CALL MGTK::TrackGoAway, trackgoaway_params
         lda     trackgoaway_params::clicked
         bne     Exit
-        jmp     InputLoop
+        rts
 .endproc ; HandleClose
 
 ;;; ============================================================
@@ -288,27 +289,28 @@ test:
     IF NEG
         sub16   #0, delta, delta ; negate
     END_IF
-        cmp16   delta, #kMoveThresholdX
-        bcs     moved
+
+    IF u16 delta < #kMoveThresholdX
 
         ;; Compute absolute Y delta
         sub16   event_params::ycoord, screentowindow_params::screen::ycoord, delta
         lda     delta+1
-    IF NEG
+      IF NEG
         sub16   #0, delta, delta ; negate
-    END_IF
-        cmp16   delta, #kMoveThresholdY
-        bcs     moved
+      END_IF
 
+      IF u16 delta < #kMoveThresholdY
         ;; Hasn't moved enough
         jmp     done
+      END_IF
+    END_IF
 
 moved:  copy16  event_params::xcoord, screentowindow_params::screen::xcoord
         copy16  event_params::ycoord, screentowindow_params::screen::ycoord
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         jsr     DrawWindow
 
-done:   jmp     InputLoop
+done:   rts
 
 
 delta:  .word   0
@@ -334,7 +336,7 @@ common:
         jsr     DrawWindow
     END_IF
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleDrag
 
 ;;; ============================================================
@@ -346,9 +348,9 @@ common:
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
 
         sub16   winfo::maprect::x2, mx, tmpw
-    IF cmp16 #kGrowBoxWidth, tmpw : GE
+    IF u16 #kGrowBoxWidth >= tmpw
         sub16   winfo::maprect::y2, my, tmpw
-      IF cmp16 #kGrowBoxHeight, tmpw : GE
+      IF u16 #kGrowBoxHeight >= tmpw
 
         ;; Initiate the grow... re-using the drag logic
         copy8   #kDAWindowId, dragwindow_params::window_id
@@ -360,14 +362,13 @@ common:
       END_IF
     END_IF
 
-        jmp     InputLoop
+        rts
 
 tmpw:   .word   0
 .endproc ; HandleGrow
 
 ;;; ============================================================
 
-penXOR: .byte   MGTK::penXOR
 pencopy:        .byte   MGTK::pencopy
 notpencopy:     .byte   MGTK::notpencopy
 
@@ -392,12 +393,17 @@ kMoveThresholdY = 5
         DEFINE_POINT pos_l, 0, 0
         DEFINE_POINT pos_r, 0, 0
 
+        DEFINE_POINT last_l, 0, 0
+        DEFINE_POINT last_r, 0, 0
+
 ;;; ============================================================
 
 .proc DrawWindow
         ;; Defer if content area is not visible
         MGTK_CALL MGTK::GetWinPort, getwinport_params
         RTS_IF A = #MGTK::Error::window_obscured
+
+        CLEAR_BIT7_FLAG skip_erase_flag
 
         ;; Defer until we have mouse coords
         lda     has_last_coords
@@ -406,14 +412,14 @@ kMoveThresholdY = 5
         MGTK_CALL MGTK::SetPort, grafport
 
         lda     has_drawn_outline
-        jne     erase_pupils
+        jne     done_outline
         inc     has_drawn_outline
 
         MGTK_CALL MGTK::SetPenMode, notpencopy
 
         ;; Draw resize box
-        sub16   winfo::maprect::x2, #kGrowBoxWidth, grow_box_params::viewloc::xcoord
-        sub16   winfo::maprect::y2, #kGrowBoxHeight, grow_box_params::viewloc::ycoord
+        SET s16 grow_box_params::viewloc::xcoord = winfo::maprect::x2 - #kGrowBoxWidth,
+        SET s16 grow_box_params::viewloc::ycoord = winfo::maprect::y2 - #kGrowBoxHeight
         MGTK_CALL MGTK::PaintBits, grow_box_params
 
         ;; Draw outline
@@ -421,77 +427,101 @@ kMoveThresholdY = 5
         MGTK_CALL MGTK::SetZP1, setzp_params_nopreserve
 
         ;; Left
-        copy16  #0, eye_rect+MGTK::Rect::x1
-        copy16  #0, eye_rect+MGTK::Rect::y1
-        copy16  winfo::maprect::x2, eye_rect+MGTK::Rect::x2
-        lsr16   eye_rect+MGTK::Rect::x2
-        add16   winfo::maprect::y2, #1, eye_rect+MGTK::Rect::y2
+        SET s16 eye_rect+MGTK::Rect::x1 = #0
+        SET s16 eye_rect+MGTK::Rect::y1 = #0
+        SET s16 eye_rect+MGTK::Rect::x2 = winfo::maprect::x2
+        SET s16 eye_rect+MGTK::Rect::x2 >>= #1
+        SET s16 eye_rect+MGTK::Rect::y2 = winfo::maprect::y2 + #1
         jsr     DrawEyeball
 
         ;; Right
-        copy16  eye_rect+MGTK::Rect::x2, eye_rect+MGTK::Rect::x1
-        copy16  winfo::maprect::x2, eye_rect+MGTK::Rect::x2
+        SET s16 eye_rect+MGTK::Rect::x1 = (eye_rect+MGTK::Rect::x2)
+        SET s16 eye_rect+MGTK::Rect::x2 = winfo::maprect::x2
         jsr     DrawEyeball
 
         MGTK_CALL MGTK::SetZP1, setzp_params_preserve
 
         ;; Skip erasing pupils if we're redrawing
-        jmp     draw_pupils
+        SET_BIT7_FLAG skip_erase_flag
+done_outline:
 
-        ;; TODO: Redo this to reduce flicker; compute new pos first,
-        ;; and only erase/redraw one at a time.
+        ;; Save previous coords (for erasing)
+        COPY_STRUCT pos_l, last_l
+        COPY_STRUCT pos_r, last_r
 
-erase_pupils:
+        ;; Compute new coords
+        SET s16 rx = winfo::maprect::x2 + #2 ; width / 4
+        SET s16 rx >>= #1
+        SET s16 rx >>= #1
+        SET s16 ry = winfo::maprect::y2 + #2 ; height / 2
+        SET s16 ry >>= #1
+
+        SET s16 cx = rx
+        SET s16 cy = ry
+        jsr     ComputePupilPos
+        SET s16 pos_l::xcoord = ppx - #kPupilW/2
+        SET s16 pos_l::ycoord = ppy - #kPupilH/2
+
+        SET s16 cx = rx + cx
+        SET s16 cx = rx + cx
+        jsr     ComputePupilPos
+        SET s16 pos_r::xcoord = ppx - #kPupilW/2
+        SET s16 pos_r::ycoord = ppy - #kPupilH/2
+
+        ;; Do one pupil at a time to minimize flicker
+        MGTK_CALL MGTK::SetZP1, setzp_params_nopreserve ; go fast
+
+    IF bit skip_erase_flag : NC
         MGTK_CALL MGTK::SetPenMode, pencopy
-        jsr     _DrawPupils
-
-draw_pupils:
+        ldax    last_l::xcoord
+        stax    pupil_rect+MGTK::Rect::x1
+        addax   #kPupilW, pupil_rect+MGTK::Rect::x2
+        ldax    last_l::ycoord
+        stax    pupil_rect+MGTK::Rect::y1
+        addax   #kPupilH, pupil_rect+MGTK::Rect::y2
+        jsr     _DrawPupil
+    END_IF
         MGTK_CALL MGTK::SetPenMode, notpencopy
-        add16 winfo::maprect::x2, #2, rx ; width / 4
-        lsr16 rx
-        lsr16 rx
-        add16 winfo::maprect::y2, #2, ry ; height / 2
-        lsr16 ry
-
-        copy16  rx, cx
-        copy16  ry, cy
-        jsr     ComputePupilPos
-        sub16  ppx, #kPupilW/2, pos_l::xcoord
-        sub16  ppy, #kPupilH/2, pos_l::ycoord
-
-        add16   rx, cx, cx
-        add16   rx, cx, cx
-        jsr     ComputePupilPos
-        sub16  ppx, #kPupilW/2, pos_r::xcoord
-        sub16  ppy, #kPupilH/2, pos_r::ycoord
-
-        FALL_THROUGH_TO _DrawPupils
-
-.proc _DrawPupils
         ldax    pos_l::xcoord
         stax    pupil_rect+MGTK::Rect::x1
         addax   #kPupilW, pupil_rect+MGTK::Rect::x2
         ldax    pos_l::ycoord
         stax    pupil_rect+MGTK::Rect::y1
         addax   #kPupilH, pupil_rect+MGTK::Rect::y2
-        MGTK_CALL MGTK::ShieldCursor, pupil_rect
-        MGTK_CALL MGTK::PaintRect, pupil_rect
-        MGTK_CALL MGTK::UnshieldCursor
-        MGTK_CALL MGTK::CheckEvents
+        jsr     _DrawPupil
 
+    IF bit skip_erase_flag : NC
+        MGTK_CALL MGTK::SetPenMode, pencopy
+        ldax    last_r::xcoord
+        stax    pupil_rect+MGTK::Rect::x1
+        addax   #kPupilW, pupil_rect+MGTK::Rect::x2
+        ldax    last_r::ycoord
+        stax    pupil_rect+MGTK::Rect::y1
+        addax   #kPupilH, pupil_rect+MGTK::Rect::y2
+        jsr     _DrawPupil
+    END_IF
+        MGTK_CALL MGTK::SetPenMode, notpencopy
         ldax    pos_r::xcoord
         stax    pupil_rect+MGTK::Rect::x1
         addax   #kPupilW, pupil_rect+MGTK::Rect::x2
         ldax    pos_r::ycoord
         stax    pupil_rect+MGTK::Rect::y1
         addax   #kPupilH, pupil_rect+MGTK::Rect::y2
+        jsr     _DrawPupil
+
+        MGTK_CALL MGTK::SetZP1, setzp_params_preserve
+        rts
+
+;;; Caller must set up `pupil_rect`
+.proc _DrawPupil
         MGTK_CALL MGTK::ShieldCursor, pupil_rect
         MGTK_CALL MGTK::PaintRect, pupil_rect
         MGTK_CALL MGTK::UnshieldCursor
         MGTK_CALL MGTK::CheckEvents
-
         rts
-.endproc ; _DrawPupils
+.endproc ; _DrawPupil
+
+skip_erase_flag:        .byte   0 ; bit7
 
 .endproc ; DrawWindow
 
@@ -503,59 +533,51 @@ draw_pupils:
         MGTK_CALL MGTK::ShieldCursor, eye_rect
 
         COPY_STRUCT MGTK::Rect, eye_rect, io_params::rect
-        copy16  #outer_oval, io_params::oval
-        sub16   io_params::rect::right, io_params::rect::left, io_params::width
-        sub16   io_params::rect::bottom, io_params::rect::top, io_params::height
+        SET u16 io_params::oval = #outer_oval
+        SET s16 io_params::width  = io_params::rect::right  - io_params::rect::left
+        SET s16 io_params::height = io_params::rect::bottom - io_params::rect::top
         jsr     InitOval
 
-        add16   eye_rect+MGTK::Rect::x1, #kPenW, io_params::rect::left
-        add16   eye_rect+MGTK::Rect::y1, #kPenH, io_params::rect::top
-        sub16   eye_rect+MGTK::Rect::x2, #kPenW, io_params::rect::right
-        sub16   eye_rect+MGTK::Rect::y2, #kPenH, io_params::rect::bottom
-        copy16  #inner_oval, io_params::oval
-        sub16   io_params::rect::right, io_params::rect::left, io_params::width
-        sub16   io_params::rect::bottom, io_params::rect::top, io_params::height
+        SET s16 io_params::rect::left   = (eye_rect+MGTK::Rect::x1) + #kPenW
+        SET s16 io_params::rect::top    = (eye_rect+MGTK::Rect::y1) + #kPenH
+        SET s16 io_params::rect::right  = (eye_rect+MGTK::Rect::x2) - #kPenW
+        SET s16 io_params::rect::bottom = (eye_rect+MGTK::Rect::y2) - #kPenH
+        SET u16 io_params::oval = #inner_oval
+        SET s16 io_params::width  = io_params::rect::right  - io_params::rect::left
+        SET s16 io_params::height = io_params::rect::bottom - io_params::rect::top
         jsr     InitOval
 
-        copy16  outer_oval+OvalRec::top, yy
+        SET s16 yy = (outer_oval+OvalRec::top)
 
     DO
-        copy16  #outer_oval, bo_params::oval
-        copy16  yy, bo_params::vert
+        SET s16 bo_params::oval = #outer_oval
+        SET s16 bo_params::vert = yy
         jsr     BumpOval
 
-        copy16  #inner_oval, bo_params::oval
-        copy16  yy, bo_params::vert
+        SET s16 bo_params::oval = #inner_oval
+        SET s16 bo_params::vert = yy
         jsr     BumpOval
 
-        copy16  yy, rect+MGTK::Rect::y1
-        copy16  yy, rect+MGTK::Rect::y2
+        SET s16 rect+MGTK::Rect::y1 = yy
+        SET s16 rect+MGTK::Rect::y2 = yy
 
-        cmp16   yy, inner_oval+OvalRec::top
-        bcc     outer_only
-        cmp16   yy, inner_oval+OvalRec::bottom
-        bcs     outer_only
-
+      IF u16 yy >= inner_oval+OvalRec::top AND u16 yy < inner_oval+OvalRec::bottom
         ;; Need to draw the left and right edges
-        copy16  outer_oval+OvalRec::leftEdge+2, rect+MGTK::Rect::x1
-        copy16  inner_oval+OvalRec::leftEdge+2, rect+MGTK::Rect::x2
+        SET s16 rect+MGTK::Rect::x1 = (outer_oval+OvalRec::leftEdge+2)
+        SET s16 rect+MGTK::Rect::x2 = (inner_oval+OvalRec::leftEdge+2)
         MGTK_CALL MGTK::PaintRect, rect
 
-        copy16  inner_oval+OvalRec::rightEdge+2, rect+MGTK::Rect::x1
-        copy16  outer_oval+OvalRec::rightEdge+2, rect+MGTK::Rect::x2
+        SET s16 rect+MGTK::Rect::x1 = (inner_oval+OvalRec::rightEdge+2)
+        SET s16 rect+MGTK::Rect::x2 = (outer_oval+OvalRec::rightEdge+2)
         MGTK_CALL MGTK::PaintRect, rect
-
-        jmp     next
-
-        ;; Only need to draw the outer oval
-outer_only:
-        copy16  outer_oval+OvalRec::leftEdge+2, rect+MGTK::Rect::x1
-        copy16  outer_oval+OvalRec::rightEdge+2, rect+MGTK::Rect::x2
+     ELSE
+         ;; Only need to draw the outer oval
+        SET s16 rect+MGTK::Rect::x1 = (outer_oval+OvalRec::leftEdge+2)
+        SET s16 rect+MGTK::Rect::x2 = (outer_oval+OvalRec::rightEdge+2)
         MGTK_CALL MGTK::PaintRect, rect
+     END_IF
 
-next:
-        inc16   yy
-    WHILE cmp16 yy, outer_oval+OvalRec::bottom : LT
+    WHILE u16 ++yy < outer_oval+OvalRec::bottom
 
         MGTK_CALL MGTK::UnshieldCursor
         rts
@@ -724,10 +746,10 @@ oval := $50
         ;; Init top/bottom to rect top/bottom
 
         ;; oval.top [16.0] = rect.top [16.0]
-        copy16 io_params::rect::top, oval+OvalRec::top
+        SET u16 oval+OvalRec::top = io_params::rect::top
 
         ;; oval.bottom [16.0] = rect.bottom [16.0]
-        copy16 io_params::rect::bottom, oval+OvalRec::bottom
+        SET u16 oval+OvalRec::bottom = io_params::rect::bottom
 
         ;; --------------------------------------------------
         ;; Check ovalWidth/Height, pin at 0
@@ -735,84 +757,84 @@ oval := $50
         ;; if (ovalWidth [16.0] < 0)
         ;;   ovalWidth [16.0] = 0
     IF bit ovalWidth+1 : NEG
-        copy16  #0, ovalWidth
+        SET u16 ovalWidth = #0
     END_IF
 
         ;; if (ovalHeight [16.0] < 0)
         ;;   ovalHeight [16.0] = 0
     IF bit ovalHeight+1 : NEG
-        copy16  #0, ovalHeight
+        SET u16 ovalHeight = #0
     END_IF
 
         ;; --------------------------------------------------
         ;; Check ovalWidth/Height, trim if bigger than rect
 
         ;; d0 [16.0] = rect.right [16.0] - rect.left [16.0]
-        sub16   io_params::rect::right, io_params::rect::left, d0
+        SET u16 d0 = io_params::rect::right - io_params::rect::left
 
         ;; if (ovalWidth [16.0] > d0 [16.0])
         ;;   ovalWidth [16.0] = d0 [16.0]
-    IF cmp16 ovalWidth, d0 : LT
-        copy16  d0, ovalWidth
+    IF u16 ovalWidth < d0
+        SET u16 ovalWidth = d0
     END_IF
 
         ;; d0 [16.0] = rect.bottom [16.0] - rect.top [16.0]
-        sub16   io_params::rect::bottom, io_params::rect::top, d0
+        SET u16 d0 = io_params::rect::bottom - io_params::rect::top
 
         ;; if (ovalHeight [16.0] > d0 [16.0])
         ;;   ovalHeight [16.0] = rect.bottom [16.0] - rect.top [16.0]
-    IF cmp16 ovalHeight, d0 : LT
-        copy16  d0, ovalHeight
+    IF u16 ovalHeight < d0
+        SET u16 ovalHeight = d0
     END_IF
 
         ;; --------------------------------------------------
         ;; Set up left/right edges, numbers
 
         ;; oval.rightEdge [16.16] = rect.right [16.0]
-        copy16 #0, oval+OvalRec::rightEdge
-        copy16 io_params::rect::right, oval+OvalRec::rightEdge+2
+        SET u16 oval+OvalRec::rightEdge = #0
+        SET u16 oval+OvalRec::rightEdge+2 = io_params::rect::right
 
         ;; oval.leftEdge [16.16] = rect.left [16.0]
-        copy16 #0, oval+OvalRec::leftEdge
-        copy16 io_params::rect::left, oval+OvalRec::leftEdge+2
+        SET u16 oval+OvalRec::leftEdge = #0
+        SET u16 oval+OvalRec::leftEdge+2 = io_params::rect::left
 
         ;; ovalWidthDiv2 [16.16] = ovalWidth [16.0] / 2
-        copy16  #0, ovalWidthDiv2
-        copy16  ovalWidth, ovalWidthDiv2+2
-        lsr32   ovalWidthDiv2
+        SET u16 ovalWidthDiv2 =  #0
+        SET u16 ovalWidthDiv2+2 =  ovalWidth
+        SET u32 ovalWidthDiv2 >>= #1
 
         ;; oval.leftEdge [16.16] = oval.leftEdge [16.16] + ovalWidthDiv2 [16.16]
-        add32   oval+OvalRec::leftEdge, ovalWidthDiv2, oval+OvalRec::leftEdge
+        SET u32 oval+OvalRec::leftEdge = (oval+OvalRec::leftEdge) + ovalWidthDiv2
 
         ;; oval.rightEdge [16.16] = oval.rightEdge [16.16] - ovalWidthDiv2 [16.16]
-        sub32   oval+OvalRec::rightEdge, ovalWidthDiv2, oval+OvalRec::rightEdge
+        SET u32 oval+OvalRec::rightEdge = (oval+OvalRec::rightEdge) - ovalWidthDiv2
 
         ;; oval.oneHalf [16.16] = 0.5
-        copy32  #$00008000, oval+OvalRec::oneHalf
+        SET u32 oval+OvalRec::oneHalf = #$00008000
 
         ;; Bias
         ;; oval.rightEdge [16.16] = oval.rightEdge [16.16] + oval.oneHalf [16.16]
-        add32   oval+OvalRec::rightEdge, oval+OvalRec::oneHalf, oval+OvalRec::rightEdge
+        SET u32 oval+OvalRec::rightEdge = (oval+OvalRec::rightEdge) + oval+OvalRec::oneHalf
 
         ;; --------------------------------------------------
         ;; Init y to -height + 1
 
         ;; oval.y [16.0] = 1 - ovalHeight [16.0]
-        sub16 #1, ovalHeight, oval+OvalRec::yy
+        SET u16 oval+OvalRec::yy = #1 - ovalHeight
 
         ;; --------------------------------------------------
         ;; Init rSqYSq to 2*ovalHeight-1
 
         ;; oval.rSqYSq [32.0] = 2 * ovalHeight [16.0] - 1
-        copy32  ovalHeight, oval+OvalRec::rSqYSq
+        SET u32 oval+OvalRec::rSqYSq = ovalHeight
         asl32   oval+OvalRec::rSqYSq
-        sub32   oval+OvalRec::rSqYSq, #1, oval+OvalRec::rSqYSq
+        SET u32 oval+OvalRec::rSqYSq = (oval+OvalRec::rSqYSq) - #1
 
         ;; --------------------------------------------------
         ;; Init square to 0
 
         ;; oval.square [16.16] = 0
-        copy32  #0, oval+OvalRec::square
+        SET u32 oval+OvalRec::square = #0
 
         ;; --------------------------------------------------
         ;; oddNum = 1 * aspect ratio squared
@@ -850,7 +872,7 @@ oval := $50
 
 
         ;; oval.oddNum [16.16] = aspect_ratio [16.16] * aspect_ratio [16.16];
-        copy32  aspect_ratio, temp
+        SET u32 temp = aspect_ratio
 
 .scope
 multiplier      := aspect_ratio
@@ -913,7 +935,7 @@ rotate:
         ;; oddBump = 2 * aspect ratio squared
 
         ;; oval.oddBump [16.16] = 2 * oval.oddNum [16.16];
-        copy32  oval+OvalRec::oddNum, oval+OvalRec::oddBump
+        SET u32 oval+OvalRec::oddBump = (oval+OvalRec::oddNum)
         asl32   oval+OvalRec::oddBump
 
         ;; --------------------------------------------------
@@ -951,11 +973,11 @@ rotate:
 
         ;; if (vert [16.0] < oval.top [16.0])
         ;;   return;
-        RTS_IF cmp16 vert, oval+OvalRec::top : LT
+        RTS_IF u16 vert < oval+OvalRec::top
 
         ;; if (vert [16.0] >= oval.bottom [16.0])
         ;;   return;
-        RTS_IF cmp16 vert, oval+OvalRec::bottom : GE
+        RTS_IF u16 vert >= oval+OvalRec::bottom
 
         ;; d0 [16.0] = oval.y [16.0];
         copy16  oval+OvalRec::yy, d0
@@ -968,8 +990,7 @@ rotate:
 
 loop1:
         ;; while (oval.square [16.16] < oval.rSqYSq [32.0] ) {
-        cmp16   oval+OvalRec::square+2, oval+OvalRec::rSqYSq
-        jcs     endloop1
+    IF u16 oval+OvalRec::square+2 < oval+OvalRec::rSqYSq
 
         ;; oval.rightEdge [16.16] = oval.rightEdge [16.16] + oval.oneHalf [16.16];
         add32   oval+OvalRec::rightEdge, oval+OvalRec::oneHalf, oval+OvalRec::rightEdge
@@ -985,15 +1006,14 @@ loop1:
 
         ;; }
         jmp     loop1
+    END_IF
 
-endloop1:
         ;; --------------------------------------------------
         ;; while square > rSqYSq make oval smaller
 
 loop2:
         ;; while (oval.square [16.16] > oval.rSqYSq [32.0]) {
-        cmp16   oval+OvalRec::square+2, oval+OvalRec::rSqYSq
-        jcc     endloop2
+    IF u16 oval+OvalRec::square+2 >= oval+OvalRec::rSqYSq
 
         ;; oval.rightEdge [16.16] = oval.rightEdge [16.16] - oval.oneHalf [16.16];
         sub32   oval+OvalRec::rightEdge, oval+OvalRec::oneHalf, oval+OvalRec::rightEdge
@@ -1009,7 +1029,7 @@ loop2:
 
         ;; }
         jmp     loop2
-endloop2:
+    END_IF
 
         ;; oval.rSqYSq [32.0] = oval.rSqYSq [32.0] - (4 * (d0 [16.0] + 1)));
 

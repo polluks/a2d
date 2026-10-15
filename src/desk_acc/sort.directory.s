@@ -115,7 +115,7 @@ start:  tsx
         TAIL_CALL JUMP_TABLE_SHOW_ALERT_PARAMS, AX=#aux::AlertNoWindowsOpen
     END_IF
 
-        CALL    JUMP_TABLE_RESTORE_OVL, A=#kDynamicRoutineRestoreBuffer
+        CALL    JUMP_TABLE_RESTORE_OVL
 
         TAIL_CALL JUMP_TABLE_ACTIVATE_WINDOW, A=window_id
 .endproc ; Exit
@@ -161,7 +161,6 @@ start:  tsx
 ;;; ============================================================
 ;;; ProDOS call parameter blocks
 
-        DEFINE_SET_MARK_PARAMS set_mark_params, $2B
         DEFINE_READWRITE_BLOCK_PARAMS block_params, 0, 0
 
         buffer := dir_data_buffer
@@ -169,10 +168,7 @@ start:  tsx
 
         DEFINE_OPEN_PARAMS open_params, path_buf, DA_IO_BUFFER
         DEFINE_READWRITE_PARAMS read_params, buffer, kBufferLen
-        DEFINE_READWRITE_PARAMS write_params, buffer, kBufferLen
         DEFINE_CLOSE_PARAMS close_params
-
-        DEFINE_GET_FILE_INFO_PARAMS file_info_params, path_buf
 
 path_buf:
         .res    kPathBufferSize, 0
@@ -353,10 +349,6 @@ done:   jmp     Exit
 
 ;;; ============================================================
 
-;;; Device number (needed for writing blocks)
-dev_num:
-        .byte   0
-
 ;;; Page (address hi byte) after last block.
 end_block_page:
         .byte   0
@@ -417,15 +409,11 @@ flag:   .byte   0
         bcc     :+
         inc     ptr+1
 
-:       lda     ptr
-        cmp     #$FF
-        bne     rtcc
+:       IF u8 ptr <> #$FF GOTO rtcc
         inc     ptr+1
         copy8   #1, entry_num
         copy8   #4, ptr         ; skip over block header
-        lda     ptr+1
-        cmp     end_block_page
-        bcs     rtcs
+        IF u8 ptr+1 >= end_block_page GOTO rtcs
 
 rtcc:   RETURN  C=0
 
@@ -469,11 +457,11 @@ rtcs:   RETURN  C=1
         ldy     #FileEntry::storage_type_name_length
         lda     (ptr1),y
         and     #STORAGE_TYPE_MASK ; Active file entry?
-        jeq     rtcc
+        beq     rtcc
 
         lda     (ptr2),y
         and     #STORAGE_TYPE_MASK ; Active file entry?
-        jeq     rtcs
+        beq     rtcs
 
         ;; Are we sorting by selection order?
         jsr     JUMP_TABLE_GET_SEL_COUNT
@@ -516,8 +504,7 @@ sys:
 
         ;; Then order by type from $FD down
         ldy     #FileEntry::file_type
-        lda     (ptr1),y
-        cmp     (ptr2),y
+        ucmp8   (ptr1),y, (ptr2),y
         bne     ret
         jmp     CompareEntryTypesAndNames
 
@@ -548,7 +535,7 @@ loop:   dex
         stax    entry_ptr
         pla
         tax
-        add16   entry_ptr, #IconEntry::name, entry_ptr
+        add16_8 entry_ptr, #IconEntry::name
         ldy     #0
         copy8   (entry_ptr),y, cmp_len ; len
 
@@ -590,7 +577,7 @@ loop2:  dex
         stax    entry_ptr
         pla
         tax
-        add16   entry_ptr, #IconEntry::name, entry_ptr
+        add16_8 entry_ptr, #IconEntry::name
         ldy     #0
         copy8   (entry_ptr),y, cmp_len2 ; len
 
@@ -624,8 +611,7 @@ done2:  stx     match2          ; match, or $FF if none
         and     match2
         cmp     #$FF            ; if either didn't match
         beq     clear
-        lda     match2
-        cmp     match
+        ucmp8   match2, match
         beq     clear           ; if they're the same
         rts                     ; otherwise carry is order
 
@@ -654,18 +640,14 @@ match2: .byte   0
         copy8   (ptr2),y, type2
         copy8   (ptr1),y, type1
 
-        lda     type2
-        cmp     type0
-    IF NE
-        lda     type1
-        cmp     type0
+    IF u8 type2 <> type0
+        ucmp8   type1, type0
         beq     rtcs
 
         bne     neither         ; always
     END_IF
 
-        lda     type1
-        cmp     type0
+        ucmp8   type1, type0
         bne     rtcc
         jsr     CompareFileEntryNames
         bcc     rtcc
@@ -696,8 +678,7 @@ type0:  .byte   0
         ;; Check for SYS
         stax    ptr
         ldy     #FileEntry::file_type
-        lda     (ptr),y
-        cmp     #FT_SYSTEM
+        ucmp8   (ptr),y, #FT_SYSTEM
         bne     fail
 
         ;; Could name end in .SYSTEM?
@@ -715,8 +696,7 @@ type0:  .byte   0
     DO
         iny
         inx
-        lda     (ptr),y
-        cmp     str_system,x
+        ucmp8   (ptr),y, str_system,x
         bne     fail
     WHILE X <> str_system
 
@@ -751,8 +731,7 @@ str_system:
 
         ldy     #0
 loop:   iny
-        lda     (ptr2),y
-        cmp     (ptr1),y
+        ucmp8   (ptr2),y, (ptr1),y
         beq     next
         bcc     rtcc
 rtcs:   RETURN  C=1
@@ -761,8 +740,7 @@ rtcs:   RETURN  C=1
 next:   cpy     #SELF_MODIFIED_BYTE
 
         bne     loop
-        lda     len2
-        cmp     len1
+        ucmp8   len2, len1
         beq     rtcc
         bcs     rtcs
 rtcc:   RETURN  C=0

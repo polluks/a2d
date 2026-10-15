@@ -7,8 +7,6 @@ DISKARGS="-hard1 $HARDIMG -flop1 prodos_floppy1.dsk"
 
 local s6d1 = manager.machine.images[":sl6:diskiing:0:525"]
 
-a2d.ConfigureRepaintTime(1)
-
 --[[
   Launch DeskTop. Open a window. Hold Solid-Apple and double-click a
   folder icon. Verify that the folder opens, and that the original
@@ -17,9 +15,9 @@ a2d.ConfigureRepaintTime(1)
 test.Step(
   "Solid Apple Double-Click",
   function()
-    a2d.SelectPath("/A2.DESKTOP/EXTRAS")
+    desktop.SelectPath("/A2.DESKTOP/EXTRAS")
     local x, y = a2dtest.GetSelectedIconCoords()
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 
     -- Over "Extras"
     a2d.InMouseKeysMode(function(m)
@@ -28,7 +26,7 @@ test.Step(
         m.DoubleClick()
         apple2.ReleaseSA()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "EXTRAS", "folder window should be open")
@@ -42,7 +40,7 @@ end)
 test.Step(
   "Solid Apple File > Open",
   function()
-    a2d.SelectPath("/A2.DESKTOP/EXTRAS")
+    desktop.SelectPath("/A2.DESKTOP/EXTRAS")
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(30, 5)
@@ -52,7 +50,7 @@ test.Step(
         m.Click()
         apple2.ReleaseSA()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "EXTRAS", "folder window should be open")
@@ -66,7 +64,7 @@ end)
 test.Step(
   "Open Apple File > Open",
   function()
-    a2d.SelectPath("/A2.DESKTOP/EXTRAS")
+    desktop.SelectPath("/A2.DESKTOP/EXTRAS")
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(30, 5)
@@ -76,7 +74,7 @@ test.Step(
         m.Click()
         apple2.ReleaseOA()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "EXTRAS", "folder window should be open")
@@ -93,9 +91,10 @@ test.Variants(
     {"Open Apple + Solid Apple + o", "o"},
   },
   function(idx, name, key)
-    a2d.SelectPath("/A2.DESKTOP/EXTRAS")
+    desktop.SelectPath("/A2.DESKTOP/EXTRAS")
 
     a2d.OASAShortcut(key)
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "EXTRAS", "folder window should be open")
@@ -109,8 +108,9 @@ end)
 test.Step(
   "Open Apple + Solid Apple + Down",
   function()
-    a2d.SelectPath("/A2.DESKTOP/EXTRAS")
+    desktop.SelectPath("/A2.DESKTOP/EXTRAS")
     a2d.OASADown()
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "EXTRAS", "folder window should be open")
@@ -127,14 +127,14 @@ test.Variants(
     {"With menu showing, Open Apple + Solid Apple + o", "o"},
   },
   function(idx, name, key)
-    a2d.SelectPath("/A2.DESKTOP/EXTRAS")
+    desktop.SelectPath("/A2.DESKTOP/EXTRAS")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(30, 5)
         m.Click()
     end)
 
     a2d.OASAShortcut(key)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "EXTRAS", "folder window should be open")
@@ -151,9 +151,10 @@ test.Variants(
     {"No selection, OA+SA+o", "o"},
   },
   function(idx, name, key)
-    a2d.ClearSelection()
+    desktop.ClearSelection()
     a2dtest.ExpectNothingChanged(function()
         a2d.OASAShortcut(key)
+        a2dtest.WaitForSystemTask()
     end)
 end)
 
@@ -164,10 +165,10 @@ end)
 test.Step(
   "No selection, OA+SA+Down",
   function()
-    a2d.ClearSelection()
+    desktop.ClearSelection()
     a2dtest.ExpectNothingChanged(function()
         a2d.OASADown()
-        a2d.WaitForRepaint()
+        a2dtest.WaitForSystemTask()
     end)
 end)
 
@@ -182,11 +183,11 @@ test.Step(
     local current = drive.filename
     drive:unload()
 
-    a2d.SelectPath("/FLOPPY1")
+    desktop.SelectPath("/FLOPPY1")
     a2d.OASADown()
     a2dtest.WaitForAlert({match="volume cannot be found"})
     a2d.DialogOK() -- OK
-    emu.wait(5) -- slow floppy
+    a2dtest.WaitForSystemTask()
     a2dtest.ExpectNotHanging()
 
     drive:load(current)

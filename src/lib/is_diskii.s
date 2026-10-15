@@ -52,22 +52,16 @@
         ;; Need to test this in case a device was remapped into
         ;; this slot. Look for the signature bytes.
         ldy     #$01            ; $Cn01 = $20 ?
-        lda     (ptr),y
-        cmp     #$20
-        bne     not_diskii
+        IF u8 (ptr),y <> #$20 GOTO not_diskii
         ldy     #$03            ; $Cn03 = $00 ?
-        lda     (ptr),y
-        cmp     #$00
+        ucmp8   (ptr),y, #$00   ; TODO: Convert to `IF...GOTO` (but changes output c/o optimization)
         bne     not_diskii
         ldy     #$05            ; $Cn05 = $03 ?
-        lda     (ptr),y
-        cmp     #$03
-        bne     not_diskii
+        IF u8 (ptr),y <> #$03 GOTO not_diskii
 
         ;; Slot contains a ProDOS device. But is it a Disk II?
         ldy     #$FF            ; $CnFF = $00 is a 16-sector Disk II
-        lda     (ptr),y
-        cmp     #$00
+        ucmp8   (ptr),y, #$00
         beq     finish          ; Yes, finish with A=0
 
         ;; NOTE: $CnFF = $FF would signify a 13-sector Disk II, which

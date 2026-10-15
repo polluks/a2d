@@ -141,8 +141,8 @@ penXOR:         .byte   MGTK::penXOR
 
 .proc _CalcPos
         ;; Default position
-        add16_8 rect+MGTK::Rect::x1, #kTextBoxTextHOffset-1, pos+MGTK::Point::xcoord
-        add16_8 rect+MGTK::Rect::y1, #kTextBoxTextVOffset-1, pos+MGTK::Point::ycoord
+        add16   rect+MGTK::Rect::x1, #kTextBoxTextHOffset-1, pos+MGTK::Point::xcoord
+        add16   rect+MGTK::Rect::y1, #kTextBoxTextVOffset-1, pos+MGTK::Point::ycoord
 
     IF bit options : NS         ; bit7 = centered
         add16   rect+MGTK::Rect::x1, rect+MGTK::Rect::x2, pos+MGTK::Point::xcoord
@@ -354,8 +354,8 @@ END_PARAM_BLOCK
         pha                     ; A = len
 
         caret_pos := tmpw
-        ldy     #LETK::LineEditRecord::caret_pos
-        copy8   (a_record),y, caret_pos
+        jsr     _GetCaretPos
+        sta     caret_pos
 
         add16_8 text_params+MGTK::TextWidthParams::data, caret_pos
         pla                     ; A = len
@@ -404,27 +404,26 @@ ycoord  .word
         len := tmpw
 
         jsr     _PrepTextParams
-        beq     ret
+    IF NOT ZERO
         sta     len
 
         sub16   params::xcoord, pos + MGTK::Point::xcoord, params::xcoord
-    IF NEG
+      IF NEG
         lda     #0
         beq     set             ; always
-    END_IF
+      END_IF
 
         ;; Iterate to find the position
         lda     #0
         sta     text_params+MGTK::TextWidthParams::width
         sta     text_params+MGTK::TextWidthParams::width+1
         sta     text_params+MGTK::TextWidthParams::length
-    DO
-        BREAK_IF cmp16 text_params+MGTK::TextWidthParams::width, params::xcoord : GE
+      DO
+        BREAK_IF u16 text_params+MGTK::TextWidthParams::width >= params::xcoord
         inc     text_params+MGTK::TextWidthParams::length
-        lda     text_params+MGTK::TextWidthParams::length
-        BREAK_IF A = len
+        BREAK_IF u8 text_params+MGTK::TextWidthParams::length = len
         jsr     _TextWidth
-    WHILE ZERO                  ; always
+      WHILE ZERO                  ; always
 
         lda     text_params+MGTK::TextWidthParams::length
 set:    pha
@@ -433,8 +432,9 @@ set:    pha
         ldy     #LETK::LineEditRecord::caret_pos
         sta     (a_record),y
         jsr     _ShowCaretForced
+    END_IF
 
-ret:    rts
+        rts
 
 .endproc ; ClickImpl
 
@@ -443,8 +443,7 @@ ret:    rts
 
 .proc _MoveCaretLeft
         ;; Any characters to left of caret?
-        ldy     #LETK::LineEditRecord::caret_pos
-        lda     (a_record),y
+        jsr     _GetCaretPos
         beq     ret
 
         sec
@@ -459,8 +458,7 @@ ret:    rts
 
 .proc _MoveCaretRight
         ;; Any characters to right of caret?
-        ldy     #LETK::LineEditRecord::caret_pos
-        lda     (a_record),y    ; A = caret_pos
+        jsr     _GetCaretPos    ; A = caret_pos
         ldy     #0
     IF A <> (a_buf),y
         clc
@@ -477,8 +475,7 @@ ret:    rts
 
 .proc _DeleteLeft
         ;; Anything to delete?
-        ldy     #LETK::LineEditRecord::caret_pos
-        lda     (a_record),y    ; A = caret_pos
+        jsr     _GetCaretPos    ; A = caret_pos
     IF NOT_ZERO
         sec
         sbc     #1
@@ -494,8 +491,7 @@ ret:    rts
 
 .proc _DeleteRight
         ;; Anything to delete?
-        ldy     #LETK::LineEditRecord::caret_pos
-        lda     (a_record),y    ; A = caret_pos
+        jsr     _GetCaretPos    ; A = caret_pos
 
         ldy     #0
     IF A <> (a_buf),y
@@ -523,37 +519,20 @@ modifiers .byte
 
 :       lda     params::key
 
-        ldx     params::modifiers
-        bne     modified
-
+    IF ldx params::modifiers : ZERO
         ;; Not modified
-        cmp     #CHAR_LEFT
-        beq     _MoveCaretLeft
-
-        cmp     #CHAR_RIGHT
-        beq     _MoveCaretRight
-
-        cmp     #CHAR_DELETE
-        beq     _DeleteLeft
-
-        cmp     #CHAR_CTRL_F
-        beq     _DeleteRight
-
-        cmp     #CHAR_CLEAR
-        beq     _DeleteLine
-
-        cmp     #' '
-        bcs     _InsertChar
-
+        IF A = #CHAR_LEFT   GOTO _MoveCaretLeft
+        IF A = #CHAR_RIGHT  GOTO _MoveCaretRight
+        IF A = #CHAR_DELETE GOTO _DeleteLeft
+        IF A = #CHAR_CTRL_F GOTO _DeleteRight
+        IF A = #CHAR_CLEAR  GOTO _DeleteLine
+        IF A >= #' '        GOTO _InsertChar
         rts
+    END_IF
 
         ;; Modified
-modified:
-        cmp     #CHAR_LEFT
-        beq     _MoveCaretStart
-
-        cmp     #CHAR_RIGHT
-        beq     _MoveCaretEnd
+        IF A = #CHAR_LEFT  GOTO _MoveCaretStart
+        IF A = #CHAR_RIGHT GOTO _MoveCaretEnd
 
         rts
 .endproc ; KeyImpl
@@ -568,8 +547,8 @@ modified:
         sta     char
 
         ;; Stash current caret pos
-        ldy     #LETK::LineEditRecord::caret_pos
-        copy8   (a_record),y, caret_pos
+        jsr     _GetCaretPos
+        sta     caret_pos
 
         ;; Is there room?
         ldy     #0
@@ -605,11 +584,10 @@ modified:
       END_IF
 
         ;; Now move caret to new position
-        ldy     #LETK::LineEditRecord::caret_pos
-        lda     (a_record),y
+        jsr     _GetCaretPos
         clc
         adc     #1
-        sta     (a_record),y
+        sta     (a_record),y    ; Y = `LETK::LineEditRecord::caret_pos`
     END_IF
 
 ret:    rts
@@ -678,8 +656,7 @@ ret:    rts
         sta     len
 
         ;; Move everything to the right of the caret down
-        ldy     #LETK::LineEditRecord::caret_pos
-        lda     (a_record),y
+        jsr     _GetCaretPos
         tay
     DO
         BREAK_IF Y = len
@@ -712,8 +689,7 @@ ret:    rts
 .proc _CalcCaretPos
         jsr     _PrepTextParams
 
-        ldy     #LETK::LineEditRecord::caret_pos
-        lda     (a_record),y
+        jsr     _GetCaretPos
     IF NOT_ZERO
         sta     text_params+MGTK::TextWidthParams::length
         jsr     _TextWidth
@@ -729,6 +705,15 @@ ret:    rts
         tya
         rts
 .endproc ; _CalcCaretPos
+
+;;; ============================================================
+
+;;; Output: A = caret pos, Y = `LETK::LineEditRecord::caret_pos`
+.proc _GetCaretPos
+        ldy     #LETK::LineEditRecord::caret_pos
+        lda     (a_record),y
+        rts
+.endproc
 
 ;;; ============================================================
 ;;; Clears and redraws text. The caret must be redrawn afterwards

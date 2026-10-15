@@ -108,7 +108,7 @@ counter:        .word   0       ; set by `ProbeSpeed`
 
         kSpeedDefault60Hz = 97  ; Measured
         kSpeedDefault50Hz = kSpeedDefault60Hz * 60 / 50 ; TODO: Validate on real hardware
-        kSpeedMax = 16          ; MHz
+        kSpeedMax = 128         ; MHz
 
         kMeterTop = 24
         kMeterHeight = 9
@@ -118,17 +118,37 @@ counter:        .word   0       ; set by `ProbeSpeed`
         DEFINE_RECT_SZ meter_left, kMeterLeft, kMeterTop, kMeterWidth, kMeterHeight
         DEFINE_RECT_SZ meter_right, kMeterLeft, kMeterTop, kMeterWidth, kMeterHeight
 
-.params ticks_muldiv_params
-number:         .word   kMeterWidth ; (in) constant
-numerator:      .word   0           ; (in) populated dynamically
-denominator:    .word   kSpeedMax   ; (in) constant
-result:         .word   0           ; (out)
-remainder:      .word   0           ; (out)
-        REF_MULDIV_MEMBERS
-.endparams
+        ;; Space doubled speeds equally, with a linear interval
+        ;; below 1 MHz. Labels and interpolation use the same breakpoints.
+.struct SpeedTick
+mhz             .byte
+count_60hz      .word
+count_50hz      .word
+.endstruct
+
+.macro SPEED_TICK mhz
+        .byte   mhz
+        .word   mhz * kSpeedDefault60Hz, mhz * kSpeedDefault50Hz
+.endmacro
+
+speed_ticks:
+        SPEED_TICK 0
+        SPEED_TICK 1
+        SPEED_TICK 2
+        SPEED_TICK 4
+        SPEED_TICK 8
+        SPEED_TICK 16
+        SPEED_TICK 32
+        SPEED_TICK 64
+        SPEED_TICK kSpeedMax
+
+        kSpeedTickCount = (* - speed_ticks) / .sizeof(SpeedTick)
+        kSpeedTickLast = (kSpeedTickCount - 1) * .sizeof(SpeedTick)
+        kMeterIntervalWidth = kMeterWidth / (kSpeedTickCount - 1)
+        .assert kMeterIntervalWidth * (kSpeedTickCount - 1) = kMeterWidth, error, "Meter intervals must fill the scale"
 
 .params progress_muldiv_params
-number:         .word   kMeterWidth ; (in) constant
+number:         .word   kMeterIntervalWidth ; (in) constant
 numerator:      .word   0           ; (in) populated dynamically
 denominator:    .word   0           ; (in) populated dynamically
 result:         .word   0           ; (out)
@@ -187,25 +207,24 @@ pattern_plaid:
 
         MGTK_CALL MGTK::FrameRect, meter_frame
 
+        SET u16 pt_tick::xcoord = #kMeterLeft
         lda     #0
     DO
         pha
-        sta     ticks_muldiv_params::numerator
-        MGTK_CALL MGTK::MulDiv, ticks_muldiv_params
-        add16   meter_left::x1, ticks_muldiv_params::result, pt_tick::xcoord
-        MGTK_CALL MGTK::MoveTo, pt_tick
-        MGTK_CALL MGTK::Line, pt_tickdelta
-        pla
-        pha
+        tax
+        lda     speed_ticks + SpeedTick::mhz,x
         ldx     #0
         jsr     IntToString
+        MGTK_CALL MGTK::MoveTo, pt_tick
+        MGTK_CALL MGTK::Line, pt_tickdelta
         MGTK_CALL MGTK::Move, pt_labeldelta
         MGTK_CALL MGTK::DrawStringCentered, str_from_int
 
+        SET u16 pt_tick::xcoord = pt_tick::xcoord + #kMeterIntervalWidth
         pla
         clc
-        adc     #1
-    WHILE A < #kSpeedMax+1
+        adc     #.sizeof(SpeedTick)
+    WHILE A < #kSpeedTickCount * .sizeof(SpeedTick)
 
         lda     #BTK::kButtonStateChecked
         sta     radio_60hz_button::state
@@ -225,22 +244,23 @@ pattern_plaid:
 ;;; Input loop
 
 .proc InputLoop
+    REPEAT
         dec     probe_count
-    IF ZERO
+      IF ZERO
         jsr     UpdateMeter
-    END_IF
+      END_IF
 
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         MGTK_CALL MGTK::GetEvent, event_params
+
         lda     event_params::kind
+      IF A = #MGTK::EventKind::button_down
+        jsr     OnClick
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     OnKey
+      END_IF
 
-        cmp     #MGTK::EventKind::button_down
-        jeq     OnClick
-
-        cmp     #MGTK::EventKind::key_down
-        beq     OnKey
-
-        jmp     InputLoop
+    FOREVER
 
 probe_count:
         .byte   0
@@ -253,48 +273,38 @@ probe_count:
 
         ldx     event_params::modifiers
     IF NOT_ZERO
-        cmp     #res_char_shortcut_apple_5
-        jeq     OnClick50Hz
+        IF A = #res_char_shortcut_apple_5 JUMP OnClick50Hz
+        IF A = #res_char_shortcut_apple_6 GOTO OnClick60Hz
+        IF A = #kShortcutCloseWindow GOTO Exit
 
-        cmp     #res_char_shortcut_apple_6
-        jeq     OnClick60Hz
-
-        cmp     #kShortcutCloseWindow
-        beq     OnKeyOK
-        jmp     InputLoop
+        rts
     END_IF
 
-        cmp     #CHAR_RETURN
-        beq     OnKeyOK
+        IF A = #CHAR_RETURN GOTO Exit
+        IF A = #CHAR_ESCAPE GOTO Exit
 
-        cmp     #CHAR_ESCAPE
-        beq     OnKeyOK
-
-        jmp     InputLoop
+        rts
 .endproc ; OnKey
 
-.proc OnKeyOK
+.proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         BTK_CALL BTK::Flash, ok_button
         jmp     CloseWindow
-.endproc ; OnKeyOK
+.endproc ; Exit
 
 ;;; ============================================================
 
 .proc OnClick
         MGTK_CALL MGTK::FindWindow, findwindow_params
 
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        bne     miss
+    IF u8 findwindow_params::window_id <> #kDAWindowId \
+      OR u8 findwindow_params::which_area <> #MGTK::Area::content
+        rts
+    END_IF
 
-        lda     findwindow_params::which_area
-        cmp     #MGTK::Area::content
-        beq     hit
-
-miss:   jmp     InputLoop
-
-hit:    lda     winfo::window_id
-        sta     screentowindow_params::window_id
+        copy8   winfo::window_id, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
 
@@ -307,43 +317,39 @@ hit:    lda     winfo::window_id
         MGTK_CALL MGTK::InRect, ok_button::rect
         bne     OnClickOK
 
-        jmp     InputLoop
+        rts
 .endproc ; OnClick
 
 ;;; ============================================================
 
 .proc OnClick60Hz
     IF bit radio_60hz_button::state : NC
-        lda     #BTK::kButtonStateChecked
-        sta     radio_60hz_button::state
-        lda     #BTK::kButtonStateNormal
-        sta     radio_50hz_button::state
+        copy8   #BTK::kButtonStateChecked, radio_60hz_button::state
+        copy8   #BTK::kButtonStateNormal, radio_50hz_button::state
         BTK_CALL BTK::RadioUpdate, radio_60hz_button
         BTK_CALL BTK::RadioUpdate, radio_50hz_button
     END_IF
-        jmp     InputLoop
+        rts
 .endproc ; OnClick60Hz
 
 ;;; ============================================================
 
 .proc OnClick50Hz
     IF bit radio_50hz_button::state : NC
-        lda     #BTK::kButtonStateNormal
-        sta     radio_60hz_button::state
-        lda     #BTK::kButtonStateChecked
-        sta     radio_50hz_button::state
+        copy8   #BTK::kButtonStateNormal, radio_60hz_button::state
+        copy8   #BTK::kButtonStateChecked, radio_50hz_button::state
         BTK_CALL BTK::RadioUpdate, radio_60hz_button
         BTK_CALL BTK::RadioUpdate, radio_50hz_button
     END_IF
-        jmp     InputLoop
+        rts
 .endproc ; OnClick50Hz
 
 ;;; ============================================================
 
 .proc OnClickOK
         BTK_CALL BTK::Track, ok_button
-        jeq     CloseWindow
-        jmp     InputLoop
+        IF NC JUMP Exit
+        rts
 .endproc ; OnClickOK
 
 ;;; ============================================================
@@ -360,24 +366,16 @@ hit:    lda     winfo::window_id
         MGTK_CALL MGTK::SetPattern, pattern_left
 
         jsr     ProbeSpeed
-
-        copy16  counter, progress_muldiv_params::numerator
-    IF bit radio_60hz_button::state : NS
-        copy16  #kSpeedMax * kSpeedDefault60Hz, progress_muldiv_params::denominator
-    ELSE
-        copy16  #kSpeedMax * kSpeedDefault50Hz, progress_muldiv_params::denominator
-    END_IF
-
-        MGTK_CALL MGTK::MulDiv, progress_muldiv_params
+        jsr     ScaleSpeed
 
         ;; Max out the meter
-    IF cmp16 progress_muldiv_params::result, #kMeterWidth : GE
-        copy16  #kMeterWidth, progress_muldiv_params::result
+    IF u16 progress_muldiv_params::result >= #kMeterWidth
+        SET u16 progress_muldiv_params::result = #kMeterWidth
         MGTK_CALL MGTK::SetPattern, pattern_plaid
     END_IF
 
-        add16   meter_left::x1, progress_muldiv_params::result, meter_left::x2
-        add16   meter_left::x2, #1, meter_right::x1
+        SET u16 meter_left::x2 = meter_left::x1 + progress_muldiv_params::result
+        SET u16 meter_right::x1 = meter_left::x2 + #1
 
         MGTK_CALL MGTK::SetPenMode, pencopy
         MGTK_CALL MGTK::ShieldCursor, meter_frame
@@ -388,6 +386,49 @@ hit:    lda     winfo::window_id
 
         rts
 .endproc ; UpdateMeter
+
+;;; ============================================================
+
+;;; Convert the measured count to a position on the nonlinear scale.
+;;; Interpolate within an interval without rounding to whole MHz first.
+.proc ScaleSpeed
+        SET u16 lower_bound = #0
+        SET u16 base_position = #0
+
+    IF bit radio_60hz_button::state : NS
+        ldx     #SpeedTick::count_60hz
+    ELSE
+        ldx     #SpeedTick::count_50hz
+    END_IF
+
+    DO
+        SET u16 upper_bound = (speed_ticks + .sizeof(SpeedTick),x)
+      IF u16 counter < upper_bound
+        jmp     interpolate
+      END_IF
+
+        SET u16 lower_bound = upper_bound
+        SET u16 base_position += #kMeterIntervalWidth
+        txa
+        clc
+        adc     #.sizeof(SpeedTick)
+        tax
+    WHILE A < #kSpeedTickLast
+
+        SET u16 progress_muldiv_params::result = #kMeterWidth
+        rts
+
+interpolate:
+        SET u16 progress_muldiv_params::numerator = counter - lower_bound
+        SET u16 progress_muldiv_params::denominator = upper_bound - lower_bound
+        MGTK_CALL MGTK::MulDiv, progress_muldiv_params
+        SET u16 progress_muldiv_params::result = base_position + progress_muldiv_params::result
+        rts
+
+lower_bound:    .word   0
+upper_bound:    .word   0
+base_position:  .word   0
+.endproc ; ScaleSpeed
 
 ;;; ============================================================
 

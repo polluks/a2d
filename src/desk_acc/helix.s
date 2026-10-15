@@ -112,17 +112,15 @@ grafport:       .tag MGTK::GrafPort
 ;;; Main Input Loop
 
 .proc InputLoop
+    REPEAT
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params + MGTK::Event::kind
-        cmp     #MGTK::EventKind::button_down ; was clicked?
-        beq     exit
-        cmp     #MGTK::EventKind::key_down  ; any key?
-        beq     exit
+        BREAK_IF A = #MGTK::EventKind::button_down ; was clicked?
+        BREAK_IF A = #MGTK::EventKind::key_down ; any key?
 
         jsr     Animate
-        jmp     InputLoop
+    FOREVER
 
-exit:
         MGTK_CALL MGTK::RedrawDeskTop
 
         MGTK_CALL MGTK::DrawMenuBar
@@ -175,22 +173,22 @@ exit:
         add16   x1pos,x, deltax1, pt1+MGTK::Point::xcoord
         add16   y1pos,x, deltay1, pt1+MGTK::Point::ycoord
 
-    IF scmp16 pt1+MGTK::Point::xcoord, #0 : NEG
+    IF s16 pt1+MGTK::Point::xcoord < #0
         copy16  #0, pt1+MGTK::Point::xcoord
         sub16   #0, deltax1, deltax1
     END_IF
 
-    IF scmp16 pt1+MGTK::Point::xcoord, #kScreenWidth : POS
+    IF s16 pt1+MGTK::Point::xcoord >= #kScreenWidth
         copy16  #kScreenWidth-1, pt1+MGTK::Point::xcoord
         sub16   #0, deltax1, deltax1
     END_IF
 
-    IF scmp16 pt1+MGTK::Point::ycoord, #0 : NEG
+    IF s16 pt1+MGTK::Point::ycoord < #0
         copy16  #0, pt1+MGTK::Point::ycoord
         sub16   #0, deltay1, deltay1
     END_IF
 
-    IF scmp16 pt1+MGTK::Point::ycoord, #kScreenHeight : POS
+    IF s16 pt1+MGTK::Point::ycoord >= #kScreenHeight
         copy16  #kScreenHeight-1, pt1+MGTK::Point::ycoord
         sub16   #0, deltay1, deltay1
     END_IF
@@ -198,22 +196,22 @@ exit:
         add16   x2pos,x, deltax2, pt2+MGTK::Point::xcoord
         add16   y2pos,x, deltay2, pt2+MGTK::Point::ycoord
 
-    IF scmp16 pt2+MGTK::Point::xcoord, #0 : NEG
+    IF s16 pt2+MGTK::Point::xcoord < #0
         copy16  #0, pt2+MGTK::Point::xcoord
         sub16   #0, deltax2, deltax2
     END_IF
 
-    IF scmp16 pt2+MGTK::Point::xcoord, #kScreenWidth : POS
+    IF s16 pt2+MGTK::Point::xcoord >= #kScreenWidth
         copy16  #kScreenWidth-1, pt2+MGTK::Point::xcoord
         sub16   #0, deltax2, deltax2
     END_IF
 
-    IF scmp16 pt2+MGTK::Point::ycoord, #0 : NEG
+    IF s16 pt2+MGTK::Point::ycoord < #0
         copy16  #0, pt2+MGTK::Point::ycoord
         sub16   #0, deltay2, deltay2
     END_IF
 
-    IF scmp16 pt2+MGTK::Point::ycoord, #kScreenHeight : POS
+    IF s16 pt2+MGTK::Point::ycoord >= #kScreenHeight
         copy16  #kScreenHeight-1, pt2+MGTK::Point::ycoord
         sub16   #0, deltay2, deltay2
     END_IF
@@ -252,7 +250,7 @@ exit:
 
 ;;; Output: A,X = signed in -7...7 but not 0
 .proc GetRandomDelta
-        ldx     #0
+        ldx     #0              ; high byte
     DO
         jsr     Random
         and     #%00001111      ; clamp to 0...15
@@ -261,7 +259,7 @@ exit:
     WHILE ZERO                  ; retry if 0
 
     IF NEG
-        ldx     #$FF            ; sign-extend into X
+        dex                     ; sign-extend into X
     END_IF
 
         rts

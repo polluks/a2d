@@ -526,8 +526,7 @@ delta_bits:
         DEFINE_LABEL memory, res_string_memory_prefix, 130, 34, 100
         DEFINE_LABEL cpu, res_string_cpu_prefix, 260, 34, 120
 
-        DEFINE_POINT line1, 0, 37
-        DEFINE_POINT line2, kDAWidth, 37
+        DEFINE_LINE line, 0, 37, kDAWidth, 37
 
 .if kBuildIsRTL
         kSlotPosX = kDAWidth - 100
@@ -1037,19 +1036,16 @@ match:  tya
         ;; Is it a Pravetz 8A/C?
         ldx     #kPravetz8ACSequenceLength-1
       DO
-        lda     PRAVETZ_8AC_ID_ADDR,x
-        cmp     pravetz_8ac_sequence,x
+        ucmp8   PRAVETZ_8AC_ID_ADDR,x, pravetz_8ac_sequence,x
         bne     :+
       WHILE dex : POS
         lda     #model::pravetz
         bne     found           ; always
 :
         ;; Is it a Nuova Elettronica DELTA?
-      IF lda $FA67 : A = #$A0
-       IF lda $FA68 : A = #$C0
+      IF u8 $FA67 = #$A0 AND u8 $FA68 = #$C0
         lda     #model::delta
         bne     found           ; always
-       END_IF
       END_IF
 
         lda     #model::iie_original
@@ -1074,8 +1070,7 @@ match:  tya
         ;; Is it a TLC?
         ldx     #kTLCSequenceLength-1
       DO
-        lda     TLC_ID_ADDR,x
-        cmp     tlc_sequence,x
+        ucmp8   TLC_ID_ADDR,x, tlc_sequence,x
         bne     :+
       WHILE dex : POS
         lda     #model::tlc
@@ -1084,8 +1079,7 @@ match:  tya
         ;; Is it a TK3000?
         ldx     #kTK3000SequenceLength-1
       DO
-        lda     TK3000_ID_ADDR,x
-        cmp     tk3000_sequence,x
+        ucmp8   TK3000_ID_ADDR,x, tk3000_sequence,x
         bne     :+
       WHILE dex : POS
         lda     #model::tk3000
@@ -1139,10 +1133,8 @@ found:
         ;; Read ProDOS version field from global page in main
         lda     KVERSION
 
-        cmp     #$24
-        bcs     v_2x
-        cmp     #$20
-        bcs     v_20x
+        IF A >= #$24 GOTO v_2x
+        IF A >= #$20 GOTO v_20x
 
         ;; $00...$08 are 1.x (roughly)
 v_1x:   and     #$0F
@@ -1180,18 +1172,25 @@ v_2x:   and     #$0F
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         jsr     JUMP_TABLE_SYSTEM_TASK
+
         JUMP_TABLE_MGTK_CALL MGTK::GetEvent, aux::event_params
         jsr     CopyEventDataToMain
+
         lda     event_params::kind
-        cmp     #MGTK::EventKind::button_down ; was clicked?
-        beq     HandleDown
-        cmp     #MGTK::EventKind::key_down  ; any key?
-        beq     HandleKey
-        jmp     InputLoop
+      IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown ; was clicked?
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey ; any key?
+      END_IF
+    FOREVER
 .endproc ; InputLoop
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         JUMP_TABLE_MGTK_CALL MGTK::CloseWindow, aux::winfo
         jmp     JUMP_TABLE_CLEAR_UPDATES ; exits input loop
 .endproc ; Exit
@@ -1204,18 +1203,14 @@ v_2x:   and     #$0F
 
         ldx     event_params::modifiers
     IF NOT_ZERO
-        cmp     #kShortcutCloseWindow
-        beq     Exit
-        jmp     InputLoop
+        IF A = #kShortcutCloseWindow GOTO Exit
+        rts
     END_IF
 
-        cmp     #CHAR_ESCAPE
-        beq     Exit
+        IF A = #CHAR_ESCAPE GOTO Exit
+        IF A = #kShortcutEasterEgg GOTO HandleEgg
 
-        cmp     #kShortcutEasterEgg
-        beq     HandleEgg
-
-        jmp     InputLoop
+        rts
 .endproc ; HandleKey
 
 ;;; ============================================================
@@ -1223,15 +1218,12 @@ v_2x:   and     #$0F
 .proc HandleDown
         JUMP_TABLE_MGTK_CALL MGTK::FindWindow, aux::findwindow_params
         jsr     CopyEventDataToMain
-        lda     findwindow_params::window_id
-        cmp     #aux::kDAWindowId
-        bne     InputLoop
+        RTS_IF u8 findwindow_params::window_id <> #aux::kDAWindowId
+
         lda     findwindow_params::which_area
-        cmp     #MGTK::Area::close_box
-        beq     HandleClose
-        cmp     #MGTK::Area::dragbar
-        beq     HandleDrag
-        jmp     InputLoop
+        IF A = #MGTK::Area::close_box GOTO HandleClose
+        IF A = #MGTK::Area::dragbar GOTO HandleDrag
+        rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -1240,7 +1232,7 @@ v_2x:   and     #$0F
         JUMP_TABLE_MGTK_CALL MGTK::TrackGoAway, aux::trackgoaway_params
         jsr     CopyEventDataToMain
         lda     trackgoaway_params::clicked
-        beq     InputLoop
+        RTS_IF ZERO
         bne     Exit            ; always
 .endproc ; HandleClose
 
@@ -1261,7 +1253,7 @@ v_2x:   and     #$0F
         jsr     DrawWindow
     END_IF
 
-        jmp     InputLoop
+        rts
 
 .endproc ; HandleDrag
 
@@ -1278,8 +1270,7 @@ v_2x:   and     #$0F
         stx     egg
 
         jsr     ClearWindow
-        jsr     DrawWindow
-        jmp     InputLoop
+        TAIL_CALL DrawWindow
 
 egg:    .byte   0
 .endproc ; HandleEgg
@@ -1333,8 +1324,8 @@ egg:    .byte   0
 
         ;; Separator
 
-        JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::line1
-        JUMP_TABLE_MGTK_CALL MGTK::LineTo, aux::line2
+        JUMP_TABLE_MGTK_CALL MGTK::MoveTo, aux::line::start
+        JUMP_TABLE_MGTK_CALL MGTK::LineTo, aux::line::end
 
         ;; Aux Slot
 
@@ -1379,8 +1370,7 @@ egg:    .byte   0
       IF NOT_ZERO
         ;; ProDOS thinks there's a card...
 
-        lda     slot
-       IF A = #3
+       IF u8 slot = #3
         ;; Special case for Slot 3
         bit     ROMIN2
         jsr     DetectLeChatMauveEve
@@ -1426,8 +1416,7 @@ draw_maybe_sp:
       END_IF
 
         ;; Special case for Slot 2
-        lda     slot
-      IF A = #2
+      IF u8 slot = #2
         jsr     SetSlotPtr
         CALL    WithInterruptsDisabled, AX=#DetectTheCricket
        IF CS
@@ -1437,7 +1426,7 @@ draw_maybe_sp:
       END_IF
 
         asl     mask
-    WHILE inc slot : lda slot : A < #8
+    WHILE u8 ++slot < #8
 
         JUMP_TABLE_MGTK_CALL MGTK::ShowCursor
         rts
@@ -1626,6 +1615,10 @@ notpas:
     IF CS
         RETURN  AX=#str_clock
     END_IF
+        CALL    SigCheck, AX=#sigtable_clock2
+    IF CS
+        RETURN  AX=#str_clock
+    END_IF
 
 ;;; Communications Card
         CALL    SigCheck, AX=#sigtable_comm
@@ -1705,6 +1698,7 @@ sigtable_workstation:   .byte   4, $0C, $31, $0D, $9D, $0E, $A3, $0F, $24
 
 ;;; Generic signatures (c/o ProDOS BASIC Programming Examples)
 sigtable_clock:         .byte   3, $00, $08, $01, $78, $02, $28
+sigtable_clock2:        .byte   3, $00, $08, $01, $78, $02, $2C ; Mountain Hardware Apple Clock
 sigtable_comm:          .byte   2, $05, $18, $07, $38
 sigtable_serial:        .byte   2, $05, $38, $07, $18
 sigtable_parallel:      .byte   2, $05, $48, $07, $48
@@ -1734,7 +1728,7 @@ sigtable_ieee488:       .byte   4, $05, $50, $07, $38, $0B, $FF, $0C, $CF
       IF CS
         RETURN  AX=#str_phasor
       END_IF
-      
+
         RETURN  C=1, AX=#str_mockingboard
     END_IF
 
@@ -1764,76 +1758,9 @@ sigtable_ieee488:       .byte   4, $05, $50, $07, $38, $0B, $FF, $0C, $CF
 ;;; ============================================================
 
         .include "../lib/with_interrupts_disabled.s"
+        .include "../lib/detect_z80.s"
 
 ;;; ============================================================
-;;; Detect Z80
-;;; Assumes $06 points at $Cn00, returns carry set if found
-
-;;; This routine gets swapped into $0FFD for execution
-.assert * > $0FFD + sizeof_Z80Routine, error, "Z80 collision"
-
-.proc Z80Routine
-        target := $0FFD
-        ;; .org $FFFD
-        patch := *+2
-        .byte   $32, $00, $e0   ; ld ($Es00),a   ; s=slot being probed turn off Z80, next PC is $0000
-        .byte   $3e, $01        ; ld a,$01
-        .byte   $32, $08, $00   ; ld (flag),a
-        .byte   $c3, $fd, $ff   ; jp $FFFD
-        flag := *
-        .byte   $00             ; flag: .db $00
-.endproc ; Z80Routine
-        sizeof_Z80Routine = .sizeof(Z80Routine)
-
-.proc DetectZ80
-        ;; Convert $Cn to $En, update Z80 code
-        lda     $07             ; $Cn
-        ora     #$E0
-        sta     Z80Routine::patch
-
-        ;; Clear detection flag
-        copy8   #0, Z80Routine::flag
-
-        ;; Put routine in place
-        jsr     SwapRoutine
-
-        ;; On IIgs, slow mode
-        jsr     IsIIgs
-        php
-    IF CC
-        lda     CYAREG          ; bit=7 = fast mode
-        pha                     ; save
-        and     #$7F            ; mask it off
-        sta     CYAREG          ; update it
-    END_IF
-
-        ;; Try to invoke Z80
-        ldy     #0
-        sta     ($06),y
-
-        ;; On IIgs, restore mode
-        plp
-    IF CC
-        pla
-        sta     CYAREG
-    END_IF
-
-        ;; Restore memory
-        jsr     SwapRoutine
-
-        ;; Flag will be set to 1 by routine if Z80 was present.
-        lda     Z80Routine::flag
-        ror                     ; move flag into carry
-        rts
-
-.proc SwapRoutine
-        ldx     #.sizeof(Z80Routine)-1
-    DO
-        swap8   Z80Routine::target,x, Z80Routine,x
-    WHILE dex : POS
-        rts
-.endproc ; SwapRoutine
-.endproc ; DetectZ80
 
 ;;; Detect Uthernet II
 ;;; Assumes $06 points at $Cn00, returns carry set if found
@@ -2141,7 +2068,7 @@ write:  sta     $C080,x         ; self-modified to $C0n0
 .endproc ; procname
 .endmacro
 
-        ;; Duplicated code, but it's not that long and more maintainble than SMC
+        ;; Duplicated code, but it's not that long and more maintainable than SMC
         CHECK_AUX_MEMORY_PROC CheckRamworksMemory, RAMWORKS_BANK
         CHECK_AUX_MEMORY_PROC CheckSuperExpanderMemory, SUPEREXP_BANK
 
@@ -2200,9 +2127,7 @@ write:  sta     $C080,x         ; self-modified to $C0n0
         ldx     #3
       DO
         ldy     sig_offsets,x
-        lda     (slot_ptr),y
-        cmp     sig_values,x
-        bne     next
+        IF u8 (slot_ptr),y <> sig_values,x GOTO next
       WHILE dex : POS
 
         ;; Now look for device type
@@ -2298,8 +2223,7 @@ str_ramworks_memory:
         bcs     p658xx
 
         ;; 65C02 - check for ZIP CHIP (except on IIc Plus)
-        lda     model           ; cached
-    IF A <> #model::iic_plus
+    IF u8 model <> #model::iic_plus ; cached
         php                     ; timing sensitive
         sei
 
@@ -2411,8 +2335,7 @@ start:
         ldy     dib_buffer+SPDIB::ID_String_Length
       IF NOT_ZERO
        DO
-        lda     dib_buffer+SPDIB::Device_Name-1,y
-        BREAK_IF A <> #' '
+        BREAK_IF u8 dib_buffer+SPDIB::Device_Name-1,y <> #' '
        WHILE dey : NOT_ZERO
       END_IF
         sty     dib_buffer+SPDIB::ID_String_Length
@@ -2427,11 +2350,7 @@ start:
         ;; Any characters lowercase? If so, don't adjust.
        DO
         CALL    IsAlpha, A=dib_buffer+SPDIB::Device_Name,y
-        IF ZS
-        lda     dib_buffer+SPDIB::Device_Name,y
-        cmp     #'a'           ; guarded by `kBuildSupportsLowercase`
-        bcs     done_adjust_case ; is lower case
-        END_IF
+        IF ZS AND u8 dib_buffer+SPDIB::Device_Name,y >= #'a' GOTO done_adjust_case ; guarded by `kBuildSupportsLowercase`
        WHILE dey : POS
 
         ldy     dib_buffer+SPDIB::ID_String_Length
@@ -2445,7 +2364,7 @@ start:
         CALL    IsAlpha, A=dib_buffer+SPDIB::Device_Name,y ; Adjust this one if also alpha
           IF EQ
         lda     dib_buffer+SPDIB::Device_Name,y
-        ora     #AS_BYTE(~CASE_MASK) ; guarded by `kBuildSupportsLowercase`
+        ora     #AS_BYTE{~CASE_MASK} ; guarded by `kBuildSupportsLowercase`
         sta     dib_buffer+SPDIB::Device_Name,y
           END_IF
          END_IF
@@ -2460,8 +2379,7 @@ done_adjust_case:
         str_current := dib_buffer+SPDIB::ID_String_Length
 
         ;; Empty?
-        lda     dib_buffer+SPDIB::ID_String_Length
-      IF ZERO
+      IF u8 dib_buffer+SPDIB::ID_String_Length = #0
         .assert .strlen(res_string_unknown) < kMaxSPDeviceNameLength, error, "string length"
         COPY_STRING str_unknown, str_current
       END_IF
@@ -2485,8 +2403,8 @@ done_adjust_case:
         CALL    DrawStringForwardFromMain, AX=#str_current
 
         ;; Next!
-next:   lda     status_params::unit_num
-        BREAK_IF A = num_devices
+next:
+        BREAK_IF u8 status_params::unit_num = num_devices
         inc     status_params::unit_num
     FOREVER
 

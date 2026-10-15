@@ -6,8 +6,6 @@ DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 function RAMCardTest(name, func1, func2)
   test.Step(
     name,
@@ -17,8 +15,8 @@ function RAMCardTest(name, func1, func2)
         func1()
       end
 
-      a2d.ToggleOptionCopyToRAMCard() -- Enable
-      a2d.Reboot()
+      desktop.ToggleOptionCopyToRAMCard() -- Enable
+      desktop.Reboot()
       a2d.WaitForDesktopReady()
 
       if not func2 then
@@ -27,9 +25,9 @@ function RAMCardTest(name, func1, func2)
         func2()
       end
 
-      a2d.DeletePath("/A2.DESKTOP/LOCAL")
-      a2d.EraseVolume("RAM1")
-      a2d.Reboot()
+      desktop.DeletePath("/A2.DESKTOP/LOCAL")
+      desktop.EraseVolume("RAM1")
+      desktop.Reboot()
       a2d.WaitForDesktopReady()
   end)
 end
@@ -42,7 +40,7 @@ end
 RAMCardTest(
   "Apple Menu subdirectories copied to Slinky RAM",
   function()
-    a2d.OpenPath("/RAM1/DESKTOP/APPLE.MENU/TOYS")
+    desktop.OpenWindow("/RAM1/DESKTOP/APPLE.MENU/TOYS")
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "TOYS", "directory should be copied to RAMCard")
 end)
 
@@ -55,21 +53,21 @@ end)
 RAMCardTest(
   "Desktop.config",
   function()
-    a2d.DeletePath("/A2.DESKTOP/LOCAL/DESKTOP.CONFIG")
+    desktop.DeletePath("/A2.DESKTOP/LOCAL/DESKTOP.CONFIG")
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
+    desktop.InvokePath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
     apple2.LeftArrowKey()
     apple2.ControlKey("D") -- Set Desktop Pattern
-    a2d.WaitForRepaint()
-    a2d.CloseWindow()
+    a2dtest.WaitForSystemTask()
+    desktop.CloseWindow()
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
+    desktop.InvokePath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
     apple2.RightArrowKey()
     apple2.ControlKey("D") -- Set Desktop Pattern
-    a2d.WaitForRepaint()
-    a2d.CloseWindow()
+    a2dtest.WaitForSystemTask()
+    desktop.CloseWindow()
 
-    a2d.SelectPath("/A2.DESKTOP/LOCAL/DESKTOP.CONFIG")
+    desktop.SelectPath("/A2.DESKTOP/LOCAL/DESKTOP.CONFIG")
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "DESKTOP.CONFIG", "file should exist")
 end)
 
@@ -83,14 +81,14 @@ end)
 RAMCardTest(
   "Selector.list",
   function()
-    a2d.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
+    desktop.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
   end,
   function()
-    a2d.DeletePath("/A2.DESKTOP/LOCAL/SELECTOR.LIST")
+    desktop.DeletePath("/A2.DESKTOP/LOCAL/SELECTOR.LIST")
 
-    a2d.AddShortcut("/A2.DESKTOP/SAMPLE.MEDIA/KARATEKA.YELL")
+    desktop.AddShortcut("/A2.DESKTOP/SAMPLE.MEDIA/KARATEKA.YELL")
 
-    a2d.SelectPath("/A2.DESKTOP/LOCAL/SELECTOR.LIST")
+    desktop.SelectPath("/A2.DESKTOP/LOCAL/SELECTOR.LIST")
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "SELECTOR.LIST", "file should exist")
 end)
 
@@ -103,10 +101,10 @@ end)
 RAMCardTest(
   "Shortcut copied on boot",
   function()
-    a2d.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="boot"})
+    desktop.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="boot"})
   end,
   function()
-    a2d.OpenPath("/RAM1/EXTRAS")
+    desktop.OpenWindow("/RAM1/EXTRAS")
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "EXTRAS", "directory should be copied to RAMCard")
 end)
 
@@ -121,8 +119,8 @@ end)
 RAMCardTest(
   "Shortcut copied on use",
   function()
-    a2d.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="use"})
-    a2d.ToggleOptionShowShortcutsOnStartup() -- Enable
+    desktop.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="use"})
+    desktop.ToggleOptionShowShortcutsOnStartup() -- Enable
   end,
   function()
     -- invoke BASIC.SYSTEM
@@ -139,7 +137,7 @@ RAMCardTest(
     a2d.WaitForDesktopReady()
 
     -- Verify directory was copied
-    a2d.OpenPath("/RAM1/EXTRAS")
+    desktop.OpenWindow("/RAM1/EXTRAS")
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "EXTRAS", "directory should be copied to RAMCard")
 end)
 
@@ -152,27 +150,27 @@ end)
 RAMCardTest(
   "Copy to RAMCard always copies",
   function()
-    a2d.OpenPath("/RAM1/DESKTOP/APPLE.MENU")
+    desktop.OpenWindow("/RAM1/DESKTOP/APPLE.MENU")
 
-    a2d.Select("CALENDAR")
+    desktop.Select("CALENDAR")
     local icon1_x, icon1_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.Select("TOYS")
+    desktop.Select("TOYS")
     local icon2_x, icon2_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 
     -- Move a file
     a2d.Drag(icon1_x, icon1_y, icon2_x, icon2_y)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     -- Ensure "Copy to RAMCard" doesn't accidentally move
-    a2d.AddShortcut("/RAM1/DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="use"})
+    desktop.AddShortcut("/RAM1/DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="use"})
     a2d.OAShortcut("1") -- invoke shortcut
     apple2.WaitForBasicSystem()
     apple2.TypeLine("BYE")
     a2d.WaitForDesktopReady()
-    a2d.OpenPath("/RAM1/EXTRAS")
+    desktop.OpenWindow("/RAM1/EXTRAS")
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "EXTRAS", "directory should be copied to RAMCard")
 end)
 
@@ -186,12 +184,12 @@ end)
 RAMCardTest(
   "Apple Menu > Control Panels is from the RAMCard",
   function()
-    a2d.SelectPath("/RAM1/DESKTOP/APPLE.MENU")
-    a2d.MoveWindowBy(0, 100)
+    desktop.SelectPath("/RAM1/DESKTOP/APPLE.MENU")
+    desktop.MoveWindowBy(0, 100)
     local icon_x, icon_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.CONTROL_PANELS)
-    emu.wait(1)
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.CONTROL_PANELS)
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "CONTROL.PANELS", "control panels should be activated")
 
     local dst_window_x, dst_window_y, dst_window_w, dst_window_h
@@ -202,6 +200,7 @@ RAMCardTest(
     a2d.Drag(icon_x, icon_y, dst_x, dst_y)
     a2dtest.WaitForAlert({match="item cannot be moved or copied into itself"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 end)
 
 --[[
@@ -212,11 +211,11 @@ end)
 test.Step(
   "Copy to RAMCard on use works",
   function()
-    a2d.ToggleOptionCopyToRAMCard() -- Enable
-    a2d.Reboot()
+    desktop.ToggleOptionCopyToRAMCard() -- Enable
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 
-    a2d.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="use"})
+    desktop.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="use"})
     a2d.OAShortcut("1")
     apple2.WaitForBasicSystem()
     apple2.TypeLine("PREFIX")
@@ -225,8 +224,8 @@ test.Step(
     apple2.TypeLine("BYE")
     a2d.WaitForDesktopReady()
 
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    a2d.EraseVolume("RAM1")
-    a2d.Reboot()
+    desktop.DeletePath("/A2.DESKTOP/LOCAL")
+    desktop.EraseVolume("RAM1")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)

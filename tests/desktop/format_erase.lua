@@ -5,8 +5,6 @@ DISKARGS="-hard1 $HARDIMG -flop1 dos33_floppy.dsk"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(1)
-
 -- Callback called with func to invoke menu item; pass false if
 -- no volumes selected, true if volumes selected (affects menu item)
 function FormatEraseTest(name, func)
@@ -16,14 +14,16 @@ function FormatEraseTest(name, func)
       name .. " - Erase",
     },
     function(idx)
-      a2d.CloseAllWindows()
-      a2d.ClearSelection()
+      desktop.CloseAllWindows()
+      desktop.ClearSelection()
       func(
         function(vol_selected)
           if vol_selected then
-            a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK+idx-1)
+            a2d.InvokeMenuItem(desktop.SPECIAL_MENU, desktop.SPECIAL_FORMAT_DISK+idx-1)
+            a2dtest.WaitForSystemTask()
           else
-            a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK-2+idx-1)
+            a2d.InvokeMenuItem(desktop.SPECIAL_MENU, desktop.SPECIAL_FORMAT_DISK-2+idx-1)
+            a2dtest.WaitForSystemTask()
           end
       end)
   end)
@@ -43,7 +43,7 @@ FormatEraseTest(
     test.ExpectIMatch(a2dtest.OCRScreen(), "RAM1", "RAM1 should exist")
 
     -- device selection
-    a2d.FormatEraseSelectSlotDrive(1, 1)
+    desktop.FormatEraseSelectSlotDrive(1, 1)
 
     -- name prompt
     apple2.Type("NEW.NAME")
@@ -54,13 +54,13 @@ FormatEraseTest(
     a2d.DialogOK()
 
     -- command
-    emu.wait(5) -- slow
+    a2dtest.WaitForSystemTask()
     a2dtest.ExpectAlertNotShowing()
     test.ExpectNotIMatch(a2dtest.OCRScreen(), "RAM1", "RAM1 should not exist")
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "NEW.NAME", "volume should be selected")
 
     -- cleanup
-    a2d.RenamePath("/NEW.NAME", "RAM1")
+    desktop.RenamePath("/NEW.NAME", "RAM1")
 end)
 
 ------------------------------------------------------------
@@ -75,7 +75,7 @@ end)
 FormatEraseTest(
   "Unique name entered",
   function(invoke)
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     invoke(true)
 
     -- name prompt
@@ -96,7 +96,7 @@ end)
 FormatEraseTest(
   "Duplicate name entered",
   function(invoke)
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     invoke(true)
 
     -- name prompt
@@ -106,8 +106,9 @@ FormatEraseTest(
 
     -- confirmation
     a2dtest.WaitForAlert({match="That name already exists%. Please use another name%."})
-    a2d.DialogCancel()
-    a2d.DialogCancel()
+    a2d.DialogCancel() -- cancel alert
+
+    a2d.DialogCancel() -- cancel format/erase dialog
 end)
 
 --[[
@@ -118,7 +119,7 @@ end)
 FormatEraseTest(
   "Same name entered",
   function(invoke)
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     invoke(true)
 
     -- name prompt
@@ -144,7 +145,7 @@ end)
 FormatEraseTest(
   "Caret in middle of name",
   function(invoke)
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     invoke(true)
 
     -- name prompt
@@ -158,12 +159,12 @@ FormatEraseTest(
     -- confirmation
     a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
-    emu.wait(5) -- slow
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "WHOLE.NAME.USED", "volume should be selected")
 
     -- cleanup
-    a2d.RenamePath("/WHOLE.NAME.USED", "RAM1")
+    desktop.RenamePath("/WHOLE.NAME.USED", "RAM1")
 end)
 
 --[[
@@ -177,7 +178,7 @@ FormatEraseTest(
     invoke(false)
 
     -- device selection
-    a2d.FormatEraseSelectSlotDrive(6, 2)
+    desktop.FormatEraseSelectSlotDrive(6, 2)
 
     -- name
     apple2.Type("DUMMY.NAME")
@@ -200,7 +201,7 @@ end)
 FormatEraseTest(
   "Icon updated - selection",
   function(invoke)
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     invoke(true)
 
     -- name
@@ -213,12 +214,12 @@ FormatEraseTest(
     a2d.DialogOK()
 
     -- successful
-    emu.wait(5) -- slow
+    a2dtest.WaitForSystemTask()
     a2dtest.ExpectAlertNotShowing()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "NEW.NAME", "volume should be selected")
 
     -- cleanup
-    a2d.RenamePath("/NEW.NAME", "RAM1")
+    desktop.RenamePath("/NEW.NAME", "RAM1")
 end)
 
 --[[
@@ -233,24 +234,24 @@ FormatEraseTest(
     invoke(false)
 
     -- device selection
-    a2d.FormatEraseSelectSlotDrive(1, 1)
+    desktop.FormatEraseSelectSlotDrive(1, 1)
 
     -- name
     apple2.Type("NEW.NAME")
     a2d.DialogOK()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     -- confirmation prompt
     a2dtest.WaitForAlert({match="Are you sure"})
     a2d.DialogOK()
 
     -- successful
-    emu.wait(5) -- slow
+    a2dtest.WaitForSystemTask()
     a2dtest.ExpectAlertNotShowing()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "NEW.NAME", "volume should be selected")
 
     -- cleanup
-    a2d.RenamePath("/NEW.NAME", "RAM1")
+    desktop.RenamePath("/NEW.NAME", "RAM1")
 end)
 
 ------------------------------------------------------------
@@ -278,15 +279,26 @@ end)
 
 --[[
   Launch DeskTop. Set selection as specified. Run the command. Verify
-  that the device selector is not skipped.
+  that the device selector is not skipped. Select a device and click OK.
+  Verify that the file icon name is not used as the default volume name.
+
 ]]
 FormatEraseTest(
   "Single file selected",
   function(invoke)
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
     invoke(false)
     test.ExpectMatch(a2dtest.OCRScreen(), "Select the location of the disk",
                 "should be prompted for device")
+    apple2.DownArrowKey()
+    a2dtest.WaitForSystemTask()
+    test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
+    a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
+    apple2.RightArrowKey()
+    apple2.SpaceKey()
+    a2dtest.WaitForSystemTask()
+    test.ExpectNotIMatch(a2dtest.OCRScreen(), "READ.ME", "file name should not be used as default")
     a2d.DialogCancel()
 end)
 
@@ -297,7 +309,7 @@ end)
 FormatEraseTest(
   "Trash selected",
   function(invoke)
-    a2d.SelectPath("/Trash")
+    desktop.SelectPath("/Trash")
     invoke(false)
     test.ExpectMatch(a2dtest.OCRScreen(), "Select the location of the disk",
                 "should be prompted for device")
@@ -311,7 +323,7 @@ end)
 FormatEraseTest(
   "Multiple volumes selected",
   function(invoke)
-    a2d.SelectAll()
+    desktop.SelectAll()
     invoke(true)
     test.ExpectMatch(a2dtest.OCRScreen(), "Select the location of the disk",
                 "should be prompted for device")
@@ -326,7 +338,7 @@ end)
 FormatEraseTest(
   "Single volume selected",
   function(invoke)
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     invoke(true)
     test.ExpectMatch(a2dtest.OCRScreen(), "New volume name:",
                 "should be prompted for new name")
@@ -379,9 +391,10 @@ FormatEraseTest(
     end)
     test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     -- name
     test.ExpectMatch(a2dtest.OCRScreen(), "Location:", "device location should be shown")
@@ -406,7 +419,7 @@ end)
 FormatEraseTest(
   "OK button states - initial selection",
   function(invoke)
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     invoke(true)
 
     -- name

@@ -4,8 +4,6 @@ DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(1)
-
 --[[
   Select a folder. Apple > Change Type. Modify only the type (e.g.
   `06`). Verify that an error is shown.
@@ -13,14 +11,16 @@ a2d.ConfigureRepaintTime(1)
 test.Step(
   "Change type of folder fails",
   function()
-    a2d.SelectPath("/TESTS/EMPTY.FOLDER")
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.CHANGE_TYPE)
+    desktop.SelectPath("/TESTS/EMPTY.FOLDER")
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.CHANGE_TYPE)
+    a2dtest.WaitForSystemTask()
     apple2.DeleteKey()
     apple2.DeleteKey()
     apple2.Type("06")
     a2d.DialogOK()
     a2dtest.WaitForAlert({match="Modifying directories is not supported"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 end)
 
 --[[
@@ -30,8 +30,9 @@ end)
 test.Step(
   "Change auxtype of folder succeeds",
   function()
-    a2d.SelectPath("/TESTS/EMPTY.FOLDER")
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.CHANGE_TYPE)
+    desktop.SelectPath("/TESTS/EMPTY.FOLDER")
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.CHANGE_TYPE)
+    a2dtest.WaitForSystemTask()
     apple2.TabKey()
     apple2.DeleteKey()
     apple2.DeleteKey()
@@ -39,6 +40,7 @@ test.Step(
     apple2.DeleteKey()
     apple2.Type("8000")
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
     a2dtest.ExpectAlertNotShowing()
 end)
 
@@ -50,17 +52,18 @@ end)
 test.Step(
   "Change file types of folder and non-folder leaves folders alone",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES")
-    a2d.SelectAll()
-    emu.wait(2)
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.CHANGE_TYPE)
+    desktop.OpenWindow("/TESTS/FILE.TYPES")
+    desktop.SelectAll()
+    a2dtest.WaitForSystemTask()
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.CHANGE_TYPE)
+    a2dtest.WaitForSystemTask()
     apple2.DeleteKey()
     apple2.DeleteKey()
     apple2.Type("06")
     a2d.DialogOK()
     a2dtest.WaitForAlert({match="Modifying directories is not supported"})
     a2d.DialogOK()
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify only non-folders are modified")
 end)
 
@@ -71,10 +74,11 @@ end)
 test.Step(
   "Change aux types of folder and non-folders",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES")
-    a2d.SelectAll()
-    emu.wait(2)
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.CHANGE_TYPE)
+    desktop.OpenWindow("/TESTS/FILE.TYPES")
+    desktop.SelectAll()
+    a2dtest.WaitForSystemTask()
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.CHANGE_TYPE)
+    a2dtest.WaitForSystemTask()
     apple2.TabKey()
     apple2.DeleteKey()
     apple2.DeleteKey()
@@ -82,6 +86,7 @@ test.Step(
     apple2.DeleteKey()
     apple2.Type("8000")
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
     a2dtest.ExpectAlertNotShowing()
 end)
 
@@ -92,14 +97,16 @@ end)
 test.Step(
   "Change type to folder is not allowed",
   function()
-    a2d.SelectPath("/TESTS/FILE.TYPES/TEST08")
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.CHANGE_TYPE)
+    desktop.SelectPath("/TESTS/FILE.TYPES/TEST08")
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.CHANGE_TYPE)
+    a2dtest.WaitForSystemTask()
     apple2.DeleteKey()
     apple2.DeleteKey()
     apple2.Type("0F")
     a2d.DialogOK()
     a2dtest.WaitForAlert({match="Modifying directories is not supported"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 end)
 
 --[[
@@ -109,14 +116,16 @@ end)
 test.Step(
   "Single alert when modifying folder types",
   function()
-    a2d.OpenPath("/TESTS/FILE.TYPES/FOLDER")
-    a2d.SelectAll()
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.CHANGE_TYPE)
+    desktop.OpenWindow("/TESTS/FILE.TYPES/FOLDER")
+    desktop.SelectAll()
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.CHANGE_TYPE)
+    a2dtest.WaitForSystemTask()
     apple2.DeleteKey()
     apple2.DeleteKey()
     apple2.Type("06")
     a2d.DialogOK()
     a2dtest.WaitForAlert({match="Modifying directories is not supported"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
     a2dtest.ExpectAlertNotShowing()
 end)

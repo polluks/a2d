@@ -9,6 +9,7 @@ local a2dtest = {}
 local util = require("util")
 local apple2 = require("apple2")
 local a2d = require("a2d")
+local desktop = require("desktop")
 local mgtk = require("mgtk")
 local test = require("test")
 
@@ -64,17 +65,21 @@ function a2dtest.SnapshotDHRWithoutClock()
   end
   return dhr
 end
-function a2dtest.ExpectUnchangedExceptClock(dhr, message)
+function a2dtest.ExpectUnchangedExceptClock(dhr, message, options)
+  options = util.default_options(options)
+  options.snap = true
   local new = a2dtest.SnapshotDHRWithoutClock()
-  test.Expect(a2dtest.CompareDHR(dhr, new, true), message, {snap=true}, 1)
+  test.Expect(a2dtest.CompareDHR(dhr, new, true), message, options)
 end
 
 -- The above, wrapped into a helper that takes a callback
-function a2dtest.ExpectNothingChanged(func)
+function a2dtest.ExpectNothingChanged(func, options)
+  options = util.default_options(options)
+  options.snap = true
   local dhr = a2dtest.SnapshotDHRWithoutClock()
   func()
   local new = a2dtest.SnapshotDHRWithoutClock()
-  test.Expect(a2dtest.CompareDHR(dhr, new, true), "nothing should have changed", {snap=true}, 1)
+  test.Expect(a2dtest.CompareDHR(dhr, new, true), "nothing should have changed", options)
 end
 
 --------------------------------------------------
@@ -104,35 +109,42 @@ end
 
 --------------------------------------------------
 
-function a2dtest.ExpectFullRepaint(func)
-  a2dtest.ExpectRepaintFraction(0.9, 1.0, func, "should be full repaint", 1)
+function a2dtest.ExpectFullRepaint(func, options)
+  options = util.default_options(options)
+  a2dtest.ExpectRepaintFraction(0.9, 1.0, func, "should be full repaint", options)
 end
 
-function a2dtest.ExpectMinimalRepaint(func)
-  a2dtest.ExpectRepaintFraction(0, 0.5, func, "should be minimal repaint", 1)
+function a2dtest.ExpectMinimalRepaint(func, options)
+  options = util.default_options(options)
+  a2dtest.ExpectRepaintFraction(0, 0.5, func, "should be minimal repaint", options)
 end
 
-function a2dtest.ExpectNoRepaint(func)
-  a2dtest.ExpectRepaintFraction(0, 0.01, func, "should not have repainted", 1)
+function a2dtest.ExpectNoRepaint(func, options)
+  options = util.default_options(options)
+  a2dtest.ExpectRepaintFraction(0, 0.01, func, "should not have repainted", options)
 end
 
-function a2dtest.ExpectRepaintFraction(min, max, func, message, level)
+function a2dtest.ExpectRepaintFraction(min, max, func, message, options)
+  options = util.default_options(options)
+  options.snap = true
   a2dtest.DHRDarkness()
   func()
   local fraction = RepaintFraction(darkness_ref, apple2.SnapshotDHR())
   test.Expect(min <= fraction and fraction <= max,
               string.format("%s - diff about %d%%", message, math.floor(fraction * 100)),
-              {snap=true}, level and level+1 or 1)
+              options)
 end
 
-function a2dtest.ExpectMenuNotHighlighted()
+function a2dtest.ExpectMenuNotHighlighted(options)
+  options = util.default_options(options)
   for col = 0,apple2.SCREEN_COLUMNS-1 do
-    test.ExpectEquals(apple2.GetDHRByte(0, col), 0x7F, "Menu should not be highlighted", {}, 1)
+    test.ExpectEquals(apple2.GetDHRByte(0, col), 0x7F, "Menu should not be highlighted", options)
   end
 end
 
-function a2dtest.ExpectClockVisible()
-  test.ExpectNotEquals(apple2.GetDHRByte(4, 78), 0x7F, "Clock should be visible", {}, 1)
+function a2dtest.ExpectClockVisible(options)
+  options = util.default_options(options)
+  test.ExpectNotEquals(apple2.GetDHRByte(4, 78), 0x7F, "Clock should be visible", options)
 end
 
 --------------------------------------------------
@@ -141,26 +153,32 @@ end
 
 local bank_offset
 
-local DESKTOP_SYMBOLS = {}
-for pair in emu.subst_env("$DESKTOP_SYMBOLS"):gmatch("([^ ]+)") do
-  local k,v = pair:match("^(.+)=(.+)$")
-  DESKTOP_SYMBOLS[k] = tonumber(v, 16)
-end
-local SELECTOR_SYMBOLS = {}
-for pair in emu.subst_env("$SELECTOR_SYMBOLS"):gmatch("([^ ]+)") do
-  local k,v = pair:match("^(.+)=(.+)$")
-  SELECTOR_SYMBOLS[k] = tonumber(v, 16)
-end
+local DESKTOP_SYMBOLS = util.GetSymbols("DESKTOP_SYMBOLS")
+local DISKCOPY_SYMBOLS = util.GetSymbols("DISKCOPY_SYMBOLS")
+local SELECTOR_SYMBOLS = util.GetSymbols("SELECTOR_SYMBOLS")
+
+local system_task_intercept_addr
 
 function a2dtest.ConfigureForDeskTop()
   bank_offset = 0x10000
   mgtk.Configure(bank_offset, DESKTOP_SYMBOLS["current_window"])
+  system_task_intercept_addr = DESKTOP_SYMBOLS["TestInterceptSystemTask"] -- in main
 end
-a2dtest.ConfigureForDiskCopy = a2dtest.ConfigureForDeskTop
+
+function a2dtest.ConfigureForDiskCopy()
+  bank_offset = 0x10000
+  mgtk.Configure(bank_offset, DESKTOP_SYMBOLS["current_window"]) -- inherits MGTK from DeskTop
+  system_task_intercept_addr = DISKCOPY_SYMBOLS["TestInterceptSystemTask"] + bank_offset -- auxlc
+end
 
 function a2dtest.ConfigureForSelector()
   bank_offset = 0x00000
   mgtk.Configure(bank_offset, SELECTOR_SYMBOLS["current_window"])
+  system_task_intercept_addr = SELECTOR_SYMBOLS["TestInterceptSystemTask"] -- in main
+end
+
+function a2dtest.WaitForSystemTask()
+  apple2.WaitForMemoryRead(system_task_intercept_addr)
 end
 
 local function ram_u8(addr)
@@ -303,27 +321,31 @@ function a2dtest.IsAlertShowing()
   return true
 end
 
-function a2dtest.ExpectAlertNotShowing()
-  test.Expect(not a2dtest.IsAlertShowing(), "an alert should not be showing", nil, 1)
+function a2dtest.ExpectAlertNotShowing(options)
+  options = util.default_options(options)
+  test.Expect(not a2dtest.IsAlertShowing(), "an alert should not be showing", options)
 end
 
 function a2dtest.WaitForAlert(options)
+  options = util.default_options(options)
+  options.snap = true
+
   util.WaitFor("alert", a2dtest.IsAlertShowing, options)
   emu.wait(0.5) -- let the alert finish drawing
-  if options and (options.match or options.imatch) then
+  if options.match or options.imatch then
     local ocr = a2dtest.OCRScreen({x1=130, y1=75, x2=470, y2=100})
     if options.imatch then
       ocr = ocr:upper()
       options.match = options.imatch:upper()
     end
-    test.ExpectMatch(ocr, options.match, "alert should match " .. options.match, {snap=true}, 1)
+    test.ExpectMatch(ocr, options.match, "alert should match " .. options.match, options)
   end
 end
 
 --------------------------------------------------
 
 function a2dtest.ExpectNotHanging()
-  a2d.OpenMenu(a2d.APPLE_MENU)
+  a2d.OpenMenu(desktop.APPLE_MENU)
   test.ExpectMatch(a2dtest.OCRScreen(), "About Apple II DeskTop", "Apple menu should have shown")
   apple2.EscapeKey()
   a2d.WaitForRepaint()
@@ -347,7 +369,7 @@ end
 --------------------------------------------------
 
 function a2dtest.GetSelectedIconName()
-  local icons = a2d.GetSelectedIcons()
+  local icons = desktop.GetSelectedIcons()
   if #icons == 0 then
     error("Selection is empty", 2)
   end
@@ -356,7 +378,7 @@ function a2dtest.GetSelectedIconName()
 end
 
 function a2dtest.GetSelectedIconCoords()
-  local icons = a2d.GetSelectedIcons()
+  local icons = desktop.GetSelectedIcons()
   if #icons == 0 then
     error("Selection is empty", 2)
   end
@@ -365,7 +387,7 @@ function a2dtest.GetSelectedIconCoords()
 end
 
 function a2dtest.GetSelectedIconWindowID()
-  local icons = a2d.GetSelectedIcons()
+  local icons = desktop.GetSelectedIcons()
   if #icons == 0 then
     error("Selection is empty", 2)
   end
@@ -374,7 +396,7 @@ function a2dtest.GetSelectedIconWindowID()
 end
 
 function a2dtest.IsSelectionInFrontWindow()
-  local icons = a2d.GetSelectedIcons()
+  local icons = desktop.GetSelectedIcons()
   if #icons == 0 then
     error("Selection is empty", 2)
   end
@@ -408,7 +430,7 @@ local ocr_table = require("ocr_table")
 
 -- callback is invoked with (run, x, y)
 function a2dtest.OCRIterate(callback, options)
-  if options == nil then options = {} end
+  options = util.default_options(options)
 
   -- Grab screen pixels
   local dhr = apple2.SnapshotDHR()
@@ -489,7 +511,7 @@ function a2dtest.OCRIterate(callback, options)
 end
 
 function a2dtest.OCRScreen(options)
-  if options == nil then options = {} end
+  options = util.default_options(options)
 
   local str = ""
   local line = ""
@@ -535,7 +557,7 @@ function a2dtest.OCRScreen(options)
 end
 
 function a2dtest.OCRFrontWindowContent(options)
-  if options == nil then options = {} end
+  options = util.default_options(options)
 
   local x, y, w, h = a2dtest.GetFrontWindowContentRect()
   options.x1 = x
@@ -575,13 +597,14 @@ end
 
 function a2dtest.VerifyFilesRemainingCountdown(frames, message)
   local last = nil
+  options = util.default_options()
 
   for i = 1, frames/2 do
     local count = a2dtest.GetFilesRemainingCount()
     if count then
       test.Expect(not last or count <= last,
                   string.format("%s - should only count down, saw %q -> %q", message, last, count),
-                  {}, 1)
+                  options)
 
       last = count
     elseif last then
@@ -594,7 +617,7 @@ function a2dtest.VerifyFilesRemainingCountdown(frames, message)
 
   test.ExpectEquals(last, 0,
               string.format("%s - progress should bottom out at 0", message),
-              {}, 1)
+              options)
 end
 
 --------------------------------------------------

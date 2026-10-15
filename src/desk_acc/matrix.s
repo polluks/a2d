@@ -33,7 +33,7 @@ event_params:   .tag MGTK::Event
 kMainPageClearByte = ' '|$80    ; space
 kAuxPageClearByte  = $C0        ; light-green on black, for RGB cards
 
-.proc Start
+.scope Start
         JUMP_TABLE_MGTK_CALL MGTK::FlushEvents
         JUMP_TABLE_MGTK_CALL MGTK::HideCursor
 
@@ -84,7 +84,7 @@ kAuxPageClearByte  = $C0        ; light-green on black, for RGB cards
 
         JUMP_TABLE_MGTK_CALL MGTK::ShowCursor
         jmp     JUMP_TABLE_RGB_MODE
-.endproc ; Start
+.endscope ; Start
 
 ;;; ============================================================
 
@@ -116,8 +116,7 @@ kAuxPageClearByte  = $C0        ; light-green on black, for RGB cards
 
       WHILE dey : POS
 
-        inc     CV
-    WHILE lda CV : A <> #24
+    WHILE u8 ++CV <> #24
 
         sta     CLR80STORE
         rts
@@ -149,8 +148,7 @@ kAuxPageClearByte  = $C0        ; light-green on black, for RGB cards
 
       WHILE dey : POS
 
-        inc     CV
-    WHILE lda CV : A <> #24
+    WHILE u8 ++CV <> #24
 
         sta     CLR80STORE
         rts
@@ -210,10 +208,8 @@ MainLoop:
         jsr     CopyEventAuxToMain
 
         lda     event_params + MGTK::Event::kind
-        cmp     #MGTK::EventKind::button_down
-        beq     exit
-        cmp     #MGTK::EventKind::key_down
-        beq     exit
+        IF A = #MGTK::EventKind::button_down GOTO exit
+        IF A = #MGTK::EventKind::key_down GOTO exit
 
         ;; Iterate over all cursors
         copy8   #kNumCursors-1, index
@@ -317,19 +313,6 @@ exit:   rts
     WHILE A < #' '+1            ; retry if control or space
         rts
 .endproc ; GetRandomChar
-
-        ;; --------------------------------------------------
-
-.proc Wait
-        sec
-wait2:  pha
-wait3:  sbc     #1
-        bne     wait3
-        pla
-        sbc     #1
-        bne     wait2
-        rts
-.endproc ; Wait
 
         ;; --------------------------------------------------
 

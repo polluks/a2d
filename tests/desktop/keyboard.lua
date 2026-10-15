@@ -6,8 +6,6 @@ DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
   Close all windows. Start typing a volume name. Verify that a
   prefix-matching volume, or the subsequent volume (in lexicographic
@@ -16,23 +14,23 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "type down",
   function()
-    a2d.CloseAllWindows()
-    a2d.ClearSelection()
+    desktop.CloseAllWindows()
+    desktop.ClearSelection()
     apple2.Type("A")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "type down order")
     apple2.Type("2")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "type down order")
     apple2.Type("Q")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "RAM1", "type down order")
-    a2d.ClearSelection()
+    desktop.ClearSelection()
     apple2.Type("T")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "TESTS", "type down order")
     apple2.Type("Z")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "TRASH", "type down order")
 end)
 
@@ -43,19 +41,19 @@ end)
 test.Step(
   "type down reset on mouse move",
   function()
-    a2d.CloseAllWindows()
-    a2d.ClearSelection()
+    desktop.CloseAllWindows()
+    desktop.ClearSelection()
     apple2.Type("T")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "TESTS", "type down order")
     apple2.Type("R")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "TRASH", "type down order")
     a2d.InMouseKeysMode(function(m)
         m.MoveByApproximately(20, 20)
     end)
     apple2.Type("A")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "type down order")
 end)
 
@@ -72,38 +70,38 @@ end)
 test.Step(
   "type down order",
   function()
-    a2d.OpenPath("/TESTS/TYPING.SELECT/ORDER")
-    emu.wait(1)
+    desktop.OpenWindow("/TESTS/TYPING.SELECT/ORDER")
+    a2dtest.WaitForSystemTask()
 
     apple2.Type("A")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "ALFA", "type down order")
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 
     apple2.Type("AB")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "ALFA", "type down order")
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 
     apple2.Type("AL")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "ALFA", "type down order")
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 
     apple2.Type("ALFAA")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "WHISKEY", "type down order")
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 
     apple2.Type("B")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "WHISKEY", "type down order")
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 
     apple2.Type("Z")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "WHISKEY", "type down order")
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 end)
 
 --[[
@@ -114,11 +112,11 @@ end)
 test.Step(
   "type down order, reset if mouse moves",
   function()
-    a2d.OpenPath("/TESTS/TYPING.SELECT/ORDER")
-    emu.wait(1)
+    desktop.OpenWindow("/TESTS/TYPING.SELECT/ORDER")
+    a2dtest.WaitForSystemTask()
 
     apple2.Type("WHIS")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "WHISKEY", "type down order")
 
     a2d.InMouseKeysMode(function(m)
@@ -126,7 +124,7 @@ test.Step(
     end)
 
     apple2.Type("ALFA")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "ALFA", "type down order")
 end)
 
@@ -141,18 +139,18 @@ test.Variants(
     {"type down order, reset on non-name key, space", apple2.RightArrowKey},
   },
   function(idx, name, keyfunc)
-    a2d.OpenPath("/TESTS/TYPING.SELECT/ORDER")
-    emu.wait(1)
+    desktop.OpenWindow("/TESTS/TYPING.SELECT/ORDER")
+    a2dtest.WaitForSystemTask()
 
     apple2.Type("WHIS")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "WHISKEY", "type down order")
 
     keyfunc()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     apple2.Type("ALFA")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "ALFA", "type down order")
 end)
 
@@ -163,25 +161,25 @@ test.Step(
   "type down in empty windows does not change selection",
   function()
     -- Volume selection
-    a2d.OpenPath("/RAM1")
+    desktop.OpenWindow("/RAM1")
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "RAM1", "volume should be selected")
     apple2.Type("ANYTHING")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "RAM1", "volume should still be selected")
 
     -- Selection in another window
-    a2d.SelectPath("/A2.DESKTOP/READ.ME", {keep_windows=true})
-    a2d.CycleWindows()
+    desktop.SelectPath("/A2.DESKTOP/READ.ME", {keep_windows=true})
+    desktop.CycleWindows()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "READ.ME", "file should be selected")
     apple2.Type("ANYTHING")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "READ.ME", "file should still be selected")
 
     -- No selection in another window
-    a2d.ClearSelection()
+    desktop.ClearSelection()
     apple2.Type("ANYTHING")
-    a2d.WaitForRepaint()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 0, "nothing should be selected")
+    a2dtest.WaitForSystemTask()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 0, "nothing should be selected")
 end)
 
 --[[
@@ -196,25 +194,25 @@ test.Variants(
   },
   function(idx, name, keyfunc)
     -- Volume selection
-    a2d.OpenPath("/RAM1")
+    desktop.OpenWindow("/RAM1")
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "RAM1", "volume should be selected")
     keyfunc()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "RAM1", "volume should still be selected")
 
     -- Selection in another window
-    a2d.SelectPath("/A2.DESKTOP/READ.ME", {keep_windows=true})
-    a2d.CycleWindows()
+    desktop.SelectPath("/A2.DESKTOP/READ.ME", {keep_windows=true})
+    desktop.CycleWindows()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "READ.ME", "file should be selected")
     keyfunc()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "READ.ME", "file should still be selected")
 
     -- No selection in another window
-    a2d.ClearSelection()
+    desktop.ClearSelection()
     keyfunc()
-    a2d.WaitForRepaint()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 0, "nothing should be selected")
+    a2dtest.WaitForSystemTask()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 0, "nothing should be selected")
 end)
 
 --[[
@@ -226,25 +224,25 @@ test.Step(
   "arrow keys in empty windows does not change selection",
   function()
     -- Volume selection
-    a2d.OpenPath("/RAM1")
+    desktop.OpenWindow("/RAM1")
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "RAM1", "volume should be selected")
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "RAM1", "volume should still be selected")
 
     -- Selection in another window
-    a2d.SelectPath("/A2.DESKTOP/READ.ME", {keep_windows=true})
-    a2d.CycleWindows()
+    desktop.SelectPath("/A2.DESKTOP/READ.ME", {keep_windows=true})
+    desktop.CycleWindows()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "READ.ME", "file should be selected")
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "READ.ME", "file should still be selected")
 
     -- No selection in another window
-    a2d.ClearSelection()
+    desktop.ClearSelection()
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 0, "nothing should be selected")
+    a2dtest.WaitForSystemTask()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 0, "nothing should be selected")
 end)
 
 --[[
@@ -255,29 +253,29 @@ end)
 test.Step(
   "type down is case insensitive",
   function()
-    a2d.OpenPath("/TESTS/TYPING.SELECT/CASE")
-    emu.wait(1)
+    desktop.OpenWindow("/TESTS/TYPING.SELECT/CASE")
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectAll()
-    local icons = a2d.GetSelectedIcons()
+    desktop.SelectAll()
+    local icons = desktop.GetSelectedIcons()
     test.ExpectEquals(#icons, 3, "should be 3 icons")
     test.ExpectEquals(icons[1].name, "UPPER", "case should match")
     test.ExpectEquals(icons[2].name, "lower", "case should match")
     test.ExpectEquals(icons[3].name, "mIxEdCaSe", "case should match")
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 
     apple2.Type("u")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "UPPER", "case insensitive")
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 
     apple2.Type("L")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "LOWER", "case insensitive")
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 
     apple2.Type("MiXeD")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "MIXEDCASE", "case insensitive")
 end)
 
@@ -291,14 +289,14 @@ test.Step(
   function()
     -- Note: acceleration isn't disabled as the "bot" can move fast enough
 
-    a2d.CloseAllWindows()
-    a2d.ClearSelection()
+    desktop.CloseAllWindows()
+    desktop.ClearSelection()
 
     apple2.Type("A")
     a2d.OAShortcut("O")
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -311,8 +309,8 @@ test.Step(
   function()
     -- Note: acceleration isn't disabled as the "bot" can move fast enough
 
-    a2d.CloseAllWindows()
-    a2d.ClearSelection()
+    desktop.CloseAllWindows()
+    desktop.ClearSelection()
 
     local file_menu_x, file_menu_y
     a2dtest.OCRIterate(function(run, x, y)
@@ -327,9 +325,13 @@ test.Step(
     end)
 
     apple2.Type("A")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     apple2.ClickMouseButton()
     a2dtest.MultiSnap(10, "verify that Open is enabled")
+
+    -- cleanup
+    apple2.ControlOAReset()
+    a2d.WaitForDesktopReady()
 end)
 
 --[[
@@ -395,20 +397,20 @@ test.Variants(
     {"empty window, space key", apple2.SpaceKey},
   },
   function(idx, name, keyfunc)
-    a2d.OpenPath("/RAM1")
-    a2d.ClearSelection()
+    desktop.OpenWindow("/RAM1")
+    desktop.ClearSelection()
 
     for i = 1, 5 do
       apple2.SpaceKey()
-      a2d.WaitForRepaint()
+      a2dtest.WaitForSystemTask()
     end
 
     test.Snap("verify no scrollbars")
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 0, "nothing should be selected")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 0, "nothing should be selected")
     a2dtest.ExpectNotHanging()
-    a2d.CloseWindow()
+    desktop.CloseWindow()
 
-    local icons = a2d.GetSelectedIcons()
+    local icons = desktop.GetSelectedIcons()
     test.ExpectEquals(#icons, 1, "volume should be selected")
     test.ExpectEqualsIgnoreCase(icons[1].name, "RAM1", "volume should be selected")
     test.Expect(not icons[1].dimmed, "volume should not be dimmed selected")
@@ -424,19 +426,19 @@ end)
 test.Step(
   "empty window, alpha key",
   function()
-    a2d.OpenPath("/RAM1")
-    a2d.ClearSelection()
+    desktop.OpenWindow("/RAM1")
+    desktop.ClearSelection()
 
     for i = 1, 5 do
       apple2.Type("Z")
     end
 
     test.Snap("verify no scrollbars")
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 0, "nothing should be selected")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 0, "nothing should be selected")
     a2dtest.ExpectNotHanging()
-    a2d.CloseWindow()
+    desktop.CloseWindow()
 
-    local icons = a2d.GetSelectedIcons()
+    local icons = desktop.GetSelectedIcons()
     test.ExpectEquals(#icons, 1, "volume should be selected")
     test.ExpectEqualsIgnoreCase(icons[1].name, "RAM1", "volume should be selected")
     test.Expect(not icons[1].dimmed, "volume should not be dimmed")
@@ -455,13 +457,13 @@ test.Variants(
     {"no windows, space key", apple2.SpaceKey},
   },
   function(idx, name, keyfunc)
-    a2d.CloseAllWindows()
-    a2d.ClearSelection()
+    desktop.CloseAllWindows()
+    desktop.ClearSelection()
 
     keyfunc()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
-    local icons = a2d.GetSelectedIcons()
+    local icons = desktop.GetSelectedIcons()
     test.ExpectEquals(#icons, 1, "volume should be selected")
     test.ExpectEqualsIgnoreCase(icons[1].name, "A2.DESKTOP", "first volume should be selected")
 end)
@@ -477,13 +479,13 @@ test.Variants(
     {"no windows, up arrow key", apple2.UpArrowKey},
   },
   function(idx, name, keyfunc)
-    a2d.CloseAllWindows()
-    a2d.ClearSelection()
+    desktop.CloseAllWindows()
+    desktop.ClearSelection()
 
     keyfunc()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
-    local icons = a2d.GetSelectedIcons()
+    local icons = desktop.GetSelectedIcons()
     test.ExpectEquals(#icons, 1, "volume should be selected")
     test.ExpectEqualsIgnoreCase(icons[1].name, "Trash", "last volume should be selected")
 end)
@@ -496,21 +498,21 @@ end)
 test.Step(
   "desktop, arrow navigation",
   function()
-    a2d.CloseAllWindows()
-    a2d.ClearSelection()
+    desktop.CloseAllWindows()
+    desktop.ClearSelection()
 
-    a2d.Select("A2.DESKTOP")
+    desktop.Select("A2.DESKTOP")
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "TESTS", "selection should move down")
     apple2.LeftArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "TESTS", "selection should remain unchanged")
     apple2.RightArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "TESTS", "selection should remain unchanged")
     apple2.UpArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "selection should move up")
 end)
 
@@ -526,10 +528,10 @@ test.Variants(
     {"window, no selection, space arrow", apple2.SpaceKey},
   },
   function(idx, name, keyfunc)
-    a2d.OpenPath("/A2.DESKTOP")
-    emu.wait(1)
+    desktop.OpenWindow("/A2.DESKTOP")
+    a2dtest.WaitForSystemTask()
     keyfunc()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "PRODOS", "first icon should be selected")
 end)
 
@@ -543,10 +545,10 @@ test.Variants(
     {"window, no selection, up arrow", apple2.UpArrowKey},
   },
   function(idx, name, keyfunc)
-    a2d.OpenPath("/A2.DESKTOP")
-    emu.wait(1)
+    desktop.OpenWindow("/A2.DESKTOP")
+    a2dtest.WaitForSystemTask()
     keyfunc()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "LOCAL", "last icon should be selected")
 end)
 
@@ -570,33 +572,34 @@ test.Variants(
     {"window, selection in inactive window, space", apple2.SpaceKey, "first"},
   },
   function(idx, name, keyfunc, which)
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 
     -- Open two windows, both containing icons
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     local x, y = a2dtest.GetSelectedIconCoords()
-    a2d.OpenPath("/TESTS/PROPERTIES")
-    emu.wait(1)
-    a2d.MoveWindowBy(0, 100)
+    desktop.OpenWindow("/TESTS/PROPERTIES")
+    a2dtest.WaitForSystemTask()
+    desktop.MoveWindowBy(0, 100)
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x, y)
         m.DoubleClick()
     end)
-    a2d.CycleWindows()
-    emu.wait(1)
+    desktop.CycleWindows()
+    a2dtest.WaitForSystemTask()
 
     -- Select an icon in one window
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "PROPERTIES", "folder window should be on top")
     apple2.RightArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     -- Activate the other window wihtout changing selection
-    a2d.CycleWindows()
+    desktop.CycleWindows()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "A2.DESKTOP", "volume window should be on top")
 
     -- Press key
     keyfunc()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     if which == "first" then
       test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "PRODOS", "first icon should be selected")
@@ -614,34 +617,34 @@ end)
 test.Step(
   "window, arrow navigation",
   function()
-    a2d.OpenPath("/A2.DESKTOP/SAMPLE.MEDIA")
-    emu.wait(2)
+    desktop.OpenWindow("/A2.DESKTOP/SAMPLE.MEDIA")
+    a2dtest.WaitForSystemTask()
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "ROOM", "selection should move down")
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "BBROS.MINI", "selection should move down")
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "JESU.JOY", "selection should move down")
     apple2.RightArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "HELLO.WORLD", "selection should move right")
     apple2.RightArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "WOZ.BREAKOUT", "selection should move right")
     apple2.UpArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "DLR.JESTER", "selection should move up")
     apple2.UpArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "HR.COLOR.CHART", "selection should move up")
     apple2.LeftArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "MONARCH", "selection should move left")
     apple2.LeftArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "ROOM", "selection should move left")
 end)
 
@@ -652,27 +655,27 @@ end)
 test.Step(
   "window open, volume navigation",
   function()
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     local x, y = a2dtest.GetSelectedIconCoords()
-    a2d.OpenSelection()
+    desktop.OpenSelection()
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x, y)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "confirm click")
 
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "TESTS", "selection should move down")
 
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "RAM1", "selection should move down")
 
     apple2.SpaceKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "first icon should be selected")
 end)
 
@@ -690,15 +693,15 @@ test.Variants(
     {"window open, click volume, click v scroll bar", "vscroll"},
   },
   function(idx, name, where)
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     local x, y = a2dtest.GetSelectedIconCoords()
-    a2d.OpenSelection()
+    desktop.OpenSelection()
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x, y)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "confirm click")
 
     local win_x, win_y, win_w, win_h = a2dtest.GetFrontWindowContentRect()
@@ -725,7 +728,7 @@ test.Variants(
     end)
 
     apple2.RightArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "PRODOS", "selection should be in window")
 end)
 
@@ -742,15 +745,15 @@ test.Variants(
     {"window open, click volume, click empty area within window, space", apple2.SpaceKey},
   },
   function(idx, name, keyfunc)
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     local x, y = a2dtest.GetSelectedIconCoords()
-    a2d.OpenSelection()
+    desktop.OpenSelection()
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x, y)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "confirm click")
 
     local win_x, win_y, win_w, win_h = a2dtest.GetFrontWindowContentRect()
@@ -760,7 +763,7 @@ test.Variants(
     end)
 
     keyfunc()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "PRODOS", "selection should be in window")
 end)
 
@@ -772,29 +775,29 @@ end)
 test.Step(
   "window open, click volume, click file",
   function()
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     local vol_x, vol_y = a2dtest.GetSelectedIconCoords()
-    a2d.OpenSelection()
-    a2d.Select("PRODOS")
+    desktop.OpenSelection()
+    desktop.Select("PRODOS")
     local file_x, file_y = a2dtest.GetSelectedIconCoords()
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(vol_x, vol_y)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "confirm click")
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(file_x, file_y)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "PRODOS", "confirm click")
 
     apple2.RightArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "CLOCK.SYSTEM", "selection should be in window")
 end)
 
@@ -812,26 +815,26 @@ test.Variants(
     {"window open, click volume, click empty area on desktop, space", apple2.SpaceKey},
   },
   function(idx, name, keyfunc)
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     local x, y = a2dtest.GetSelectedIconCoords()
-    a2d.OpenSelection()
+    desktop.OpenSelection()
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x, y)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "confirm click")
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(apple2.SCREEN_WIDTH, apple2.SCREEN_HEIGHT)
         m.Click()
     end)
-    a2d.WaitForRepaint()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 0, "selection should be cleared")
+    a2dtest.WaitForSystemTask()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 0, "selection should be cleared")
 
     keyfunc()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "first volume should be selected")
 end)
 
@@ -848,29 +851,29 @@ test.Variants(
     {"window open, click file, click empty space on desktop, space", apple2.SpaceKey},
   },
   function(idx, name, keyfunc)
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     local vol_x, vol_y = a2dtest.GetSelectedIconCoords()
-    a2d.OpenSelection()
-    a2d.Select("PRODOS")
+    desktop.OpenSelection()
+    desktop.Select("PRODOS")
     local file_x, file_y = a2dtest.GetSelectedIconCoords()
-    a2d.ClearSelection()
+    desktop.ClearSelection()
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(file_x, file_y)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "PRODOS", "confirm click")
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(apple2.SCREEN_WIDTH, apple2.SCREEN_HEIGHT)
         m.Click()
     end)
-    a2d.WaitForRepaint()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 0, "selection should be cleared")
+    a2dtest.WaitForSystemTask()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 0, "selection should be cleared")
 
     keyfunc()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "PRODOS", "selection should be in window")
 end)
 
@@ -885,34 +888,35 @@ end)
 test.Step(
   "Arrow keys in empty windows don't change selection",
   function()
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     local x, y = a2dtest.GetSelectedIconCoords()
 
     -- Open window with icons
-    a2d.OpenPath("/A2.DESKTOP")
+    desktop.OpenWindow("/A2.DESKTOP")
 
     -- Open window without icons
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x, y)
         m.DoubleClick()
     end)
-    a2d.MoveWindowBy(0, 100)
+    desktop.MoveWindowBy(0, 100)
 
     -- Select an icon in the first window
-    a2d.CycleWindows()
+    desktop.CycleWindows()
+    a2dtest.WaitForSystemTask()
     apple2.RightArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "PRODOS", "first icon should be selected")
 
     -- Activate the other window
-    a2d.CycleWindows()
+    desktop.CycleWindows()
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "RAM1", "empty window should be on top")
 
     -- Press an arrow key
     apple2.RightArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "PRODOS", "first icon should be selected")
 end)
@@ -928,15 +932,15 @@ test.Variants(
     {"left arrow in list view", apple2.LeftArrowKey},
   },
   function(idx, name, keyfunc)
-    a2d.OpenPath("/A2.DESKTOP")
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
-    a2d.WaitForRepaint()
+    desktop.OpenWindow("/A2.DESKTOP")
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "single volume should be selected")
 
     a2dtest.ExpectNothingChanged(function()
         keyfunc()
-        a2d.WaitForRepaint()
+        a2dtest.WaitForSystemTask()
     end)
 
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "single volume should be selected")
@@ -961,42 +965,42 @@ test.Variants(
     {"list view, up arrow does not wrap", "up"},
   },
   function(idx, name, which)
-    a2d.OpenPath("/A2.DESKTOP")
+    desktop.OpenWindow("/A2.DESKTOP")
 
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_DATE)
-    a2d.WaitForRepaint()
-    a2d.SelectAll()
-    local icons = a2d.GetSelectedIcons()
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_DATE)
+    a2dtest.WaitForSystemTask()
+    desktop.SelectAll()
+    local icons = desktop.GetSelectedIcons()
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(apple2.SCREEN_WIDTH, apple2.SCREEN_HEIGHT)
         m.Click()
     end)
-    a2d.WaitForRepaint()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 0, "selection should be cleared")
+    a2dtest.WaitForSystemTask()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 0, "selection should be cleared")
 
     if which == "down" then
       apple2.DownArrowKey()
-      a2d.WaitForRepaint()
+      a2dtest.WaitForSystemTask()
       test.ExpectEquals(a2dtest.GetSelectedIconName(), icons[1].name, "first icon should be selected")
       apple2.DownArrowKey()
-      a2d.WaitForRepaint()
+      a2dtest.WaitForSystemTask()
       test.ExpectEquals(a2dtest.GetSelectedIconName(), icons[2].name, "next icon should be selected")
       for i = 1, 30 do
         apple2.DownArrowKey()
-        a2d.WaitForRepaint()
+        a2dtest.WaitForSystemTask()
       end
       test.ExpectEquals(a2dtest.GetSelectedIconName(), icons[#icons].name, "last icon should be selected")
     else
       apple2.UpArrowKey()
-      a2d.WaitForRepaint()
+      a2dtest.WaitForSystemTask()
       test.ExpectEquals(a2dtest.GetSelectedIconName(), icons[#icons].name, "last icon should be selected")
       apple2.UpArrowKey()
-      a2d.WaitForRepaint()
+      a2dtest.WaitForSystemTask()
       test.ExpectEquals(a2dtest.GetSelectedIconName(), icons[#icons-1].name, "previous icon should be selected")
       for i = 1, 30 do
         apple2.UpArrowKey()
-        a2d.WaitForRepaint()
+        a2dtest.WaitForSystemTask()
       end
       test.ExpectEquals(a2dtest.GetSelectedIconName(), icons[1].name, "first icon should be selected")
     end
@@ -1045,13 +1049,13 @@ test.Variants(
      function() apple2.PressShift() apple2.TabKey() apple2.ReleaseShift() end, "backwards"},
   },
   function(idx, name, press, release, keyfunc, dir)
-    a2d.OpenPath("/RAM1")
-    a2d.CreateFolder("A")
-    a2d.CreateFolder("B")
-    a2d.CreateFolder("C")
-    a2d.SelectAll()
-    a2d.OpenSelectionAndCloseCurrent()
-    emu.wait(5)
+    desktop.OpenWindow("/RAM1")
+    desktop.CreateFolder("A")
+    desktop.CreateFolder("B")
+    desktop.CreateFolder("C")
+    desktop.SelectAll()
+    desktop.OpenSelectionAndCloseCurrent()
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 3, "A, B, C should be open")
 
     local sequence = ""
@@ -1060,7 +1064,7 @@ test.Variants(
 
       keyfunc()
 
-      a2d.WaitForRepaint()
+      a2dtest.WaitForSystemTask()
 
       release()
 
@@ -1073,9 +1077,9 @@ test.Variants(
       test.ExpectEquals(sequence, "BACBAC", "should cycle backwards")
     end
 
-    a2d.OpenPath("/RAM1")
-    a2d.SelectAll()
-    a2d.DeleteSelection()
+    desktop.OpenWindow("/RAM1")
+    desktop.SelectAll()
+    desktop.DeleteSelection()
 end)
 
 
@@ -1086,13 +1090,13 @@ end)
 test.Step(
   "OA+Down with no windows, no selection",
   function()
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(apple2.SCREEN_WIDTH, apple2.SCREEN_HEIGHT)
         m.Click()
     end)
-    a2d.WaitForRepaint()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 0, "selection should be cleared")
+    a2dtest.WaitForSystemTask()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 0, "selection should be cleared")
 
     a2dtest.ExpectNothingChanged(a2d.OADown)
 end)
@@ -1109,10 +1113,10 @@ test.Variants(
     {"no windows, space key after Select All", apple2.SpaceKey},
   },
   function(idx, name, keyfunc)
-    a2d.CloseAllWindows()
-    a2d.SelectAll()
+    desktop.CloseAllWindows()
+    desktop.SelectAll()
     keyfunc()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "A2.DESKTOP", "single volume should be selected")
 end)
 
@@ -1129,10 +1133,10 @@ test.Variants(
     {"window open, space after Select All", apple2.SpaceKey},
   },
   function(idx, name, keyfunc)
-    a2d.OpenPath("/A2.DESKTOP")
-    a2d.SelectAll()
+    desktop.OpenWindow("/A2.DESKTOP")
+    desktop.SelectAll()
     keyfunc()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "PRODOS", "single file should be selected")
 end)
 
@@ -1143,8 +1147,8 @@ end)
 test.Step(
   "Icon view - select from last selected",
   function()
-    a2d.OpenPath("/TESTS/SELECTION/SHIFT.ARROWS")
-    emu.wait(5) -- full windows can take a bit
+    desktop.OpenWindow("/TESTS/SELECTION/SHIFT.ARROWS")
+    a2dtest.WaitForSystemTask()
 
     --  A  B  C  D  E
     --  F  G  H  I  J
@@ -1153,13 +1157,13 @@ test.Step(
     --  U  V  W  X  Y
     --  Z
 
-    a2d.Select("B")
+    desktop.Select("B")
     local x1, y1 = a2dtest.GetSelectedIconCoords()
-    a2d.Select("D")
+    desktop.Select("D")
     local x2, y2 = a2dtest.GetSelectedIconCoords()
-    a2d.Select("E")
+    desktop.Select("E")
     local x3, y3 = a2dtest.GetSelectedIconCoords()
-    a2d.Select("C")
+    desktop.Select("C")
     local x4, y4 = a2dtest.GetSelectedIconCoords()
 
     a2d.InMouseKeysMode(function(m)
@@ -1174,13 +1178,13 @@ test.Step(
         m.Click()
         apple2.ReleaseOA()
     end)
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 4, "should start with 3 selected")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 4, "should start with 3 selected")
 
     apple2.DownArrowKey()
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "should collapse to 1 selected")
-    test.ExpectEqualsIgnoreCase(a2d.GetSelectedIcons()[1].name, "H", "icon next to last should be selected")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 1, "should collapse to 1 selected")
+    test.ExpectEqualsIgnoreCase(desktop.GetSelectedIcons()[1].name, "H", "icon next to last should be selected")
 end)
 
 --[[
@@ -1190,17 +1194,18 @@ end)
 test.Step(
   "List view - select from last selected",
   function()
-    a2d.OpenPath("/TESTS/SELECTION/SHIFT.ARROWS")
-    emu.wait(5) -- full windows can take a bit
-    a2d.InvokeMenuItem(a2d.VIEW_MENU, a2d.VIEW_BY_NAME)
+    desktop.OpenWindow("/TESTS/SELECTION/SHIFT.ARROWS")
+    a2dtest.WaitForSystemTask()
+    a2d.InvokeMenuItem(desktop.VIEW_MENU, desktop.VIEW_BY_NAME)
+    a2dtest.WaitForSystemTask()
 
-    a2d.Select("C")
+    desktop.Select("C")
     local x1, y1 = a2dtest.GetSelectedIconCoords()
 
-    a2d.Select("G")
+    desktop.Select("G")
     local x2, y2 = a2dtest.GetSelectedIconCoords()
 
-    a2d.Select("E")
+    desktop.Select("E")
     local x3, y3 = a2dtest.GetSelectedIconCoords()
 
     a2d.InMouseKeysMode(function(m)
@@ -1213,13 +1218,13 @@ test.Step(
         m.Click()
         apple2.ReleaseOA()
     end)
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 3, "should start with 3 selected")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 3, "should start with 3 selected")
 
     apple2.UpArrowKey()
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "should collapse to 1 selected")
-    test.ExpectEqualsIgnoreCase(a2d.GetSelectedIcons()[1].name, "D", "icon next to last should be selected")
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 1, "should collapse to 1 selected")
+    test.ExpectEqualsIgnoreCase(desktop.GetSelectedIcons()[1].name, "D", "icon next to last should be selected")
 end)
 
 --[[
@@ -1229,21 +1234,21 @@ end)
 test.Step(
   "Space selects first icon",
   function()
-    a2d.OpenPath("/TESTS/TYPING.SELECT/ORDER")
-    emu.wait(1)
+    desktop.OpenWindow("/TESTS/TYPING.SELECT/ORDER")
+    a2dtest.WaitForSystemTask()
 
     apple2.Type("ALFA")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "ALFA", "type down selection")
     apple2.SpaceKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "ALFA", "space selects first icon")
 
     apple2.Type("WHISKEY")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "WHISKEY", "type down selection")
     apple2.SpaceKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetSelectedIconName(), "ALFA", "space selects first icon")
 end)
 
@@ -1255,10 +1260,10 @@ end)
 test.Step(
   "Keyboard selection scrolls already selected icon into view",
   function()
-    a2d.OpenPath("/TESTS/SELECTION/GREEK")
-    emu.wait(5) -- full windows can take a bit
+    desktop.OpenWindow("/TESTS/SELECTION/GREEK")
+    a2dtest.WaitForSystemTask()
 
-    a2d.Select("ALPHA")
+    desktop.Select("ALPHA")
     test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "ALPHA", "ALPHA should be selected")
     test.ExpectNotMatch(a2dtest.OCRScreen(), "OMEGA", "OMEGA should be scrolled out of view")
 
@@ -1266,16 +1271,16 @@ test.Step(
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x + w + 5, y + h - 5)
         m.ButtonDown()
-        emu.wait(1)
+        emu.wait(1) -- scroll all the way to the bottom
         m.ButtonUp()
     end)
 
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.ExpectNotMatch(a2dtest.OCRScreen({invert=true}), "ALPHA", "ALPHA should be scrolled out of view")
     test.ExpectMatch(a2dtest.OCRScreen(), "OMEGA", "OMEGA should be scrolled into view")
 
     apple2.SpaceKey()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "ALPHA", "ALPHA should be scrolled into view")
     test.ExpectNotMatch(a2dtest.OCRScreen(), "OMEGA", "OMEGA should be scrolled out of view")
 end)

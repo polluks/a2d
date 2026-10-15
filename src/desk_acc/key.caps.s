@@ -552,20 +552,24 @@ continue:
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
+
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params::kind
+      IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      END_IF
 
-        cmp     #MGTK::EventKind::button_down ; was clicked?
-        jeq     HandleDown
-
-        cmp     #MGTK::EventKind::key_down  ; any key?
-        jeq     HandleKey
-
-        jmp     InputLoop
+    FOREVER
 .endproc ; InputLoop
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         MGTK_CALL MGTK::CloseWindow, winfo
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
         rts
@@ -578,10 +582,8 @@ continue:
         beq     start
         lda     event_params::key
         jsr     ToUpperCase
-        cmp     #kShortcutQuit  ; Apple-Q to quit
-        beq     Exit
-        cmp     #kShortcutCloseWindow ; Apple-W to close window
-        beq     Exit
+        IF A = #kShortcutQuit GOTO Exit  ; Apple-Q to quit
+        IF A = #kShortcutCloseWindow GOTO Exit ; Apple-W to close window
 
 start:  lda     KBD
         and     #CHAR_MASK
@@ -610,7 +612,7 @@ start:  lda     KBD
         jsr     invert
     END_IF
 
-        jmp     InputLoop
+        rts
 
 invert:
         MGTK_CALL MGTK::ShieldCursor, tmp_rect
@@ -630,16 +632,12 @@ last_char:
         copy16  event_params::ycoord, findwindow_params::mousey
         MGTK_CALL MGTK::FindWindow, findwindow_params
 
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        jne     InputLoop
+        RTS_IF u8 findwindow_params::window_id <> #kDAWindowId
 
         lda     findwindow_params::which_area
-        cmp     #MGTK::Area::close_box
-        beq     HandleClose
-        cmp     #MGTK::Area::dragbar
-        beq     HandleDrag
-        jmp     InputLoop
+        IF A = #MGTK::Area::close_box GOTO HandleClose
+        IF A = #MGTK::Area::dragbar GOTO HandleDrag
+        rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -647,7 +645,7 @@ last_char:
 .proc HandleClose
         MGTK_CALL MGTK::TrackGoAway, trackgoaway_params
         lda     trackgoaway_params::clicked
-        jeq     InputLoop
+        RTS_IF ZERO
         jmp     Exit
 .endproc ; HandleClose
 
@@ -668,7 +666,7 @@ last_char:
         jsr     DrawWindow
     END_IF
 
-        jmp     InputLoop
+        rts
 
 .endproc ; HandleDrag
 
@@ -771,10 +769,8 @@ check:
     END_IF
 
         ;; Is IIc+?
-        lda     ZIDBYTE         ; $00 = IIc
-    IF ZERO
-        lda     ZIDBYTE2        ; $05 = IIc Plus
-      IF A = #$05
+    IF u8 ZIDBYTE = #0          ; $00 = IIc
+      IF u8 ZIDBYTE2 = #$05     ; $05 = IIc Plus
         RETURN  C=1             ; Yes, is a IIc+
       END_IF
     END_IF
@@ -846,12 +842,11 @@ check:
         ldy     #2
     DO
         ;; X?
-        scmp16  tmp_poly,y, tmp_rect::x1
-      IF NEG
+      IF s16 tmp_poly,y < tmp_rect::x1
         copy16  tmp_poly,y, tmp_rect::x1
       END_IF
-        scmp16  tmp_poly,y, tmp_rect::x2
-      IF POS
+
+      IF s16 tmp_poly,y >= tmp_rect::x2
         copy16  tmp_poly,y, tmp_rect::x2
       END_IF
 
@@ -859,12 +854,11 @@ check:
         iny
 
         ;; Y?
-        scmp16  tmp_poly,y, tmp_rect::y1
-      IF NEG
+      IF s16 tmp_poly,y < tmp_rect::y1
         copy16  tmp_poly,y, tmp_rect::y1
       END_IF
-        scmp16  tmp_poly,y, tmp_rect::y2
-      IF POS
+
+      IF s16 tmp_poly,y >= tmp_rect::y2
         copy16  tmp_poly,y, tmp_rect::y2
       END_IF
 

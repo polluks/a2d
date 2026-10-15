@@ -79,8 +79,7 @@ ones:   pla                     ; ones
         iny
         sta     str_time,y
 
-        lda     hour
-        cmp     #12
+        ucmp8   hour, #12
         bcs     :+
         lda     #'A'
         SKIP_NEXT_2_BYTE_INSTRUCTION
@@ -116,38 +115,7 @@ clock_24hours:
 
 ;;; ============================================================
 
-;;; Day of the Week calculation (valid 1900-03-01 to 2155-12-31)
-;;; c/o http://6502.org/source/misc/dow.htm
-;;; Inputs: Y = year (0=1900), X = month (1=Jan), A = day (1...31)
-;;; Output: A = weekday (0=Sunday)
-.proc DayOfWeek
-        tmp := $06
-
-        cpx     #3              ; Year starts in March to bypass
-        bcs     :+              ; leap year problem
-        dey                     ; If Jan or Feb, decrement year
-:       eor     #$7F            ; Invert A so carry works right
-        cpy     #200            ; Carry will be 1 if 22nd century
-        adc     month_offset_table-1,X ; A is now day+month offset
-        sta     tmp
-        tya                     ; Get the year
-        jsr     mod7            ; Do a modulo to prevent overflow
-        sbc     tmp             ; Combine with day+month
-        sta     tmp
-        tya                     ; Get the year again
-        lsr                     ; Divide it by 4
-        lsr
-        clc                     ; Add it to y+m+d and fall through
-        adc     tmp
-
-mod7:   adc     #7              ; Returns (A+3) modulo 7
-        bcc     mod7            ; for A in 0..255
-        rts
-
-month_offset_table:
-        .byte   1,5,6,3,1,5,3,0,4,2,6,4
-        ASSERT_TABLE_SIZE month_offset_table, 12
-.endproc ; DayOfWeek
+        .include "day_of_week.s"
 
 ;;; ============================================================
 ;;; Parse date/time
@@ -187,7 +155,7 @@ month_offset_table:
         ;; ----------------------------------------
         ;; Year
         ;; (top 7 bits of datehi, top 3 bits of timehi)
-year:   lda     #0
+        lda     #0
         sta     ytmp+1
 
         ldy     #DateTime::datehi
@@ -199,13 +167,13 @@ year:   lda     #0
         ;; 0-39 is 2000-2039
         ;; Per Technical Note: ProDOS #28: ProDOS Dates -- 2000 and Beyond
         ;; https://web.archive.org/web/2007/http://web.pdx.edu/~heiss/technotes/pdos/tn.pdos.28.html
-tn28:   lda     ytmp            ; ytmp is still just one byte
+        lda     ytmp            ; ytmp is still just one byte
     IF A < #40
         adc     #100
         sta     ytmp
     END_IF
 
-do1900: ldy     #ParsedDateTime::year
+        ldy     #ParsedDateTime::year
         add16in ytmp, #1900, (parsed_ptr),y
 
         ;; ----------------------------------------
@@ -219,9 +187,7 @@ do1900: ldy     #ParsedDateTime::year
         lsr     a
         lsr     a
         lsr     a
-        beq     invalid         ; < 1
-        cmp     #13
-        bcs     invalid         ; > 12
+        IF ZERO OR A >= #13 GOTO invalid
         ldy     #ParsedDateTime::month
         sta     (parsed_ptr),y
 
@@ -231,9 +197,7 @@ do1900: ldy     #ParsedDateTime::year
         ldy     #DateTime::datelo
         lda     (datetime_ptr),y
         and     #%00011111
-        beq     invalid         ; < 1
-        cmp     #32
-        bcs     invalid         ; > 31
+        IF ZERO OR A >= #32 GOTO invalid
         ldy     #ParsedDateTime::day
         sta     (parsed_ptr),y
 
@@ -242,8 +206,7 @@ do1900: ldy     #ParsedDateTime::year
         ldy     #DateTime::timehi
         lda     (datetime_ptr),y
         and     #%00011111
-        cmp     #24
-        bcs     invalid         ; > 23
+        IF A >= #24 GOTO invalid
         ldy     #ParsedDateTime::hour
         sta     (parsed_ptr),y
 
@@ -252,8 +215,7 @@ do1900: ldy     #ParsedDateTime::year
         ldy     #DateTime::timelo
         lda     (datetime_ptr),y
         and     #%00111111
-        cmp     #60
-        bcs     invalid         ; > 59
+        IF A >= #60 GOTO invalid
         ldy     #ParsedDateTime::minute
         sta     (parsed_ptr),y
 

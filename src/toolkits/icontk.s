@@ -85,8 +85,8 @@ END_PARAM_BLOCK
         stx     params_addr
 
 .ifdef DEBUG
-        ;; Bad if param block overlaps our zero page useage
-    IF cmp16 params_addr, #zp_end : LT
+        ;; Bad if param block overlaps our zero page usage
+    IF u16 params_addr < #zp_end
         brk
     END_IF
 .endif ; DEBUG
@@ -195,24 +195,17 @@ reserved:       .byte   0
         REF_MAPINFO_MEMBERS
 .endparams
 
-.params textwidth_params
-textptr:        .addr   text_buffer
-textlen:        .byte   0
+.params stringwidth_params
+stringptr:      .addr   label_buffer
 result:         .word   0
 .endparams
-settextbg_params    := textwidth_params::result + 1  ; re-used
+settextbg_params    := stringwidth_params::result + 1 ; re-used
 
 settextbg_white:
         .byte   MGTK::textbg_white
 
-.params drawtext_params
-textptr:        .addr   text_buffer
-textlen:        .byte   0
-.endparams
-        ;; `text_buffer` contains only the characters; the length
-        ;; is in `drawtext_params::textlen`
-text_buffer:
-        .res    19, 0
+label_buffer:
+        .res    1 + 15 + 2, 0 ; length byte + `kMaxIconNameLength` + leading/trailing spaces
 
 white_pattern:
         .byte   %11111111
@@ -275,7 +268,7 @@ header_height:  .byte   0
 
 ;;; Polygon holding the composite outlines of all icons being dragged.
 ;;; Re-use the "save area" ($800-$1AFF) since menus won't show during
-;;; this kOperation.
+;;; this operation.
 polybuf_addr:           .addr   0
 max_draggable_icons:    .byte   0
 
@@ -347,7 +340,7 @@ icon_grafport:  .tag    MGTK::GrafPort
 ;;; InitToolKit
 
 .proc InitToolKitImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 headersize      .byte
 a_polybuf       .addr
 bufsize         .word
@@ -355,17 +348,14 @@ a_typemap       .addr
 a_heap          .addr
 END_PARAM_BLOCK
 
-        table_ptr := generic_ptr
-
         copy8   params::headersize, header_height
         copy16  params::a_polybuf, polybuf_addr
-        copy16  params::bufsize, bufsize
         copy16  params::a_typemap, typemap_addr
-        copy16  params::a_heap, table_ptr
 
         ;; --------------------------------------------------
         ;; Populate `icon_ptrs_low/high` table
 
+        table_ptr := params::a_heap
         ldx     #1
     DO
         ;; Populate table entry
@@ -379,6 +369,7 @@ END_PARAM_BLOCK
         ;; --------------------------------------------------
         ;; MaxDraggableItems = BufferSize / kIconPolySize
 
+        bufsize := params::bufsize
         ldy     #0
     DO
         sub16_8 bufsize, #kIconPolySize
@@ -389,8 +380,6 @@ END_PARAM_BLOCK
 
         rts
 
-bufsize:
-        .word   0
 .endproc ; InitToolKitImpl
 
 ;;; ============================================================
@@ -452,10 +441,8 @@ done:   rts
 ;;; ============================================================
 ;;; HighlightIcon
 
-;;; param is pointer to icon id
-
 .proc HighlightIconImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 icon    .byte
 END_PARAM_BLOCK
 
@@ -476,7 +463,7 @@ END_PARAM_BLOCK
 ;;; HighlightAll / UnhighlightAll
 
 .proc HighlightAllImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 window_id       .byte
 END_PARAM_BLOCK
 
@@ -510,7 +497,7 @@ END_PARAM_BLOCK
         pha
 
         CALL    GetIconState, A=icon_list,x
-        and     #AS_BYTE(~kIconEntryStateHighlighted)
+        and     #AS_BYTE{~kIconEntryStateHighlighted}
         sta     (icon_ptr),y
 
         pla
@@ -522,10 +509,8 @@ END_PARAM_BLOCK
 ;;; ============================================================
 ;;; FreeIcon
 
-;;; param is pointer to icon number
-
 .proc FreeIconImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 icon    .byte
 END_PARAM_BLOCK
 
@@ -568,15 +553,14 @@ END_PARAM_BLOCK
 
         ;; Find index
         ldx     num_icons
-:       dex
-        cmp     icon_list,x
-        bne     :-
+    DO
+        dex
+    WHILE A <> icon_list,x
 
         ;; Shift items down
-:       copy8   icon_list+1,x, icon_list,x
-        inx
-        cpx     num_icons
-        bne     :-
+    DO
+        copy8   icon_list+1,x, icon_list,x
+    WHILE inx : X <> num_icons
 
         pla                     ; A = icon
         rts
@@ -608,7 +592,7 @@ END_PARAM_BLOCK
 ;;; EraseIcon
 
 .proc EraseIconImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 icon    .byte
 END_PARAM_BLOCK
 
@@ -619,10 +603,8 @@ END_PARAM_BLOCK
 ;;; ============================================================
 ;;; FreeAll
 
-;;; param is window id (0 = desktop)
-
 .proc FreeAllImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 window_id       .byte
 END_PARAM_BLOCK
 
@@ -650,7 +632,7 @@ END_PARAM_BLOCK
 ;;; FindIcon
 
 .proc FindIconImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 coords          .tag MGTK::Point
 result          .byte           ; out
 window_id       .byte
@@ -705,9 +687,12 @@ finish:
 ;;; DragHighlighted
 
 .proc DragHighlightedImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 icon    .byte                   ; in/out
 coords  .tag    MGTK::Point
+
+;;; local variables on ZP:
+headery .word
 END_PARAM_BLOCK
 
         initial_coords := params::coords
@@ -726,8 +711,7 @@ END_PARAM_BLOCK
 .scope _DragDetectImpl
 
 peek:   MGTK_CALL MGTK::PeekEvent, peekevent_params
-        lda     peekevent_params::kind
-    IF A <> #MGTK::EventKind::drag
+    IF u8 peekevent_params::kind <> #MGTK::EventKind::drag
         TAIL_CALL exit_with_a, A=#IconTK::kDragResultNotADrag
     END_IF
 
@@ -742,11 +726,11 @@ peek:   MGTK_CALL MGTK::PeekEvent, peekevent_params
         tay
         lda     findwindow_params+1,x
         sbc     z:last_coords+1,x
-    IF NEG
-        cpy     #AS_BYTE(-kDragDelta)
+      IF NEG
+        cpy     #AS_BYTE{-kDragDelta}
         bcc     is_drag         ; above threshold, so drag
         CONTINUE_IF CS          ; always
-    END_IF
+      END_IF
         cpy     #kDragDelta     ; above threshold, so drag
         bcs     is_drag
 
@@ -778,11 +762,8 @@ is_drag:
         ;; Assert: there are highlighted icons
 
         ;; Make sure there's room
-        lda     highlight_count
-        cmp     max_draggable_icons
-        beq     :+                      ; equal okay
-        jcs     exit_canceled           ; too many
-:
+        IF u8 highlight_count > max_draggable_icons JUMP exit_canceled
+
         CALL    GetIconWin, A=last_highlighted_icon
         sta     source_window_id
 
@@ -819,13 +800,12 @@ is_drag:
         jsr     _XDrawOutline
     REPEAT
         MGTK_CALL MGTK::PeekEvent, peekevent_params
-        lda     peekevent_params::kind
-        cmp     #MGTK::EventKind::drag
-        jne     not_drag
+      IF u8 peekevent_params::kind <> #MGTK::EventKind::drag
+        jmp     not_drag
+      END_IF
 
-        ;; Escape key?
-        lda     KBD             ; MGTK doesn't process keys during drag
-      IF A = #CHAR_ESCAPE | $80
+        ;; Escape key? (MGTK doesn't process keys during drag)
+      IF u8 KBD = #CHAR_ESCAPE | $80
         bit     KBDSTRB         ; consume the keypress
         copy8   #MGTK::EventKind::key_down, peekevent_params::kind
         jmp     not_drag
@@ -834,9 +814,7 @@ is_drag:
         ;; Coords changed?
         ldx     #.sizeof(MGTK::Point)-1
       DO
-        lda     findwindow_params,x
-        cmp     last_coords,x
-        bne     moved
+        IF u8 findwindow_params,x <> last_coords,x GOTO moved
       WHILE dex : POS
         REDO_IF NEG             ; always
 
@@ -908,9 +886,7 @@ not_drag:
     END_IF
 
         ;; Drag ended by a keystroke?
-        lda     peekevent_params::kind
-        cmp     #MGTK::EventKind::key_down ; cancel?
-        jeq     exit_canceled
+        IF u8 peekevent_params::kind = #MGTK::EventKind::key_down JUMP exit_canceled ; cancel?
 
         ;; Drag ended over an icon?
         lda     highlight_icon_id
@@ -939,8 +915,7 @@ same_window:
         ASSERT_EQUALS MGTK::Area::desktop, 0
         beq     move_ok
 
-        cmp     #MGTK::Area::content
-        jne     exit_canceled   ; don't move
+        IF A <> #MGTK::Area::content JUMP exit_canceled ; don't move
 
         jsr     _CheckRealContentArea
         bcs     exit_canceled   ; don't move
@@ -962,7 +937,7 @@ move_ok:
     IF NS
         lda     #IconTK::kDragResultMoveModified
         ASSERT_NOT_EQUALS IconTK::kDragResultMoveModified, 0
-        bne     exit_with_a
+        bne     exit_with_a     ; always
     END_IF
 
         INVOKE_WITH_LAMBDA _IterateHighlightedIcons
@@ -1097,10 +1072,10 @@ find_icon:
         COPY_STRUCT MGTK::Point, findwindow_params::mousex, findcontrol_params::mousex
         copy8   findwindow_params::window_id, findcontrol_params::window_id
         MGTK_CALL MGTK::FindControlEx, findcontrol_params
-        bne     fail
+    IF ZERO
         lda     findcontrol_params::which_ctl
         ASSERT_EQUALS MGTK::Ctl::not_a_control, 0
-        bne     fail            ; scrollbar, etc.
+      IF ZERO           ; skip if scrollbar, etc.
 
         ;; Ignore if y coord < window's header height
         MGTK_CALL MGTK::GetWinPtr, findwindow_params::window_id
@@ -1108,45 +1083,44 @@ find_icon:
         copy16  window_ptr, z:win_ptr
         ldy     #MGTK::Winfo::port + MGTK::GrafPort::viewloc + MGTK::Point::ycoord
         lda     (win_ptr),y
-        copy16in (win_ptr),y, headery
-        add16_8 headery, header_height
-    IF cmp16 findwindow_params::mousey, headery : GE
+        copy16in (win_ptr),y, params::headery
+        add16_8 params::headery, header_height
+       IF u16 findwindow_params::mousey >= params::headery
         RETURN  C=0
+       END_IF
+      END_IF
     END_IF
 
 fail:   RETURN  C=1
 
-headery:
-        .word   0
 .endproc ; _CheckRealContentArea
 
 .proc _ValidateTargetAndHighlight
         ;; Over an icon
         sta     icon_num
 
+        ;; Highlighted? (not valid if it's being dragged)
         jsr     GetIconState    ; A = state, sets `icon_ptr` too
-
-        ;; Highlighted?
         ;;and     #kIconEntryStateHighlighted
-        ASSERT_EQUALS ::kIconEntryStateHighlighted, $40
+        ASSERT_EQUALS ::kIconEntryStateHighlighted, ::N_FLAG_MASK>>1
         asl
-        bmi     done            ; Not valid (it's being dragged)
-
+    IF NC
         ;; Is it a drop target?
         ldy     #IconEntry::flags
         lda     (icon_ptr),y
         ;;and     #kIconEntryFlagsDropTarget
-        ASSERT_EQUALS ::kIconEntryFlagsDropTarget, $40
+        ASSERT_EQUALS ::kIconEntryFlagsDropTarget, ::N_FLAG_MASK>>1
         asl
-        bpl     done
-
+      IF NS
         ;; Highlight it!
         icon_num := *+1
         lda     #SELF_MODIFIED_BYTE
         sta     highlight_icon_id
         jsr     _HighlightIcon
+      END_IF
+    END_IF
 
-done:   rts
+        rts
 .endproc ; _ValidateTargetAndHighlight
 
 .proc _XDrawOutline
@@ -1199,10 +1173,8 @@ done:   rts
 ;;; ============================================================
 ;;; UnhighlightIcon
 
-;;; param is pointer to IconEntry
-
 .proc UnhighlightIconImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 icon    .byte
 END_PARAM_BLOCK
 
@@ -1212,7 +1184,7 @@ END_PARAM_BLOCK
 
         ;; Mark not highlighted
         jsr     GetIconState    ; A = state, sets `icon_ptr` too
-        and     #AS_BYTE(~kIconEntryStateHighlighted)
+        and     #AS_BYTE{~kIconEntryStateHighlighted}
         sta     (icon_ptr),y
 
         pla                     ; A = icon
@@ -1223,7 +1195,7 @@ END_PARAM_BLOCK
 ;;; IconInRect
 
 .proc IconInRectImplImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 icon    .byte
 rect    .tag    MGTK::Rect
 END_PARAM_BLOCK
@@ -1239,28 +1211,26 @@ start:
         ldx     #2              ; loop over dimensions
     DO
         ;; top/left of bitmap > bottom/right of rect --> outside
-        scmp16  params::rect+MGTK::Rect::bottomright,x, bitmap_rect+MGTK::Rect::topleft,x
-        bmi     :+
+        IF s16 params::rect+MGTK::Rect::bottomright,x < bitmap_rect+MGTK::Rect::topleft,x GOTO done_bitmap
 
         ;; bottom/right of bitmap < top/left of rect --> outside
-        scmp16  bitmap_rect+MGTK::Rect::bottomright,x, params::rect+MGTK::Rect::topleft,x
-        bmi     :+
+        IF s16 bitmap_rect+MGTK::Rect::bottomright,x < params::rect+MGTK::Rect::topleft,x GOTO done_bitmap
 
     WHILE dex : dex : POS       ; next dimension
         bmi     inside          ; always
-:
+
+done_bitmap:
+
         ;; --------------------------------------------------
         ;; Label
 
         ldx     #2              ; loop over dimensions
     DO
         ;; top/left of text > bottom/right of rect --> outside
-        scmp16  params::rect+MGTK::Rect::bottomright,x, label_rect+MGTK::Rect::topleft,x
-        bmi     outside
+        IF s16 params::rect+MGTK::Rect::bottomright,x < label_rect+MGTK::Rect::topleft,x GOTO outside
 
         ;; bottom/right of text < top/left of rect --> outside
-        scmp16  label_rect+MGTK::Rect::bottomright,x, params::rect+MGTK::Rect::topleft,x
-        bmi     outside
+        IF s16 label_rect+MGTK::Rect::bottomright,x < params::rect+MGTK::Rect::topleft,x GOTO outside
 
     WHILE dex : dex : POS       ; next dimension
 
@@ -1276,7 +1246,7 @@ IconInRectImpl := IconInRectImplImpl::start
 ;;; GetIconBounds
 
 .proc GetIconBoundsImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 icon    .byte
 rect    .tag    MGTK::Rect ; out
 END_PARAM_BLOCK
@@ -1305,7 +1275,7 @@ END_PARAM_BLOCK
 ;;; GetRenameRect
 
 .proc GetRenameRectImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 icon    .byte
 rect    .tag    MGTK::Rect ; out
 END_PARAM_BLOCK
@@ -1328,7 +1298,7 @@ END_PARAM_BLOCK
 ;;; GetBitmapRect
 
 .proc GetBitmapRectImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 icon    .byte
 rect    .tag    MGTK::Rect ; out
 END_PARAM_BLOCK
@@ -1394,8 +1364,11 @@ clip_window_id:
 ;;; ============================================================
 
 .proc DrawIconCommon
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
         icon    .byte
+
+;;; local variables on ZP:
+        win_state       .byte
 END_PARAM_BLOCK
 
         sta     clip_icons_flag
@@ -1411,7 +1384,7 @@ END_PARAM_BLOCK
 
         ;; Stash some state
         ldy     #IconEntry::win_state
-        copy8   (icon_ptr),y, win_state
+        copy8   (icon_ptr),y, params::win_state
 
         ;; For quick access
         and     #kIconEntryWinIdMask
@@ -1470,7 +1443,7 @@ ret:    rts
 
         ;; Prep coords
         copy16  label_rect+MGTK::Rect::x1, label_pos+MGTK::Point::xcoord
-        add16_8 label_rect+MGTK::Rect::y1, #kSystemFontHeight-1, label_pos+MGTK::Point::ycoord
+        add16   label_rect+MGTK::Rect::y1, #kSystemFontHeight-1, label_pos+MGTK::Point::ycoord
 
         ldx     #.sizeof(MGTK::Point)-1
     DO
@@ -1481,8 +1454,8 @@ ret:    rts
 
         ;; Set text background color
         lda     #MGTK::textbg_white
-        ASSERT_EQUALS ::kIconEntryStateHighlighted, $40
-    IF bit win_state : VS       ; highlighted?
+        ASSERT_EQUALS ::kIconEntryStateHighlighted, ::V_FLAG_MASK
+    IF bit params::win_state : VS       ; highlighted?
         lda     #MGTK::textbg_black
     END_IF
         sta     settextbg_params
@@ -1492,15 +1465,15 @@ ret:    rts
         ;; Icon
 
         ;; Shade (XORs background)
-        ASSERT_EQUALS ::kIconEntryStateDimmed, $80
-    IF bit win_state : NS
+        ASSERT_EQUALS ::kIconEntryStateDimmed, ::N_FLAG_MASK
+    IF bit params::win_state : NS
         MGTK_CALL MGTK::SetPattern, dark_pattern
         jsr     _Shade
     END_IF
 
         ;; Mask (cleared to white or black)
-        ASSERT_EQUALS ::kIconEntryStateHighlighted, $40
-    IF bit win_state : VS
+        ASSERT_EQUALS ::kIconEntryStateHighlighted, ::V_FLAG_MASK
+    IF bit params::win_state : VS
         MGTK_CALL MGTK::SetPenMode, penBIC
     ELSE
         MGTK_CALL MGTK::SetPenMode, penOR
@@ -1508,14 +1481,14 @@ ret:    rts
         MGTK_CALL MGTK::PaintBits, mask_paintbits_params
 
         ;; Shade again (restores background)
-        ASSERT_EQUALS ::kIconEntryStateDimmed, $80
-    IF bit win_state : NS
+        ASSERT_EQUALS ::kIconEntryStateDimmed, ::N_FLAG_MASK
+    IF bit params::win_state : NS
         jsr     _Shade
     END_IF
 
         ;; Icon (drawn in black or white)
-        ASSERT_EQUALS ::kIconEntryStateHighlighted, $40
-    IF bit win_state : VS
+        ASSERT_EQUALS ::kIconEntryStateHighlighted, ::V_FLAG_MASK
+    IF bit params::win_state : VS
         MGTK_CALL MGTK::SetPenMode, penOR
     ELSE
         MGTK_CALL MGTK::SetPenMode, penBIC
@@ -1527,7 +1500,7 @@ ret:    rts
 
         MGTK_CALL MGTK::MoveTo, label_pos
 
-        MGTK_CALL MGTK::DrawText, drawtext_params
+        MGTK_CALL MGTK::DrawString, label_buffer
 
         MGTK_CALL MGTK::SetTextBG, settextbg_white
 
@@ -1540,16 +1513,12 @@ ret:    rts
 .endproc ; _Shade
 
 .endproc ; _DoPaint
-
-win_state:                      ; copy of IconEntry::win_state
-        .byte   0
-
 .endproc ; DrawIconCommon
 
 ;;; ============================================================
 
 ;;; Input: `icon_ptr` points at icon
-;;; Output: Populates `bitmap_rect` and `label_rect` and `text_buffer`
+;;; Output: Populates `bitmap_rect` and `label_rect` and `label_buffer`
 ;;; Sets `res_ptr`
 .proc CalcIconRects
         ;; Copy, pad, and measure name
@@ -1592,10 +1561,10 @@ win_state:                      ; copy of IconEntry::win_state
         copy16  bitmap_rect+MGTK::Rect::y1, label_rect+MGTK::Rect::y1
 
         ;; Label bottom
-        add16_8 label_rect+MGTK::Rect::y1, #kSystemFontHeight+1, label_rect+MGTK::Rect::y2
+        add16   label_rect+MGTK::Rect::y1, #kSystemFontHeight+1, label_rect+MGTK::Rect::y2
 
         ;; Left edge of label
-        add16_8 bitmap_rect+MGTK::Rect::x2, #kListViewIconGap-2, label_rect+MGTK::Rect::x1
+        add16   bitmap_rect+MGTK::Rect::x2, #kListViewIconGap-2, label_rect+MGTK::Rect::x1
 
         jsr     stash_rename_rect
 
@@ -1606,10 +1575,10 @@ win_state:                      ; copy of IconEntry::win_state
         ;; Regular icon
 
         ;; Label top
-        add16_8 bitmap_rect+MGTK::Rect::y2, #kIconLabelGapV, label_rect+MGTK::Rect::y1
+        add16   bitmap_rect+MGTK::Rect::y2, #kIconLabelGapV, label_rect+MGTK::Rect::y1
 
         ;; Label bottom
-        add16_8 label_rect+MGTK::Rect::y1, #kSystemFontHeight, label_rect+MGTK::Rect::y2
+        add16   label_rect+MGTK::Rect::y1, #kSystemFontHeight, label_rect+MGTK::Rect::y2
 
         ;; Center horizontally
 
@@ -1622,18 +1591,18 @@ win_state:                      ; copy of IconEntry::win_state
         ldy     #IconResource::maprect + MGTK::Rect::x2
         add16in label_rect+MGTK::Rect::x1, (res_ptr),y, label_rect+MGTK::Rect::x1
         jsr     stash_rename_rect
-        sub16   label_rect+MGTK::Rect::x1, textwidth_params::result, label_rect+MGTK::Rect::x1
+        sub16   label_rect+MGTK::Rect::x1, stringwidth_params::result, label_rect+MGTK::Rect::x1
         asr16   label_rect+MGTK::Rect::x1 ; signed
 
-        sub16_8 rename_rect+MGTK::Rect::x1, #kIconRenameLineEditWidth, rename_rect+MGTK::Rect::x1
+        sub16   rename_rect+MGTK::Rect::x1, #kIconRenameLineEditWidth, rename_rect+MGTK::Rect::x1
         asr16   rename_rect+MGTK::Rect::x1
 
     END_IF
 
         ;; Label right
-        add16   label_rect+MGTK::Rect::x1, textwidth_params::result, label_rect+MGTK::Rect::x2
+        add16   label_rect+MGTK::Rect::x1, stringwidth_params::result, label_rect+MGTK::Rect::x2
 
-        add16_8 rename_rect+MGTK::Rect::x1, #kIconRenameLineEditWidth, rename_rect+MGTK::Rect::x2
+        add16   rename_rect+MGTK::Rect::x1, #kIconRenameLineEditWidth, rename_rect+MGTK::Rect::x2
         dec16   rename_rect+MGTK::Rect::y1
 
         rts
@@ -1751,31 +1720,27 @@ icon_poly_map:
 
 .endproc ; CalcIconPoly
 
-;;; Copy name from IconEntry (`icon_ptr`) to text_buffer,
+;;; Copy name from IconEntry (`icon_ptr`) to `label_buffer`,
 ;;; with leading/trailing spaces, and measure it.
 
 .proc PrepareName
-        .assert text_buffer - 1 = drawtext_params::textlen, error, "location mismatch"
-
-        dest := drawtext_params::textlen
-
-        ldy     #.sizeof(IconEntry)
-        ldx     #.sizeof(IconEntry) - IconEntry::name
+        ;; Copy IconEntry's name into `label_buffer`, offset by one
+        ldy     #IconEntry::name + kMaxIconNameLength
+        ldx     #kMaxIconNameLength
     DO
-        copy8   (icon_ptr),y, dest + 1,x
+        copy8   (icon_ptr),y, label_buffer + 1,x
     WHILE dey : dex : POS
 
-        ldy     dest + 1
+        ldy     label_buffer + 1 ; copied length
+        iny                      ; pad start / end with spaces
         iny
-        iny
-        sty     dest
+        sty     label_buffer    ; updated length
 
         lda     #' '
-        sta     dest + 1
-        sta     dest,y
+        sta     label_buffer + 1        ; pad start
+        sta     label_buffer,y          ; pad end
 
-        copy8   drawtext_params::textlen, textwidth_params::textlen
-        MGTK_CALL MGTK::TextWidth, textwidth_params
+        MGTK_CALL MGTK::StringWidth, stringwidth_params
 
         rts
 .endproc ; PrepareName
@@ -1784,7 +1749,7 @@ icon_poly_map:
 ;;; DrawAll
 
 .proc DrawAllImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 window_id       .byte
 END_PARAM_BLOCK
 
@@ -1798,7 +1763,7 @@ END_PARAM_BLOCK
     WHILE dey : dex : POS
 
         ;; Loop over all icons
-        ldx     #AS_BYTE(-1)
+        ldx     #AS_BYTE{-1}
     DO
         inx
         BREAK_IF X = num_icons
@@ -1830,7 +1795,7 @@ END_PARAM_BLOCK
 ;;; OffsetAll
 
 .proc OffsetAllImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 window_id       .byte
 delta_x         .word
 delta_y         .word
@@ -1862,7 +1827,7 @@ END_PARAM_BLOCK
 ;;; GetAllBounds
 
 .proc GetAllBoundsImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 window_id       .byte
 rect            .tag    MGTK::Rect ; out
 END_PARAM_BLOCK
@@ -1889,7 +1854,7 @@ END_PARAM_BLOCK
         lda     (icon_ptr),y
         and     #kIconEntryFlagsSmall
        IF ZERO
-        sub16_8 bitmap_rect+MGTK::Rect::y2, #kMaxIconBitmapHeight, bitmap_rect+MGTK::Rect::y1
+        sub16   bitmap_rect+MGTK::Rect::y2, #kMaxIconBitmapHeight, bitmap_rect+MGTK::Rect::y1
        END_IF
 
         MGTK_CALL MGTK::UnionRects, unionrects_bitmap_bounding
@@ -1922,7 +1887,7 @@ END_PARAM_BLOCK
 ;;; GetIconEntry
 
 .proc GetIconEntryImpl
-PARAM_BLOCK params, icontk::command_data
+PARAM_BLOCK params, icontk::command_data, kMaxCommandDataSize
 icon    .byte           ; in
 entry   .addr           ; out
 END_PARAM_BLOCK
@@ -2126,17 +2091,16 @@ reserved:       .byte   0
         ldx     #2              ; loop over dimensions
     DO
 
-      IF scmp16 portbits::maprect::topleft,x, bounding_rect+MGTK::Rect::topleft,x : NEG
+      IF s16 bounding_rect+MGTK::Rect::topleft,x > portbits::maprect::topleft,x
         copy16  bounding_rect+MGTK::Rect::topleft,x, portbits::maprect::topleft,x
       END_IF
 
-      IF scmp16 bounding_rect+MGTK::Rect::bottomright,x, portbits::maprect::bottomright,x : NEG
+      IF s16 bounding_rect+MGTK::Rect::bottomright,x < portbits::maprect::bottomright,x
         copy16  bounding_rect+MGTK::Rect::bottomright,x, portbits::maprect::bottomright,x
       END_IF
 
         ;; Is there anything left?
-        scmp16  portbits::maprect::bottomright,x, portbits::maprect::topleft,x
-        bmi     empty
+        IF s16 portbits::maprect::bottomright,x < portbits::maprect::topleft,x GOTO empty
 
     WHILE dex : dex : POS       ; next dimension
 
@@ -2264,9 +2228,7 @@ reclip:
 
 next_pt:
         ;; Done all 4 points?
-        lda     pt_num
-        cmp     #4
-        bne     do_pt
+        IF u8 pt_num <> #4 GOTO do_pt
 
         ;; --------------------------------------------------
         ;; Finish up
@@ -2274,7 +2236,7 @@ next_pt:
         copy16  cr_l, vx
         copy16  cr_t, vy
 
-        scmp16   cr_r, clip_bounds+MGTK::Rect::x2 ; result in N / A's bit7
+        scmp16  cr_r, clip_bounds+MGTK::Rect::x2 ; result in N / A's bit7
         ;; if (cr_r < clip_bounds::x2) more drawing is needed
         sta     more_drawing_needed_flag ; update bit7
 
@@ -2297,9 +2259,7 @@ do_pt:  lda     pt_num
 
         inc     pt_num
         MGTK_CALL MGTK::FindWindow, cwi_findwindow_params
-        lda     cwi_findwindow_params::window_id
-        cmp     clip_window_id
-        beq     next_pt
+        IF u8 cwi_findwindow_params::window_id = clip_window_id GOTO next_pt
 
         ;; --------------------------------------------------
         ;; Compute window edges (including non-content area)
@@ -2339,7 +2299,7 @@ do_pt:  lda     pt_num
         ;; Cases 7/8/9 (and done)
         ;; if (win_l > cr_l)
         ;; . cr_r = win_l - 1
-    IF scmp16 cr_l, win_l : NEG
+    IF s16 win_l > cr_l
         sub16   win_l, #1, cr_r
         jmp     reclip
     END_IF
@@ -2347,7 +2307,7 @@ do_pt:  lda     pt_num
         ;; Cases 1/2/3 (and continue below)
         ;; if (cr_r > win_r)
         ;; . cr_r = win_r
-    IF scmp16 win_r, cr_r : NEG
+    IF s16 cr_r > win_r
         copy16  win_r, cr_r
         ;; in case 2 this will be reset
     END_IF
@@ -2355,7 +2315,7 @@ do_pt:  lda     pt_num
         ;; Cases 3/6 (and done)
         ;; if (win_t > cr_t)
         ;; . cr_b = win_t - 1
-    IF scmp16 cr_t, win_t : NEG
+    IF s16 win_t > cr_t
         sub16   win_t, #1, cr_b
         jmp     reclip
     END_IF
@@ -2363,7 +2323,7 @@ do_pt:  lda     pt_num
         ;; Cases 1/4 (and done)
         ;; if (win_b < cr_b)
         ;; . cr_t = win_b + 1
-    IF scmp16 win_b, cr_b :  NEG
+    IF s16 win_b < cr_b
         ldxy    win_b
         inxy
         stxy    cr_t
@@ -2374,7 +2334,7 @@ do_pt:  lda     pt_num
         ;; if (win_r < stash_r)
         ;; . cr_l = win_r + 1
         ;; . cr_r = stash_r
-    IF scmp16 stash_r, win_r : POS
+    IF s16 win_r <= stash_r
         ldxy    win_r
         inxy
         stxy    cr_l

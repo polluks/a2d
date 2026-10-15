@@ -141,39 +141,29 @@ pensize_frame:  .byte   kBorderDX, kBorderDY
 ;;; Input loop and processing
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         MGTK_CALL MGTK::GetEvent, event_params
 
         lda     event_params::kind
-    IF A = #MGTK::EventKind::button_down
+      IF A = #MGTK::EventKind::button_down
         jsr     OnClick
-        jmp     InputLoop
-    END_IF
-
-    IF A = #MGTK::EventKind::key_down
+      ELSE_IF A = #MGTK::EventKind::key_down
         jsr     OnKey
-        jmp     InputLoop
-    END_IF
-
-        jmp     InputLoop
+      END_IF
+    FOREVER
 .endproc ; InputLoop
 
 ;;; ============================================================
 
 .proc OnClick
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::window_id
-    IF A = #kDAWindowId
+    IF u8 findwindow_params::window_id = #kDAWindowId
         lda     findwindow_params::which_area
 
-        cmp     #MGTK::Area::close_box
-        beq     DoClose
-
-        cmp     #MGTK::Area::dragbar
-        beq     DoDrag
-
-        cmp     #MGTK::Area::content
-        beq     DoClick
+        IF A = #MGTK::Area::close_box GOTO DoClose
+        IF A = #MGTK::Area::dragbar GOTO DoDrag
+        IF A = #MGTK::Area::content GOTO DoClick
     END_IF
         rts
 .endproc ; OnClick

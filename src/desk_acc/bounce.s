@@ -118,8 +118,8 @@ grow_box_bitmap:
 
 .proc DrawGrowBox
         MGTK_CALL MGTK::SetPenMode, notpencopy
-        sub16_8 winfo::maprect::x2, #kGrowBoxWidth, grow_box_params::viewloc::xcoord
-        sub16_8 winfo::maprect::y2, #kGrowBoxHeight, grow_box_params::viewloc::ycoord
+        sub16   winfo::maprect::x2, #kGrowBoxWidth, grow_box_params::viewloc::xcoord
+        sub16   winfo::maprect::y2, #kGrowBoxHeight, grow_box_params::viewloc::ycoord
         MGTK_CALL MGTK::PaintBits, grow_box_params
         rts
 .endproc ; DrawGrowBox
@@ -188,16 +188,20 @@ object_deltas:
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         MGTK_CALL MGTK::GetEvent, event_params
+
         lda     event_params::kind
-        cmp     #MGTK::EventKind::button_down
-        beq     HandleDown
-        cmp     #MGTK::EventKind::key_down
-        beq     HandleKey
-        cmp     #MGTK::EventKind::no_event
-        bne     InputLoop
-        jmp     HandleNoEvent
+      IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      ELSE_IF A = #MGTK::EventKind::no_event
+        jsr     HandleNoEvent
+      END_IF
+
+    FOREVER
 .endproc ; InputLoop
 
 ;;; ============================================================
@@ -208,17 +212,19 @@ object_deltas:
         ldx     event_params::modifiers
     IF NOT_ZERO
         jsr     ToUpperCase
-        cmp     #kShortcutCloseWindow
-        beq     Exit
-        bne     InputLoop       ; always
+        IF A = #kShortcutCloseWindow GOTO Exit
+        rts
     END_IF
 
-        cmp     #CHAR_ESCAPE
-        bne     InputLoop
+        RTS_IF A <> #CHAR_ESCAPE
         FALL_THROUGH_TO Exit
 .endproc ; HandleKey
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
+
         MGTK_CALL MGTK::CloseWindow, winfo
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
         rts
@@ -228,17 +234,15 @@ object_deltas:
 
 .proc HandleDown
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        bne     InputLoop
+        RTS_IF u8 findwindow_params::window_id <> #kDAWindowId
+
         lda     findwindow_params::which_area
-        cmp     #MGTK::Area::close_box
-        beq     HandleClose
-        cmp     #MGTK::Area::dragbar
-        beq     HandleDrag
-        cmp     #MGTK::Area::content
-        beq     HandleGrow
-        bne     InputLoop       ; always
+
+        IF A = #MGTK::Area::close_box GOTO HandleClose
+        IF A = #MGTK::Area::dragbar   GOTO HandleDrag
+        IF A = #MGTK::Area::content   GOTO HandleGrow
+
+        rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -247,7 +251,7 @@ object_deltas:
         MGTK_CALL MGTK::TrackGoAway, trackgoaway_params
         lda     trackgoaway_params::clicked
         bne     Exit
-        beq     InputLoop       ; always
+        rts
 .endproc ; HandleClose
 
 ;;; ============================================================
@@ -265,7 +269,7 @@ common:
     END_IF
 
 finish:
-        jmp     InputLoop
+        rts
 .endproc ; HandleDrag
 
 ;;; ============================================================
@@ -277,11 +281,10 @@ finish:
         copy8   #kDAWindowId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         sub16   winfo::maprect::x2, screentowindow_params::windowx, tmpw
-        cmp16   #kGrowBoxWidth, tmpw
-        bcc     HandleDrag::finish
+        IF u16 tmpw > #kGrowBoxWidth GOTO HandleDrag::finish
+
         sub16   winfo::maprect::y2, screentowindow_params::windowy, tmpw
-        cmp16   #kGrowBoxHeight, tmpw
-        bcc     HandleDrag::finish
+        IF u16 tmpw > #kGrowBoxHeight GOTO HandleDrag::finish
 
         ;; Initiate the grow... re-using the drag logic
         copy8   #kDAWindowId, growwindow_params::window_id
@@ -292,9 +295,7 @@ finish:
 ;;; ============================================================
 
 .proc HandleNoEvent
-        jsr     AnimateObjects
-
-        jmp     InputLoop
+        TAIL_CALL       AnimateObjects
 .endproc ; HandleNoEvent
 
 ;;; ============================================================
@@ -376,7 +377,7 @@ finish:
         add16in (pos_ptr),y, (delta_ptr),y, tmpw
 
 
-      IF scmp16 tmpw, #0 : NEG
+      IF s16 tmpw < #0
         copy16  #0, tmpw
 
         ldy     #MGTK::Point::xcoord
@@ -386,7 +387,7 @@ finish:
         sub16   winfo::maprect+MGTK::Rect::x2, #kObjectWidth-1, dim
 
 
-      IF scmp16 dim, tmpw : NEG
+      IF s16 dim < tmpw
         copy16  dim, tmpw
 
         ldy     #MGTK::Point::xcoord
@@ -403,7 +404,7 @@ finish:
         add16in (pos_ptr),y, (delta_ptr),y, tmpw
 
 
-      IF scmp16 tmpw, #0 : NEG
+      IF s16 tmpw < #0
         copy16  #0, tmpw
 
         ldy     #MGTK::Point::ycoord
@@ -412,7 +413,7 @@ finish:
 
         sub16   winfo::maprect+MGTK::Rect::y2, #kObjectHeight-1, dim
 
-      IF scmp16 dim, tmpw : NEG
+      IF s16 dim < tmpw
         copy16  dim, tmpw
 
         ldy     #MGTK::Point::ycoord

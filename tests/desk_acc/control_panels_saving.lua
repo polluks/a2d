@@ -5,8 +5,7 @@ DISKARGS="-flop3 $HARDIMG"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-a2d.RemoveClockDriverAndReboot()
+desktop.RemoveClockDriverAndReboot()
 local s7d1 = manager.machine.images[":sl7:superdrive:fdc:0:35hd"]
 
 --[[
@@ -52,12 +51,12 @@ function SaveSettingsTest(name, filename, toggle_func)
     },
     function(idx, name, da, prompts, rename)
       --setup
-      a2d.ToggleOptionCopyToRAMCard() -- Enable
-      a2d.Reboot()
+      desktop.ToggleOptionCopyToRAMCard() -- Enable
+      desktop.Reboot()
       a2d.WaitForDesktopReady({timeout=240})
 
       if rename then
-        a2d.RenamePath("/A2.DESKTOP", "A2D")
+        desktop.RenamePath("/A2.DESKTOP", "A2D")
       end
 
       local drive, current
@@ -66,12 +65,12 @@ function SaveSettingsTest(name, filename, toggle_func)
         drive = s7d1
         current = drive.filename
         drive:unload()
-        emu.wait(5)
+        emu.wait(5) -- async drive validation
       end
 
-      a2d.OpenPath("/RAM4/DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. da, {no_validate=true})
+      desktop.InvokePath("/RAM4/DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. da)
       toggle_func()
-      a2d.CloseWindow()
+      desktop.CloseWindow()
 
       if prompts > 0 then
         a2dtest.WaitForAlert({match="save the changes"})
@@ -83,19 +82,19 @@ function SaveSettingsTest(name, filename, toggle_func)
 
         drive:load(current)
         a2d.DialogOK()
+        a2dtest.WaitForSystemTask()
       end
-      emu.wait(5) -- time for writing
 
       a2dtest.ExpectAlertNotShowing()
 
       -- cleanup
-      a2d.CheckAllDrives()
+      desktop.CheckAllDrives()
       if rename then
-        a2d.RenamePath("/A2D", "A2.DESKTOP")
+        desktop.RenamePath("/A2D", "A2.DESKTOP")
       end
-      a2d.DeletePath("/A2.DESKTOP/LOCAL")
-      a2d.EraseVolume("RAM4")
-      a2d.Reboot()
+      desktop.DeletePath("/A2.DESKTOP/LOCAL")
+      desktop.EraseVolume("RAM4")
+      desktop.Reboot()
       a2d.WaitForDesktopReady()
   end)
 
@@ -112,10 +111,10 @@ function SaveSettingsTest(name, filename, toggle_func)
     function(idx, name, da, prompts, rename)
 
       if rename then
-        a2d.RenamePath("/A2.DESKTOP", "A2D")
-        a2d.OpenPath("/A2D/APPLE.MENU/CONTROL.PANELS/" .. da, {no_validate=true})
+        desktop.RenamePath("/A2.DESKTOP", "A2D")
+        desktop.InvokePath("/A2D/APPLE.MENU/CONTROL.PANELS/" .. da)
       else
-        a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. da, {no_validate=true})
+        desktop.InvokePath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/" .. da)
       end
 
       toggle_func()
@@ -128,7 +127,7 @@ function SaveSettingsTest(name, filename, toggle_func)
         drive:unload()
       end
 
-      a2d.CloseWindow()
+      desktop.CloseWindow()
 
       if prompts > 0 then
         a2dtest.WaitForAlert({match="save the changes"})
@@ -140,18 +139,18 @@ function SaveSettingsTest(name, filename, toggle_func)
 
         drive:load(current)
         a2d.DialogOK()
+        a2dtest.WaitForSystemTask()
       end
-      emu.wait(5) -- time for writing
 
       a2dtest.ExpectAlertNotShowing()
 
       -- cleanup
-      a2d.CheckAllDrives()
+      desktop.CheckAllDrives()
       if rename then
-        a2d.RenamePath("/A2D", "A2.DESKTOP")
+        desktop.RenamePath("/A2D", "A2.DESKTOP")
       end
-      a2d.DeletePath("/A2.DESKTOP/LOCAL")
-      a2d.Reboot()
+      desktop.DeletePath("/A2.DESKTOP/LOCAL")
+      desktop.Reboot()
       a2d.WaitForDesktopReady()
   end)
 end
@@ -178,9 +177,9 @@ end)
 
 SaveSettingsTest("Sounds", "SOUNDS", function()
                    apple2.DownArrowKey() -- change listbox index
-                   emu.wait(2)
+                   a2dtest.WaitForSystemTask()
                    apple2.UpArrowKey()
-                   emu.wait(2)
+                   a2dtest.WaitForSystemTask()
 end)
 
 SaveSettingsTest("Date & Time", "DATE.AND.TIME", function()

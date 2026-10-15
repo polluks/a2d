@@ -1,5 +1,3 @@
-a2d.ConfigureRepaintTime(0.25)
-
 test.Step(
   "Basic OCR",
   function()
@@ -16,8 +14,9 @@ test.Step(
     local recognized = a2dtest.OCRScreen({invert=true})
     test.ExpectNotMatch(recognized, "File", "screen should not contain inverted File")
 
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_GET_INFO)
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_GET_INFO)
+    a2dtest.WaitForSystemTask()
     local recognized = a2dtest.OCRScreen({invert=true})
     test.ExpectMatch(recognized, "File", "screen should contain inverted File")
 
@@ -27,10 +26,10 @@ end)
 test.Step(
   "Dimmed text",
   function()
-    a2d.CloseAllWindows()
-    a2d.ClearSelection()
+    desktop.CloseAllWindows()
+    desktop.ClearSelection()
 
-    a2d.OpenMenu(a2d.FILE_MENU)
+    a2d.OpenMenu(desktop.FILE_MENU)
     local recognized = a2dtest.OCRScreen()
     test.ExpectNotMatch(recognized, "New Folder", "New Folder should be dimmed")
     test.ExpectNotMatch(recognized, "Open", "Open should be dimmed")
@@ -38,8 +37,8 @@ test.Step(
     test.ExpectMatch(recognized, "Quit", "Quit should not be dimmed")
     apple2.EscapeKey()
 
-    a2d.SelectPath("/A2.DESKTOP")
-    a2d.OpenMenu(a2d.FILE_MENU)
+    desktop.SelectPath("/A2.DESKTOP")
+    a2d.OpenMenu(desktop.FILE_MENU)
     local recognized = a2dtest.OCRScreen()
     test.ExpectNotMatch(recognized, "New Folder", "New Folder should be dimmed")
     test.ExpectMatch(recognized, "Open", "Open should not be dimmed")
@@ -47,8 +46,8 @@ test.Step(
     test.ExpectMatch(recognized, "Quit", "Quit should not be dimmed")
     apple2.EscapeKey()
 
-    a2d.OpenPath("/A2.DESKTOP")
-    a2d.OpenMenu(a2d.FILE_MENU)
+    desktop.OpenWindow("/A2.DESKTOP")
+    a2d.OpenMenu(desktop.FILE_MENU)
     local recognized = a2dtest.OCRScreen()
     test.ExpectMatch(recognized, "New Folder", "New Folder should not be dimmed")
     test.ExpectMatch(recognized, "Open", "Open should not be dimmed")
@@ -60,8 +59,9 @@ end)
 test.Step(
   "Bounds",
   function()
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_GET_INFO)
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_GET_INFO)
+    a2dtest.WaitForSystemTask()
 
     if false then
     local recognized = a2dtest.OCRScreen()

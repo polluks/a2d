@@ -6,8 +6,6 @@ DISKARGS="-hard1 $HARDIMG"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
   Configure a system with an IEEE-488 card. Launch DeskTop. Apple Menu >
   About This Apple II. Verify that the card is detected.
@@ -15,8 +13,8 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "IEEE-488 detection",
   function()
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.ABOUT_THIS_APPLE_II)
-    emu.wait(5)
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.ABOUT_THIS_APPLE_II)
+    a2dtest.WaitForSystemTask()
     local ocr = a2dtest.OCRFrontWindowContent()
     test.ExpectMatch(ocr, "IEEE%-488", "IEEE-488 card should be detected")
 end)

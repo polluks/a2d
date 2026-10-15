@@ -35,8 +35,6 @@ DISKARGS="\
   "
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
   Configure a system with 9 or more drives. Launch DeskTop. Special >
   Copy Disk.... Verify that the scrollbar is active.
@@ -44,7 +42,7 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "scrollbar enabled with 9 or more drives",
   function()
-    a2d.CopyDisk()
+    desktop.CopyDisk()
 
     local hscroll, vscroll = a2dtest.GetFrontWindowScrollOptions()
     test.ExpectNotEquals(vscroll & mgtk.scroll.option_active, 0, "v scrollbar should be active")

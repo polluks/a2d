@@ -5,8 +5,6 @@ DISKARGS="-flop1 $ROHARDIMG"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(1)
-
 --[[
   Boot with an 800K image that is write protected. Add a shortcut.
   Verify the prompt asks about saving changes. Cancel. Verify that
@@ -16,18 +14,18 @@ a2d.ConfigureRepaintTime(1)
 test.Step(
   "Add a shortcut - write protected - Cancel",
   function()
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
-    emu.wait(5)
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_ADD_A_SHORTCUT)
+    a2dtest.WaitForSystemTask()
     a2d.ClearTextField()
     apple2.Type("Shortcut~Name")
     a2d.DialogOK()
 
     a2dtest.WaitForAlert({match="save the changes"})
     a2d.DialogCancel()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
-    a2d.OpenMenu(a2d.SHORTCUTS_MENU)
+    a2d.OpenMenu(desktop.SHORTCUTS_MENU)
     local ocr = a2dtest.OCRScreen()
     test.ExpectMatch(ocr, "Edit a Shortcut", "menu item should be disabled")
     test.ExpectMatch(ocr, "Delete a Shortcut", "menu item should be disabled")
@@ -36,7 +34,7 @@ test.Step(
     apple2.EscapeKey()
 
     -- cleanup
-    a2d.Reboot()
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)
 
@@ -49,28 +47,28 @@ end)
 test.Step(
   "Add a shortcut - write protected - OK, Try Again, Cancel",
   function()
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
-    emu.wait(5)
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_ADD_A_SHORTCUT)
+    a2dtest.WaitForSystemTask()
     a2d.ClearTextField()
     apple2.Type("Shortcut~Name")
     a2d.DialogOK()
 
     a2dtest.WaitForAlert({match="save the changes"})
     a2d.DialogOK()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
     a2dtest.WaitForAlert({match="write protected"})
     a2d.DialogOK()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
     a2dtest.WaitForAlert({match="write protected"})
     a2d.DialogCancel()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
     a2dtest.ExpectNotHanging()
 
     -- cleanup
-    a2d.Reboot()
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)

@@ -50,6 +50,10 @@
 ;;; Structure
 ;;; --------------------------------------------------
 
+;;; IF ... GOTO
+@goto_target:
+    IF NS GOTO @goto_target
+
 ;;; IF
     IF NS
         nop
@@ -90,6 +94,11 @@
 ;;; --------------------------------------------------
 ;;; Flag Tests
 ;;; --------------------------------------------------
+
+
+;;; IF ... GOTO
+@goto_target:
+    IF NS GOTO @goto_target
 
 ;;; IF
     IF NC
@@ -196,6 +205,10 @@
 ;;; Register Comparisons
 ;;; --------------------------------------------------
 
+;;; IF ... GOTO
+@goto_target:
+    IF A >= #$12 GOTO @goto_target
+
 ;;; IF
     IF A >= #$12
         nop
@@ -270,6 +283,10 @@
 
 table := *
 
+;;; IF ... GOTO
+@goto_target:
+    IF A >= table,x GOTO @goto_target
+
 ;;; IF
     IF A >= table,x
         nop
@@ -319,6 +336,11 @@ table := *
 ;;; --------------------------------------------------
 ;;; IN / NOT_IN operators
 ;;; --------------------------------------------------
+
+;;; IF ... IN / NOT_IN... GOTO
+@goto_target:
+    IF A IN #1, #2, #3 GOTO @goto_target
+    IF A NOT_IN #1, #2, #3 GOTO @goto_target
 
 ;;; IF ... IN / NOT_IN
     IF A IN #1, #2, #3
@@ -492,6 +514,11 @@ table := *
 ;;; BETWEEN / NOT_BETWEEN operators
 ;;; --------------------------------------------------
 
+;;; IF ... BETWEEN / NOT_BETWEEN ... GOTO
+@goto_target:
+    IF A BETWEEN #'0', #'9' GOTO @goto_target
+    IF A NOT_BETWEEN #'0', #'9' GOTO @goto_target
+
 ;;; IF ... BETWEEN / NOT_BETWEEN
     IF A BETWEEN #'0', #'9'
         nop
@@ -652,6 +679,245 @@ table := *
 
         RTS_IF NOT A NOT_BETWEEN #'0', #'9'
 
+;;; --------------------------------------------------
+;;; Typed Comparisons
+;;; --------------------------------------------------
+
+var1 := *
+var2 := *
+
+;;; u8
+@goto_target:
+    IF u8 var1 = var2 GOTO @goto_target
+
+    IF u8 var1 = var2
+        nop
+    END_IF
+    IF u8 var1 = #12
+        nop
+    END_IF
+
+    IF u8 var1 <> var2
+        nop
+    END_IF
+    IF u8 var1 <> #12
+        nop
+    END_IF
+
+    IF u8 var1 < var2
+        nop
+    END_IF
+    IF u8 var1 < #12
+        nop
+    END_IF
+
+    IF u8 var1 > var2
+        nop
+    END_IF
+    IF u8 var1 > #12
+        nop
+    END_IF
+
+    IF u8 var1 >= var2
+        nop
+    END_IF
+    IF u8 var1 >= #12
+        nop
+    END_IF
+
+    IF u8 var1 <= var2
+        nop
+    END_IF
+    IF u8 var1 <= #12
+        nop
+    END_IF
+
+        ;; #0 special cases
+    IF u8 var1 = #0
+        nop
+    END_IF
+    IF u8 var1 <> #0
+        nop
+    END_IF
+
+        ;; prefix operators
+    DO
+        nop
+    WHILE u8 ++var1 < #12
+    DO
+        nop
+    WHILE u8 --var1 >= #12
+    DO
+        nop
+    WHILE u8 --var1 > #0
+
+;;; u16
+@goto_target:
+    IF u16 var1 = var2 GOTO @goto_target
+
+    IF u16 var1 = var2
+        nop
+    END_IF
+    IF u16 var1 = #1234
+        nop
+    END_IF
+
+    IF u16 var1 <> var2
+        nop
+    END_IF
+    IF u16 var1 <> #1234
+        nop
+    END_IF
+
+    IF u16 var1 < var2
+        nop
+    END_IF
+    IF u16 var1 < #1234
+        nop
+    END_IF
+
+    IF u16 var1 > var2
+        nop
+    END_IF
+    IF u16 var1 > #1234
+        nop
+    END_IF
+
+    IF u16 var1 >= var2
+        nop
+    END_IF
+    IF u16 var1 >= #1234
+        nop
+    END_IF
+
+    IF u16 var1 <= var2
+        nop
+    END_IF
+    IF u16 var1 <= #1234
+        nop
+    END_IF
+
+        ;; prefix operators
+    DO
+        nop
+    WHILE u16 ++var1 < #1234
+    DO
+        nop
+    WHILE u16 --var1 >= #1234
+    DO
+        nop
+    WHILE u16 --var1 > #0
+
+;;; s16
+@goto_target:
+    IF s16 var1 = var2 GOTO @goto_target
+
+    IF s16 var1 = var2
+        nop
+    END_IF
+    IF s16 var1 = #1234
+        nop
+    END_IF
+
+    IF s16 var1 <> var2
+        nop
+    END_IF
+    IF s16 var1 <> #1234
+        nop
+    END_IF
+
+    IF s16 var1 < var2
+        nop
+    END_IF
+    IF s16 var1 < #1234
+        nop
+    END_IF
+
+    IF s16 var1 > var2
+        nop
+    END_IF
+    IF s16 var1 > #1234
+        nop
+    END_IF
+
+    IF s16 var1 >= var2
+        nop
+    END_IF
+    IF s16 var1 >= #1234
+        nop
+    END_IF
+
+    IF s16 var1 <= var2
+        nop
+    END_IF
+    IF s16 var1 <= #1234
+        nop
+    END_IF
+
+        ;; prefix operators
+    DO
+        nop
+    WHILE s16 ++var1 < #1234
+    DO
+        nop
+    WHILE s16 --var1 >= #1234
+    DO
+        nop
+    WHILE s16 --var1 > #0
+
+;;; u24
+@goto_target:
+    IF u24 var1 = var2 GOTO @goto_target
+
+    IF u24 var1 = var2
+        nop
+    END_IF
+    IF u24 var1 = #1234
+        nop
+    END_IF
+
+    IF u24 var1 <> var2
+        nop
+    END_IF
+    IF u24 var1 <> #1234
+        nop
+    END_IF
+
+    IF u24 var1 < var2
+        nop
+    END_IF
+    IF u24 var1 < #1234
+        nop
+    END_IF
+
+    IF u24 var1 > var2
+        nop
+    END_IF
+    IF u24 var1 > #1234
+        nop
+    END_IF
+
+    IF u24 var1 >= var2
+        nop
+    END_IF
+    IF u24 var1 >= #1234
+        nop
+    END_IF
+
+    IF u24 var1 <= var2
+        nop
+    END_IF
+    IF u24 var1 <= #1234
+        nop
+    END_IF
+
+        ;; prefix operators
+    DO
+        nop
+    WHILE u24 ++var1 < #1234
+    DO
+        nop
+    WHILE u24 ++var1 > #1234
 
 ;;; --------------------------------------------------
 ;;; Cheap Local Label Compatibility
@@ -884,7 +1150,7 @@ table := *
     IF scmp16 var, #kConstant : POS
         nop
     END_IF
-        ;; Note that AS_BYTE(-1) will result in an assembly error
+        ;; Note that AS_BYTE{-1} will result in an assembly error
         ;; because ca65 passes the whole rest of the line as the arg,
         ;; since commas are the delimiter.
     IF scmp16 var, #AS_BYTE{-1} : POS
@@ -1045,28 +1311,142 @@ ft21:
 
 
 ;;; --------------------------------------------------
+;;; JUMP is not overly pessimistic
+;;; --------------------------------------------------
+
+short_target:
+        IF NC JUMP short_target ; BPL $10
+        IF NS JUMP short_target ; BMI $30
+        IF CC JUMP short_target ; BCC $90
+        IF CS JUMP short_target ; BCS $B0
+        IF VC JUMP short_target ; BVC $50
+        IF VS JUMP short_target ; BVS $70
+        IF ZC JUMP short_target ; BNE $D0
+        IF ZS JUMP short_target ; BEQ $F0
+
+;;; --------------------------------------------------
 ;;; Long (backwards) branches
 ;;; --------------------------------------------------
 
-    DO
-.repeat 120
-        nop
-.endrepeat
-        ;; Should be `BMI`
-        REDO_IF NS
+long_target:
 
-        ;; Should be `BCS`
-    WHILE CS
+        IF NC GOTO long_target  ; BPL $10
+        IF NS GOTO long_target  ; BMI $30
+        IF CC GOTO long_target  ; BCC $90
+        IF CS GOTO long_target  ; BCS $B0
+        IF VC GOTO long_target  ; BVC $50
+        IF VS GOTO long_target  ; BVS $70
+        IF ZC GOTO long_target  ; BNE $D0
+        IF ZS GOTO long_target  ; BEQ $F0
 
-    DO
-.repeat 130
-        nop
-.endrepeat
-        ;; Should be `BPL` / `JMP`
-        REDO_IF NS
+        IF NC JUMP long_forward_target  ; BMI $30
+        IF NS JUMP long_forward_target  ; BPL $10
+        IF CC JUMP long_forward_target  ; BCS $B0
+        IF CS JUMP long_forward_target  ; BCC $90
+        IF VC JUMP long_forward_target  ; BVS $70
+        IF VS JUMP long_forward_target  ; BVC $50
+        IF ZC JUMP long_forward_target  ; BEQ $F0
+        IF ZS JUMP long_forward_target  ; BNE $D0
 
-        ;; Should be `BCC` / `JMP`
-    WHILE CS
+        .res    129
+
+        IF NC GOTO long_target  ; BMI $30
+        IF NS GOTO long_target  ; BPL $10
+        IF CC GOTO long_target  ; BCS $B0
+        IF CS GOTO long_target  ; BCC $90
+        IF VC GOTO long_target  ; BVS $70
+        IF VS GOTO long_target  ; BVC $50
+        IF ZC GOTO long_target  ; BEQ $F0
+        IF ZS GOTO long_target  ; BNE $D0
+
+long_forward_target:
+
+;;; ============================================================
+;;; Assignment Expressions
+;;; ============================================================
+
+
+varA:   .word   1234
+varB:   .word   4567
+varC:   .word   9870
+
+;;; u8
+        SET u8 varB = varA
+        SET u8 varB = #kConstant
+        SET u8 varB = #12
+        SET u8 varC = varA + varB
+        SET u8 varC = #12 + varB
+        SET u8 varC = varA + #12
+        SET u8 varC = varA - varB
+        SET u8 varC = #12 - varB
+        SET u8 varC = varA - #12
+        SET u8 varA += #12
+        SET u8 varA -= #12
+
+        SET u8 varA <<= #1
+        SET u8 varA <<= #4
+        SET u8 varA >>= #1
+        SET u8 varA >>= #4
+
+;;; u16
+        SET u16 varB = varA
+        SET u16 varB = #kConstant
+        SET u16 varB = #1234
+        SET u16 varC = varA + varB
+        SET u16 varC = #1234 + varB
+        SET u16 varC = varA + #1234
+        SET u16 varC = varA - varB
+        SET u16 varA += varB
+        SET u16 varA -= varB
+
+        SET u16 varA <<= #1
+        SET u16 varA <<= #4
+        SET u16 varA >>= #1
+        SET u16 varA >>= #4
+
+
+;;; s16
+        SET s16 varB = varA
+        SET s16 varC = varA + varB
+        SET s16 varC = varA - varB
+        SET s16 varA += varB
+        SET s16 varA -= varB
+
+        SET s16 varA <<= #1
+        SET s16 varA <<= #4
+        SET s16 varA >>= #1
+        SET s16 varA >>= #4
+
+;;; u24
+        SET u24 varB = varA
+        SET u24 varB = #$123456
+
+;;; u32
+        SET u32 varB = varA
+        SET u32 varB = #$12345678
+        SET u32 varC = varA + varB
+        SET u32 varC = varA - varB
+        SET u32 varA += varB
+        SET u32 varA -= varB
+
+        SET u32 varA <<= #1
+        SET u32 varA <<= #4
+        SET u32 varA >>= #1
+        SET u32 varA >>= #4
+
+;;; Parenthesized expressions
+
+        SET u16 (varC+4) = (varA+2) + (varB+3)
+        SET u16 varB+1,x = (varA+1,x)
+
+;;; Shifts with Constants
+
+        SET u8 varA <<= #kConstant
+        SET u8 varA >>= #kConstant
+
+;;; Shifts with Y as loop counter
+
+        SET u16 varA >>= #kConstant, USE_Y
 
 ;;; ============================================================
 ;;; Errors
@@ -1079,6 +1459,7 @@ ft21:
         RTS_IF A > #123            ; RTS_IF: Greater-than operator ('>') not supported
         RTS_IF A <= #123           ; RTS_IF: Less-than-or-equal operator ('<=') not supported
         RTS_IF A = 1               ; RTS_IF: Numeric literal in '=' comparison; did you mean '#1'?
+        RTS_IF A = kConstant       ; RTS_IF: Constant in '=' comparison; did you mean '#kConstant'?
         RTS_IF A >= table,A        ; RTS_IF: Unexpected non-index register after comparison '>='
         RTS_IF A >= table,X,Y      ; RTS_IF: Unexpected arguments after comparison '>='
         RTS_IF A BETWEEN           ; RTS_IF: Expected argument(s) after 'BETWEEN'
@@ -1090,7 +1471,20 @@ ft21:
         RTS_IF A IN                ; RTS_IF: Expected argument(s) after 'IN'
         RTS_IF aa >= #1            ; RTS_IF: Expected boolean expression, saw identifier ('aa')
         RTS_IF A IN #0 #1          ; Expected 'end-of-line' but found '#'
-        RTS_IF BIT var             ; RTS_IF: Expected end-of-statement (':')
+        RTS_IF BIT var             ; RTS_IF: Expected end-of-statement (':'); did you forget a type prefix ('u8', etc)?
+        RTS_IF A = ++var           ; RTS_IF: Unexpected '++' (only supported at start of typed comparison)
+        RTS_IF A = var++           ; RTS_IF: Unexpected '++' (only supported at start of typed comparison)
+
+        RTS_IF u16                 ; RTS_IF: Expected argument(s) after type 'u16'
+        RTS_IF u16 var             ; RTS_IF: Expected operator (=, <>, <, >=)
+        RTS_IF u16 var <           ; RTS_IF: Expected argument(s) after operator '<'
+        RTS_IF u16 var < #123,456  ; RTS_IF: Unexpected non-index-register after comparison '<'
+        RTS_IF u16 var < 123       ; RTS_IF: Numeric literal in '<' comparison; did you mean '#123'?
+        RTS_IF u16 var < kConstant ; RTS_IF: Constant in '<' comparison; did you mean '#kConstant'?
+        RTS_IF u8 var++ = #5       ; RTS_IF: Unexpected '--' (only supported at start of typed comparison)
+        RTS_IF u8 var-- = #5       ; RTS_IF: Unexpected '++' (only supported at start of typed comparison)
+        RTS_IF u8 var = --var      ; RTS_IF: Unexpected '--' (only supported at start of typed comparison)
+        RTS_IF u8 var = ++var      ; RTS_IF: Unexpected '++' (only supported at start of typed comparison)
 
         CALL    target, FOO=        ; CALL: Expected 'reg=...'
         CALL    target, A           ; CALL: Expected 'A=...'
@@ -1100,4 +1494,26 @@ ft21:
         CALL    target, C=var       ; CALL: Expected constant expression after 'C='
 
         FALL_THROUGH_TO target      ; FALL_THROUGH_TO: Target not adjacent: 'target'
+
+        IF NS GOTO                  ; IF: Expected target after GOTO
+        IF NS JUMP                  ; IF: Expected target after JUMP
+
+        SET                         ; SET: Expected type (u8,u16,s16,u24,u32)
+        SET u16                     ; SET: Expected assignment target
+        SET u16 target              ; SET: Expected assignment operator (=, +=, -=)
+        SET u16 target =            ; SET: Expected argument(s) after operator '='
+        SET u16 target = varA +     ; SET: Expected argument(s) after operator '+'
+        SET u16 target += varA + varB ; SET: Unexpected expression after assignment op ('+=')
+        SET u16 target += 1         ; SET: Numeric literal after '+='; did you mean '#1'?
+        SET u16 target += kConstant ; SET: Constant after '+='; did you mean '#kConstant'?
+        SET u16 target = 1 + varB   ; SET: Numeric literal after '='; did you mean '#1'?
+        SET u16 target = kConstant + varB ; SET: Constant after '='; did you mean '#kConstant'?
+        SET u16 target = varA + 1   ; SET: Numeric literal in '+' expression; did you mean '#1'?
+        SET u16 target = varA + kConstant ; SET: Constant in '+' expression; did you mean '#kConstant'?
+
+        SET u16 target <<= 1             ; SET: Numeric literal after '<<='; did you mean '#1'?
+        SET u16 target <<= kConstant     ; SET: Constant after '<<='; did you mean '#kConstant'?
+        SET u16 target <<= varA          ; SET: Expected immediate argument for '<<='
+        SET u16 target <<= #kNonConstant ; SET: Expected constant expression after '<<='
+        SET u16 target <<= #0            ; SET: Expected non-zero count
 .endif

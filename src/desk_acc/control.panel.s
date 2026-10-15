@@ -114,14 +114,11 @@ penwidth:       .byte   4
 penheight:      .byte   2
 .endparams
 
-        DEFINE_POINT frame_l1a, 0, 68
-        DEFINE_POINT frame_l1b, 205, 68
-        DEFINE_POINT frame_l2a, 205, 68
-        DEFINE_POINT frame_l2b, kDAWidth, 68
-        DEFINE_POINT frame_l3a, 205, 0
-        DEFINE_POINT frame_l3b, 205, kDAHeight
+        DEFINE_LINE frame_l1, 0, 68, 205, 68
+        DEFINE_LINE frame_l2, 205, 68, kDAWidth, 68
+        DEFINE_LINE frame_l3, 205, 0, 205, kDAHeight
 
-        DEFINE_RECT frame_rect, AS_WORD(-1), AS_WORD(-1), kDAWidth - 2, kDAHeight
+        DEFINE_RECT frame_rect, AS_WORD{-1}, AS_WORD{-1}, kDAWidth - 2, kDAHeight
 
 
 ;;; ============================================================
@@ -216,6 +213,36 @@ rarr_bitmap:
         PIXELS  "##...."
 
         DEFINE_BUTTON rgb_color_button, kDAWindowId, res_string_label_rgb_color, res_string_shortcut_apple_1, kPatternEditX + 46, kPatternEditY + 50, 75
+
+pencil_cursor:
+        PIXELS  ".............."
+        PIXELS  ".......####..."
+        PIXELS  "......##...#.."
+        PIXELS  ".....#..###..."
+        PIXELS  "....#....#...."
+        PIXELS  "...#....#....."
+        PIXELS  "..#....#......"
+        PIXELS  ".#....#......."
+        PIXELS  ".#####........"
+        PIXELS  ".####........."
+        PIXELS  ".##..........."
+        PIXELS  ".............."
+
+        PIXELS  ".......####..."
+        PIXELS  "......######.."
+        PIXELS  ".....########."
+        PIXELS  "....########.."
+        PIXELS  "...########..."
+        PIXELS  "..########...."
+        PIXELS  ".########....."
+        PIXELS  "########......"
+        PIXELS  "#######......."
+        PIXELS  "######. ......"
+        PIXELS  "#####........."
+        PIXELS  "####.........."
+
+        .byte   2,10
+
 
 ;;; ============================================================
 ;;; Double-Click Speed Resources
@@ -472,23 +499,25 @@ caret_blink_caret_bitmap:
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         jsr     DoCaretBlink
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         jsr     GetNextEvent
 
-        cmp     #kEventKindMouseMoved
-        beq     HandleMove
-
-        cmp     #MGTK::EventKind::button_down
-        jeq     HandleDown
-
-        cmp     #MGTK::EventKind::key_down
-        beq     HandleKey
-
-        bne     InputLoop       ; always
+      IF A = #kEventKindMouseMoved
+        jsr     HandleMove
+      ELSE_IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      END_IF
+    FOREVER
 .endproc ; InputLoop
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         MGTK_CALL MGTK::CloseWindow, winfo
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
         rts
@@ -500,7 +529,18 @@ caret_blink_caret_bitmap:
         ;; For warping the cursor after scaling change
         COPY_STRUCT event_params::coords, last_mouse_pos
 
-        jmp     InputLoop
+        copy8   #kDAWindowId, screentowindow_params::window_id
+        MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
+        MGTK_CALL MGTK::MoveTo, screentowindow_params::window
+
+        MGTK_CALL MGTK::InRect, fatbits_rect
+    IF NOT_ZERO
+        MGTK_CALL MGTK::SetCursor, pencil_cursor
+    ELSE
+        MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
+    END_IF
+
+        rts
 .endproc ; HandleMove
 
 ;;; ============================================================
@@ -511,8 +551,7 @@ caret_blink_caret_bitmap:
         ldx     event_params::modifiers
     IF NOT_ZERO
         jsr     ToUpperCase
-        cmp     #kShortcutCloseWindow
-        beq     Exit
+        IF A = #kShortcutCloseWindow GOTO Exit
 
       IF A BETWEEN #'1', #'9'
         sec
@@ -524,25 +563,19 @@ caret_blink_caret_bitmap:
         jmp     SELF_MODIFIED
       END_IF
 
-        jmp     InputLoop
+        rts
     END_IF
 
-        cmp     #CHAR_ESCAPE
-        jeq     Exit
-
-        cmp     #CHAR_LEFT
-        jeq     HandleLArrClick
-
-        cmp     #CHAR_RIGHT
-        jeq     HandleRArrClick
+        IF A = #CHAR_ESCAPE GOTO Exit
+        IF A = #CHAR_LEFT JUMP HandleLArrClick
+        IF A = #CHAR_RIGHT JUMP HandleRArrClick
 
     IF A = #CHAR_CTRL_D
         BTK_CALL BTK::Flash, pattern_button
         jmp     HandlePatternClick
     END_IF
 
-        jmp     InputLoop
-
+        rts
 
 shortcut_table_values:
         .byte   0, 0, 1, 3, 2, 1, 1, 2, 3
@@ -558,17 +591,14 @@ shortcut_table_addr_hi:
 
 .proc HandleDown
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        jne     InputLoop
+        RTS_IF u8 findwindow_params::window_id <> #kDAWindowId
+
         lda     findwindow_params::which_area
-        cmp     #MGTK::Area::close_box
-        beq     HandleClose
-        cmp     #MGTK::Area::dragbar
-        beq     HandleDrag
-        cmp     #MGTK::Area::content
-        beq     HandleClick
-        jmp     InputLoop
+        IF A = #MGTK::Area::close_box GOTO HandleClose
+        IF A = #MGTK::Area::dragbar   GOTO HandleDrag
+        IF A = #MGTK::Area::content   GOTO HandleClick
+
+        rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -577,7 +607,7 @@ shortcut_table_addr_hi:
         MGTK_CALL MGTK::TrackGoAway, trackgoaway_params
         lda     trackgoaway_params::clicked
         jne     Exit
-        jmp     InputLoop
+        rts
 .endproc ; HandleClose
 
 ;;; ============================================================
@@ -593,7 +623,7 @@ shortcut_table_addr_hi:
         jsr     DrawWindow
     END_IF
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleDrag
 
 
@@ -621,7 +651,7 @@ shortcut_table_addr_hi:
         MGTK_CALL MGTK::InRect, pattern_button::rect
     IF NOT_ZERO
         BTK_CALL BTK::Track, pattern_button
-        jmi     InputLoop
+        RTS_IF NS
         jmp     HandlePatternClick
     END_IF
 
@@ -674,16 +704,14 @@ shortcut_table_addr_hi:
         TAIL_CALL HandleCaretBlinkClick, A=#3
     END_IF
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleClick
 
 ;;; ============================================================
 
 .proc HandleRArrClick
         inc     pattern_index
-
-        lda     pattern_index
-    IF A >= #kPatternCount
+    IF u8 pattern_index >= #kPatternCount
         copy8   #0, pattern_index
     END_IF
 
@@ -721,7 +749,7 @@ shortcut_table_addr_hi:
         MGTK_CALL MGTK::ShowCursor
     END_IF
 
-        jmp     InputLoop
+        rts
 .endproc ; UpdatePattern
 
 ;;; ============================================================
@@ -768,9 +796,7 @@ shortcut_table_addr_hi:
         ;; Repeat until mouse-up
       DO
         MGTK_CALL MGTK::GetEvent, event_params
-        lda     event_params::kind
-        cmp     #MGTK::EventKind::button_up
-        jeq     InputLoop
+        RTS_IF u8 event_params::kind = #MGTK::EventKind::button_up
 
         copy8   #kDAWindowId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
@@ -782,15 +808,14 @@ shortcut_table_addr_hi:
         jsr     MapCoords
         ldx     screentowindow_params::windowx
         ldy     screentowindow_params::windowy
-        BREAK_IF X <> lastx
-      WHILE Y = lasty
+      WHILE X = lastx AND Y = lasty
 
         stx     lastx
         sty     lasty
     FOREVER
 
 mask1:  .byte   1<<0, 1<<1, 1<<2, 1<<3, 1<<4, 1<<5, 1<<6, 1<<7
-mask2:  .byte   AS_BYTE(~(1<<0)), AS_BYTE(~(1<<1)), AS_BYTE(~(1<<2)), AS_BYTE(~(1<<3)), AS_BYTE(~(1<<4)), AS_BYTE(~(1<<5)), AS_BYTE(~(1<<6)), AS_BYTE(~(1<<7))
+mask2:  .byte   AS_BYTE{~(1<<0)}, AS_BYTE{~(1<<1)}, AS_BYTE{~(1<<2)}, AS_BYTE{~(1<<3)}, AS_BYTE{~(1<<4)}, AS_BYTE{~(1<<5)}, AS_BYTE{~(1<<6)}, AS_BYTE{~(1<<7)}
 
 flag:   .byte   0
 
@@ -800,18 +825,11 @@ lasty:  .byte   0
 
 ;;; Assumes click is within fatbits_rect
 .proc MapCoords
-        sub16   screentowindow_params::windowx, fatbits_rect::x1, screentowindow_params::windowx
-        sub16   screentowindow_params::windowy, fatbits_rect::y1, screentowindow_params::windowy
+        SET s16 screentowindow_params::windowx -= fatbits_rect::x1
+        SET s16 screentowindow_params::windowy -= fatbits_rect::y1
 
-        ldy     #kFatBitWidthShift
-    DO
-        lsr16   screentowindow_params::windowx
-    WHILE dey : NOT_ZERO
-
-        ldy     #kFatBitHeightShift
-    DO
-        lsr16   screentowindow_params::windowy
-    WHILE dey : NOT_ZERO
+        SET s16 screentowindow_params::windowx >>= #::aux::kFatBitWidthShift, USE_Y
+        SET s16 screentowindow_params::windowy >>= #::aux::kFatBitHeightShift, USE_Y
 
         rts
 .endproc ; MapCoords
@@ -825,7 +843,7 @@ lasty:  .byte   0
         ;; Find matching index in word table, or 0
         ldx     #kDblClickSpeedTableSize * 2
     DO
-      IF ecmp16 dblclick_speed, dblclick_speed_table-2,x : EQ
+      IF u16 dblclick_speed = dblclick_speed_table-2,x
         ;; Found a match
         txa
         lsr                     ; /= 2
@@ -856,8 +874,7 @@ dblclick_speed: .word   0
 
         jsr     MarkDirty
 
-        jsr     UpdateDblclickButtons
-        jmp     InputLoop
+        TAIL_CALL UpdateDblclickButtons
 
 dblclick_speed: .word   0
 .endproc ; HandleDblclickClick
@@ -906,9 +923,8 @@ dblclick_speed: .word   0
         ;; --------------------------------------------------
         ;; Update the UI
 
-        jsr     UpdateTrackingButtons
+        TAIL_CALL UpdateTrackingButtons
 
-        jmp     InputLoop
 .endproc ; HandleTrackingClick
 
 ;;; ============================================================
@@ -931,7 +947,7 @@ dblclick_speed: .word   0
         ldx     #DeskTopSettings::pattern + .sizeof(MGTK::Pattern)-1
     DO
         CALL    WriteSetting, A=pattern - DeskTopSettings::pattern,x
-    WHILE dex : X <> #AS_BYTE(DeskTopSettings::pattern-1)
+    WHILE dex : X <> #AS_BYTE{DeskTopSettings::pattern-1}
 
         jsr     MarkDirty
 
@@ -941,9 +957,8 @@ dblclick_speed: .word   0
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
 
         ;; Draw DA's window
-        jsr     DrawWindow
+        TAIL_CALL DrawWindow
 
-        jmp     InputLoop
 .endproc ; HandlePatternClick
 
 ;;; ============================================================
@@ -967,12 +982,12 @@ notpencopy:     .byte   MGTK::notpencopy
         ;; Frame
 
         MGTK_CALL MGTK::SetPenSize, frame_pensize
-        MGTK_CALL MGTK::MoveTo, frame_l1a
-        MGTK_CALL MGTK::LineTo, frame_l1b
-        MGTK_CALL MGTK::MoveTo, frame_l2a
-        MGTK_CALL MGTK::LineTo, frame_l2b
-        MGTK_CALL MGTK::MoveTo, frame_l3a
-        MGTK_CALL MGTK::LineTo, frame_l3b
+        MGTK_CALL MGTK::MoveTo, frame_l1::start
+        MGTK_CALL MGTK::LineTo, frame_l1::end
+        MGTK_CALL MGTK::MoveTo, frame_l2::start
+        MGTK_CALL MGTK::LineTo, frame_l2::end
+        MGTK_CALL MGTK::MoveTo, frame_l3::start
+        MGTK_CALL MGTK::LineTo, frame_l3::end
         MGTK_CALL MGTK::FrameRect, frame_rect
         MGTK_CALL MGTK::SetPenSize, winfo::penwidth
 
@@ -1017,8 +1032,7 @@ notpencopy:     .byte   MGTK::notpencopy
 
         MGTK_CALL MGTK::PaintBits, darrow_params
         add16_8 addr, #.sizeof(MGTK::Point)
-        inc     arrow_num
-    WHILE lda arrow_num : A <> #kNumArrows
+    WHILE u8 ++arrow_num <> #kNumArrows
 .endscope
 
         BTK_CALL BTK::RadioDraw, dblclick_button1
@@ -1164,8 +1178,7 @@ arrow_num:
 
 .proc UpdateRGBCheckbox
         CALL    ReadSetting, X=#DeskTopSettings::rgb_color
-        and     #$80
-        .assert BTK::kButtonStateChecked = $80, error, "const mismatch"
+        and     #BTK::kButtonStateChecked
         sta     rgb_color_button::state
         BTK_CALL BTK::CheckboxUpdate, rgb_color_button
         rts
@@ -1220,12 +1233,12 @@ rotated_pattern:
         copy8   #$FF, mode
 
         copy8   #0, ypos
-        copy16  fatbits_rect::y1, bitrect::y1
-        add16_8 bitrect::y1, #kFatBitHeight-1, bitrect::y2
+        SET s16 bitrect::y1 = fatbits_rect::y1
+        SET s16 bitrect::y2 = bitrect::y1 + (#kFatBitHeight-1)
 
 yloop:  copy8   #0, xpos
-        copy16  fatbits_rect::x1, bitrect::x1
-        add16_8 bitrect::x1, #kFatBitWidth-1, bitrect::x2
+        SET s16 bitrect::x1 = fatbits_rect::x1
+        SET s16 bitrect::x2 = bitrect::x1 + (#kFatBitWidth-1)
         ldy     ypos
         copy8   pattern,y, row
 
@@ -1244,7 +1257,7 @@ zero:   lda     #MGTK::notpencopy
 
         ;; next x
         inc     xpos
-    IF lda xpos : A <> #8
+    IF u8 xpos <> #8
         add16_8 bitrect::x1, #kFatBitWidth
         add16_8 bitrect::x2, #kFatBitWidth
         jmp     xloop
@@ -1252,7 +1265,7 @@ zero:   lda     #MGTK::notpencopy
 
         ;; next y
         inc     ypos
-    IF lda ypos : A <> #8
+    IF u8 ypos <> #8
         add16_8 bitrect::y1, #kFatBitHeight
         add16_8 bitrect::y2, #kFatBitHeight
         jmp     yloop
@@ -1280,20 +1293,13 @@ mode:   .byte   0
         sta     bitrect::x1+1
         sta     bitrect::y1+1
 
-        ldx     #kFatBitWidthShift
-    DO
-        asl16   bitrect::x1
-    WHILE dex : NOT_ZERO
+        SET s16 bitrect::x1 <<= #::aux::kFatBitWidthShift
+        SET s16 bitrect::y1 <<= #::aux::kFatBitHeightShift
 
-        ldx     #kFatBitHeightShift
-    DO
-        asl16   bitrect::y1
-    WHILE dex : NOT_ZERO
-
-        add16   bitrect::x1, fatbits_rect::x1, bitrect::x1
-        add16_8 bitrect::x1, #kFatBitWidth-1, bitrect::x2
-        add16   bitrect::y1, fatbits_rect::y1, bitrect::y1
-        add16_8 bitrect::y1, #kFatBitHeight-1, bitrect::y2
+        SET s16 bitrect::x1 += fatbits_rect::x1
+        SET s16 bitrect::x2 = bitrect::x1 + (#kFatBitWidth-1)
+        SET s16 bitrect::y1 += fatbits_rect::y1
+        SET s16 bitrect::y2 = bitrect::y1 + (#kFatBitHeight-1)
 
         lda     #MGTK::pencopy
     IF bit mode : NC
@@ -1327,7 +1333,7 @@ pattern:
 ;;; representing the current desktop pattern; either incrementing
 ;;; to 0 or decrementing (to a negative and wrapping) will start
 ;;; iterating through the table.
-pattern_index:  .byte   AS_BYTE(-1)
+pattern_index:  .byte   AS_BYTE{-1}
 
 kPatternCount = 15 + 14 + 1 ; 15 B&W patterns, 14 solid color patterns + 1
 patterns:
@@ -1539,7 +1545,7 @@ caret_blink_counter:
         ;; Find matching index in word table, or 0
         ldx     #kCaretBlinkSpeedTableSize * 2
     DO
-      IF ecmp16 caret_blink_speed, caret_blink_speed_table-2,x : EQ
+      IF u16 caret_blink_speed = caret_blink_speed_table-2,x
         ;; Found a match
         txa
         lsr                     ; /= 2
@@ -1571,8 +1577,7 @@ caret_blink_speed: .word   0
         jsr     MarkDirty
         jsr     ResetCaretBlinkCounter
 
-        jsr     UpdateCaretBlinkButtons
-        jmp     InputLoop
+        TAIL_CALL UpdateCaretBlinkButtons
 
 caret_blink_speed: .word   0
 .endproc ; HandleCaretBlinkClick
@@ -1618,7 +1623,7 @@ done:   rts
 
         JSR_TO_MAIN JUMP_TABLE_RGB_MODE
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleRGBClick
 
 ;;; ============================================================

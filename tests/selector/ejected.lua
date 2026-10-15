@@ -5,7 +5,6 @@ DISKARGS="-flop1 $HARDIMG"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(1)
 local s6d1 = manager.machine.images[":sl6:superdrive:fdc:0:35hd"]
 
 --[[
@@ -16,9 +15,10 @@ local s6d1 = manager.machine.images[":sl6:superdrive:fdc:0:35hd"]
 test.Step(
   "Startup disk ejected",
   function()
-    a2d.AddShortcut("/A2.DESKTOP/READ.ME")
-    a2d.ToggleOptionShowShortcutsOnStartup()
-    a2d.Reboot()
+    desktop.AddShortcut("/A2.DESKTOP/READ.ME")
+    desktop.ToggleOptionShowShortcutsOnStartup()
+    desktop.Reboot()
+    a2dtest.ConfigureForSelector()
     a2d.WaitForDesktopReady()
 
     local drive = s6d1
@@ -28,15 +28,16 @@ test.Step(
     apple2.Type("D")
     a2dtest.WaitForAlert({match="insert the system disk"})
     apple2.EscapeKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     drive:load(image)
 
     apple2.Type("D")
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    emu.wait(5) -- floppies are slow
-    a2d.Reboot()
+    desktop.DeletePath("/A2.DESKTOP/LOCAL")
+    a2dtest.WaitForSystemTask()
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)
 
@@ -50,10 +51,10 @@ end)
 test.Step(
   "Shortcut copied at boot",
   function()
-    a2d.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="boot"})
-    a2d.ToggleOptionShowShortcutsOnStartup() -- enable
-    a2d.ToggleOptionCopyToRAMCard() -- enable
-    a2d.Reboot()
+    desktop.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="boot"})
+    desktop.ToggleOptionShowShortcutsOnStartup() -- enable
+    desktop.ToggleOptionCopyToRAMCard() -- enable
+    desktop.Reboot()
     a2d.WaitForDesktopReady({timeout=360})
 
     local drive = s6d1
@@ -71,10 +72,10 @@ test.Step(
     -- cleanup
     apple2.Type("D")
     a2d.WaitForDesktopReady()
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    emu.wait(5) -- floppies are slow
-    a2d.EraseVolume("RAM4")
-    a2d.Reboot()
+    desktop.DeletePath("/A2.DESKTOP/LOCAL")
+    a2dtest.WaitForSystemTask()
+    desktop.EraseVolume("RAM4")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)
 
@@ -89,10 +90,10 @@ end)
 test.Step(
   "Shortcut copied at use",
   function()
-    a2d.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="use"})
-    a2d.ToggleOptionShowShortcutsOnStartup() -- enable
-    a2d.ToggleOptionCopyToRAMCard() -- enable
-    a2d.Reboot()
+    desktop.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="use"})
+    desktop.ToggleOptionShowShortcutsOnStartup() -- enable
+    desktop.ToggleOptionCopyToRAMCard() -- enable
+    desktop.Reboot()
     a2d.WaitForDesktopReady({timeout=240})
 
     -- Run normally, let it copy to RAMCard
@@ -118,10 +119,10 @@ test.Step(
     -- cleanup
     apple2.Type("D")
     a2d.WaitForDesktopReady()
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    emu.wait(5) -- floppies are slow
-    a2d.EraseVolume("RAM4")
-    a2d.Reboot()
+    desktop.DeletePath("/A2.DESKTOP/LOCAL")
+    a2dtest.WaitForSystemTask()
+    desktop.EraseVolume("RAM4")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)
 
@@ -134,33 +135,36 @@ test.DISABLED_Step(
   "Shortcut copied at use - eject during the copy",
   "hangs in the device firmware if unloaded when reading",
   function()
-    a2d.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="use"})
-    a2d.ToggleOptionShowShortcutsOnStartup() -- enable
-    a2d.ToggleOptionCopyToRAMCard() -- enable
-    a2d.Reboot()
+    desktop.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="use"})
+    desktop.ToggleOptionShowShortcutsOnStartup() -- enable
+    desktop.ToggleOptionCopyToRAMCard() -- enable
+    desktop.Reboot()
     a2d.WaitForDesktopReady({timeout=240})
+    a2dtest.ConfigureForSelector()
 
     -- Run normally, let it copy to RAMCard
     apple2.Type("1")
     a2d.DialogOK({no_wait=true})
 
     -- BUG: Timing sensitive - may hang in device driver.
-    emu.wait(1.25)
+    emu.wait(1.25) -- eject during copy
     local drive = s6d1
     local image = drive.filename
     drive:unload()
 
     a2dtest.WaitForAlert()
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     drive:load(image)
 
     -- cleanup
     apple2.Type("D")
     a2d.WaitForDesktopReady()
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    emu.wait(5) -- floppies are slow
-    a2d.EraseVolume("RAM4")
-    a2d.Reboot()
+    a2dtest.ConfigureForDeskTop()
+    desktop.DeletePath("/A2.DESKTOP/LOCAL")
+    a2dtest.WaitForSystemTask()
+    desktop.EraseVolume("RAM4")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)

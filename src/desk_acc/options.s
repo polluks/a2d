@@ -202,18 +202,24 @@ button_eor_table:
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
+
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params::kind
-        cmp     #MGTK::EventKind::button_down
-        beq     HandleDown
-        cmp     #MGTK::EventKind::key_down
-        beq     HandleKey
+      IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      END_IF
 
-        jmp     InputLoop
+    FOREVER
 .endproc ; InputLoop
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         MGTK_CALL MGTK::CloseWindow, winfo
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
         rts
@@ -227,14 +233,10 @@ button_eor_table:
         ldx     event_params::modifiers
     IF NOT_ZERO
         jsr     ToUpperCase
-        cmp     #kShortcutCloseWindow
-        beq     Exit
+        IF A = #kShortcutCloseWindow GOTO Exit
 
         ;; Digit key?
-        cmp     #'1'
-        bcc     InputLoop
-        cmp     #'1'+kNumButtons
-        bcs     InputLoop
+        RTS_IF A < #'1' OR A >= #'1'+kNumButtons
 
         sec
         sbc     #'1'            ; ASCII -> index
@@ -245,7 +247,7 @@ button_eor_table:
         ;; no modifiers
         cmp     #CHAR_ESCAPE
         beq     Exit
-        bne     InputLoop       ; always
+        rts
 .endproc ; HandleKey
 
 ;;; ============================================================
@@ -254,17 +256,13 @@ button_eor_table:
         copy16  event_params::xcoord, findwindow_params::mousex
         copy16  event_params::ycoord, findwindow_params::mousey
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        bne     InputLoop
+        RTS_IF u8 findwindow_params::window_id <> #kDAWindowId
+
         lda     findwindow_params::which_area
-        cmp     #MGTK::Area::close_box
-        beq     HandleClose
-        cmp     #MGTK::Area::dragbar
-        beq     HandleDrag
-        cmp     #MGTK::Area::content
-        beq     HandleClick
-        jmp     InputLoop
+        IF A = #MGTK::Area::close_box GOTO HandleClose
+        IF A = #MGTK::Area::dragbar GOTO HandleDrag
+        IF A = #MGTK::Area::content GOTO HandleClick
+        rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -273,7 +271,7 @@ button_eor_table:
         MGTK_CALL MGTK::TrackGoAway, trackgoaway_params
         lda     trackgoaway_params::clicked
         bne     Exit
-        jmp     InputLoop
+        rts
 .endproc ; HandleClose
 
 ;;; ============================================================
@@ -291,7 +289,7 @@ button_eor_table:
         ;; Draw DA's window
         jsr     DrawWindow
     END_IF
-        jmp     InputLoop
+        rts
 
 .endproc ; HandleDrag
 
@@ -325,7 +323,7 @@ button_eor_table:
 
         ;; ----------------------------------------
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleClick
 
 ;;; ============================================================
@@ -360,7 +358,7 @@ button_eor_table:
 
         BTK_CALL BTK::CheckboxDraw, SELF_MODIFIED, params_addr
 
-    WHILE inc index : lda index : A < #kNumButtons
+    WHILE u8 ++index < #kNumButtons
 
         ;; --------------------------------------------------
 
@@ -410,8 +408,7 @@ set:    RETURN  A=#$80
 
         BTK_CALL BTK::CheckboxUpdate, SELF_MODIFIED, params_addr
 
-        jsr     MarkDirty
-        jmp     InputLoop
+        TAIL_CALL MarkDirty
 
 index:  .byte   0
 .endproc ; ToggleButton

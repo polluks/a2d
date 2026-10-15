@@ -266,14 +266,9 @@ key             .byte
 
         lda     params::key
 
-        cmp     #CHAR_LEFT
-        beq     _HandleKeyLeft
-
-        cmp     #CHAR_UP
-        beq     _HandleKeyUp
-
-        cmp     #CHAR_DOWN
-        beq     _HandleKeyDown
+        IF A = #CHAR_LEFT GOTO _HandleKeyLeft
+        IF A = #CHAR_UP GOTO _HandleKeyUp
+        IF A = #CHAR_DOWN GOTO _HandleKeyDown
 
         FALL_THROUGH_TO _HandleKeyRight
 
@@ -358,7 +353,7 @@ last:   lda     max_entries_minus_one
 .proc _HandleKeyDown
         lda     oprc_selected_index
     IF NS
-        lda     #AS_BYTE(-1)    ; no selection, start at first
+        lda     #AS_BYTE{-1}    ; no selection, start at first
     END_IF
 
     REPEAT

@@ -7,8 +7,6 @@ RESOLUTION="704x462"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
   Repeat the following cases with these modifiers: Open-Apple, Solid-Apple:
 
@@ -22,13 +20,13 @@ test.Variants(
     {"cycle - SA + shift-tab", apple2.PressSA, apple2.ReleaseSA},
   },
   function(idx, name, press, release)
-    a2d.CreateFolder("/A2.DESKTOP/TMP")
-    a2d.OpenPath("/A2.DESKTOP/TMP")
-    a2d.CreateFolder("A")
-    a2d.CreateFolder("B")
-    a2d.CreateFolder("C")
-    a2d.SelectAll()
-    a2d.OpenSelectionAndCloseCurrent()
+    desktop.CreateFolder("/A2.DESKTOP/TMP")
+    desktop.OpenWindow("/A2.DESKTOP/TMP")
+    desktop.CreateFolder("A")
+    desktop.CreateFolder("B")
+    desktop.CreateFolder("C")
+    desktop.SelectAll()
+    desktop.OpenSelectionAndCloseCurrent()
     test.ExpectEquals(a2dtest.GetWindowCount(), 3, "A, B, C should be open")
 
     local sequence = ""
@@ -37,10 +35,8 @@ test.Variants(
 
       apple2.PressShift()
       apple2.TabKey()
-      emu.wait(1)
+      a2dtest.WaitForSystemTask()
       apple2.ReleaseShift()
-
-      a2d.WaitForRepaint()
 
       release()
 
@@ -49,5 +45,5 @@ test.Variants(
 
     test.ExpectEquals(sequence, "BACBAC", "should cycle backwards")
 
-    a2d.DeletePath("/A2.DESKTOP/TMP")
+    desktop.DeletePath("/A2.DESKTOP/TMP")
 end)

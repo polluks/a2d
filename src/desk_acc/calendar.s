@@ -129,31 +129,19 @@ day_pos_table:
         kGridDY = kDayDY
 
 grid_lines:
-        DEFINE_POINT gl1a, 0,        kGridYPos + kGridDY * 0
-        DEFINE_POINT gl1b, kDAWidth, kGridYPos + kGridDY * 0
-        DEFINE_POINT gl2a, 0,        kGridYPos + kGridDY * 1
-        DEFINE_POINT gl2b, kDAWidth, kGridYPos + kGridDY * 1
-        DEFINE_POINT gl3a, 0,        kGridYPos + kGridDY * 2
-        DEFINE_POINT gl3b, kDAWidth, kGridYPos + kGridDY * 2
-        DEFINE_POINT gl4a, 0,        kGridYPos + kGridDY * 3
-        DEFINE_POINT gl4b, kDAWidth, kGridYPos + kGridDY * 3
-        DEFINE_POINT gl5a, 0,        kGridYPos + kGridDY * 4
-        DEFINE_POINT gl5b, kDAWidth, kGridYPos + kGridDY * 4
-        DEFINE_POINT gl6a, 0,        kGridYPos + kGridDY * 5
-        DEFINE_POINT gl6b, kDAWidth, kGridYPos + kGridDY * 5
+        DEFINE_LINE gl1, 0, kGridYPos + kGridDY * 0, kDAWidth, kGridYPos + kGridDY * 0
+        DEFINE_LINE gl2, 0, kGridYPos + kGridDY * 1, kDAWidth, kGridYPos + kGridDY * 1
+        DEFINE_LINE gl3, 0, kGridYPos + kGridDY * 2, kDAWidth, kGridYPos + kGridDY * 2
+        DEFINE_LINE gl4, 0, kGridYPos + kGridDY * 3, kDAWidth, kGridYPos + kGridDY * 3
+        DEFINE_LINE gl5, 0, kGridYPos + kGridDY * 4, kDAWidth, kGridYPos + kGridDY * 4
+        DEFINE_LINE gl6, 0, kGridYPos + kGridDY * 5, kDAWidth, kGridYPos + kGridDY * 5
 
-        DEFINE_POINT gl7a,  kGridXPos + kGridDX * 0, kGridYPos
-        DEFINE_POINT gl7b,  kGridXPos + kGridDX * 0, kDAHeight
-        DEFINE_POINT gl8a,  kGridXPos + kGridDX * 1, kGridYPos
-        DEFINE_POINT gl8b,  kGridXPos + kGridDX * 1, kDAHeight
-        DEFINE_POINT gl9a,  kGridXPos + kGridDX * 2, kGridYPos
-        DEFINE_POINT gl9b,  kGridXPos + kGridDX * 2, kDAHeight
-        DEFINE_POINT gl10a, kGridXPos + kGridDX * 3, kGridYPos
-        DEFINE_POINT gl10b, kGridXPos + kGridDX * 3, kDAHeight
-        DEFINE_POINT gl11a, kGridXPos + kGridDX * 4, kGridYPos
-        DEFINE_POINT gl11b, kGridXPos + kGridDX * 4, kDAHeight
-        DEFINE_POINT gl12a, kGridXPos + kGridDX * 5, kGridYPos
-        DEFINE_POINT gl12b, kGridXPos + kGridDX * 5, kDAHeight
+        DEFINE_LINE gl7,  kGridXPos + kGridDX * 0, kGridYPos, kGridXPos + kGridDX * 0, kDAHeight
+        DEFINE_LINE gl8,  kGridXPos + kGridDX * 1, kGridYPos, kGridXPos + kGridDX * 1, kDAHeight
+        DEFINE_LINE gl9,  kGridXPos + kGridDX * 2, kGridYPos, kGridXPos + kGridDX * 2, kDAHeight
+        DEFINE_LINE gl10, kGridXPos + kGridDX * 3, kGridYPos, kGridXPos + kGridDX * 3, kDAHeight
+        DEFINE_LINE gl11, kGridXPos + kGridDX * 4, kGridYPos, kGridXPos + kGridDX * 4, kDAHeight
+        DEFINE_LINE gl12, kGridXPos + kGridDX * 5, kGridYPos, kGridXPos + kGridDX * 5, kDAHeight
         kNumGridLines = 12
 
 grid_pen:
@@ -255,20 +243,24 @@ first_dow:
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params::kind
-        cmp     #MGTK::EventKind::button_down
-        jeq     HandleDown
-        cmp     #MGTK::EventKind::apple_key
-        jeq     HandleDown
-        cmp     #MGTK::EventKind::key_down
-        beq     HandleKey
-
-        jmp     InputLoop
+      IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::apple_key
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      END_IF
+    FOREVER
 .endproc ; InputLoop
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         MGTK_CALL MGTK::CloseWindow, winfo
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
         rts
@@ -278,43 +270,34 @@ first_dow:
 
 .proc HandleKey
         lda     event_params::key
-        cmp     #CHAR_LEFT
-        jeq     DecDate
-        cmp     #CHAR_UP
-        jeq     DecDate
-        cmp     #CHAR_RIGHT
-        jeq     IncDate
-        cmp     #CHAR_DOWN
-        jeq     IncDate
+        IF A = #CHAR_LEFT GOTO DecDate
+        IF A = #CHAR_UP GOTO DecDate
+        IF A = #CHAR_RIGHT JUMP IncDate
+        IF A = #CHAR_DOWN JUMP IncDate
 
         ldx     event_params::modifiers
     IF NOT_ZERO
         jsr     ToUpperCase
-        cmp     #kShortcutCloseWindow
-        beq     Exit
-        bne     InputLoop       ; always
+        IF A = #kShortcutCloseWindow GOTO Exit
+        rts
     END_IF
 
-        cmp     #CHAR_ESCAPE
-        beq     Exit
-        bne     InputLoop       ; always
+        IF A = #CHAR_ESCAPE GOTO Exit
+        rts
 .endproc ; HandleKey
 
 ;;; ============================================================
 
 .proc HandleDown
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        jne     InputLoop
+        RTS_IF u8 findwindow_params::window_id <> #kDAWindowId
+
         lda     findwindow_params::which_area
-        cmp     #MGTK::Area::close_box
-        jeq     HandleClose
-        cmp     #MGTK::Area::dragbar
-        jeq     HandleDrag
-        cmp     #MGTK::Area::content
-        jeq     HandleClick
-        jmp     InputLoop
+        IF A = #MGTK::Area::close_box JUMP HandleClose
+        IF A = #MGTK::Area::dragbar   JUMP HandleDrag
+        IF A = #MGTK::Area::content   JUMP HandleClick
+
+        rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -338,12 +321,13 @@ first_dow:
 
         copy8   #12, datetime + ParsedDateTime::month
 year:   dec16   datetime + ParsedDateTime::year
-check:  cmp16   datetime + ParsedDateTime::year, #1901
-        bcs     fin
+check:
+    IF u16 datetime + ParsedDateTime::year < #1901
         copy16  #2155, datetime + ParsedDateTime::year
+    END_IF
 
-fin:    jsr     UpdateWindow
-        jmp     InputLoop
+fin:    TAIL_CALL UpdateWindow
+
 .endproc ; DecDate
 
 .proc IncDate
@@ -361,18 +345,17 @@ fin:    jsr     UpdateWindow
         bmi     year
 
         inc     datetime + ParsedDateTime::month
-        lda     datetime + ParsedDateTime::month
-        cmp     #13
-        bcc     fin
+        IF u8 datetime + ParsedDateTime::month < #13 GOTO fin
 
         copy8   #1, datetime + ParsedDateTime::month
 year:   inc16   datetime + ParsedDateTime::year
-check:  cmp16   datetime + ParsedDateTime::year, #2155
-        bcc     fin
+check:
+    IF u16 datetime + ParsedDateTime::year >= #2155
         copy16  #1901, datetime + ParsedDateTime::year
+    END_IF
 
-fin:    jsr     UpdateWindow
-        jmp     InputLoop
+fin:    TAIL_CALL UpdateWindow
+
 .endproc ; IncDate
 
 ;;; ============================================================
@@ -381,7 +364,7 @@ fin:    jsr     UpdateWindow
         MGTK_CALL MGTK::TrackGoAway, trackgoaway_params
         lda     trackgoaway_params::clicked
         jne     Exit
-        jmp     InputLoop
+        rts
 .endproc ; HandleClose
 
 ;;; ============================================================
@@ -398,7 +381,7 @@ fin:    jsr     UpdateWindow
         jsr     DrawWindow
     END_IF
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleDrag
 
 
@@ -415,7 +398,7 @@ fin:    jsr     UpdateWindow
         MGTK_CALL MGTK::InRect, right_button::rect
         jne     IncDate
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleClick
 
 ;;; ============================================================
@@ -425,7 +408,7 @@ notpencopy:     .byte   MGTK::notpencopy
 
 ;;; ============================================================
 
-.proc PaintWindow
+.proc PaintWindowImpl
         ENTRY_POINTS_FOR_BIT7_FLAG draw, update, full_flag
 
         ;; Defer if content area is not visible
@@ -511,7 +494,7 @@ notpencopy:     .byte   MGTK::notpencopy
         MGTK_CALL MGTK::MoveTo, SELF_MODIFIED, pt_start
         MGTK_CALL MGTK::LineTo, SELF_MODIFIED, pt_end
 
-      WHILE inc index : lda index : A < #kNumGridLines
+      WHILE u8 ++index < #kNumGridLines
     END_IF
 
         ;; --------------------------------------------------
@@ -580,10 +563,7 @@ notpencopy:     .byte   MGTK::notpencopy
         sta     str_date+2
 
         ;; A valid day?
-        lda     date
-        beq     draw_date
-        cmp     mlen
-        bcs     draw_date
+        IF lda date : ZERO OR A >= mlen GOTO draw_date
 
         ;; Create the string.
         copy8   #2, str_date
@@ -611,16 +591,14 @@ draw_date:
 
         ;; Next
         inc     col
-      IF lda col : A = #7
+      IF u8 col = #7
         copy8   #0, col
         inc     row
         copy16  date_base::xcoord, date_pos
         add16_8 date_pos::ycoord, #kDayDY
       END_IF
 
-        inc     date
-        lda     date
-    WHILE A <> #39              ; extra, to erase previous days
+    WHILE u8 ++date <> #39        ; extra, to erase previous days
 
         ;; --------------------------------------------------
         ;; Left/right arrow buttons
@@ -659,9 +637,9 @@ date:   .byte   0
 mlen:   .byte   0               ; month length + 1
 row:    .byte   0
 col:    .byte   0               ; sun=0, etc
-.endproc ; PaintWindow
-DrawWindow := PaintWindow::draw
-UpdateWindow := PaintWindow::update
+.endproc ; PaintWindowImpl
+DrawWindow := PaintWindowImpl::draw
+UpdateWindow := PaintWindowImpl::update
 
 ;;; ============================================================
 ;;; Populates `str_year` from `datetime` (a `ParsedDateTime`)
@@ -672,7 +650,7 @@ UpdateWindow := PaintWindow::update
 
         ldy     #1
 
-        ldx     #AS_BYTE(-1)
+        ldx     #AS_BYTE{-1}
     DO
         inx
         sub16   tmp, #1000, tmp
@@ -683,7 +661,7 @@ UpdateWindow := PaintWindow::update
         sta     str_year,y
         iny
 
-        ldx     #AS_BYTE(-1)
+        ldx     #AS_BYTE{-1}
     DO
         inx
         sub16   tmp, #100, tmp
@@ -694,7 +672,7 @@ UpdateWindow := PaintWindow::update
         sta     str_year,y
         iny
 
-        ldx     #AS_BYTE(-1)
+        ldx     #AS_BYTE{-1}
     DO
         inx
         sub16   tmp, #10, tmp

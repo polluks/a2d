@@ -9,9 +9,6 @@ RESOLUTION="704x462"
 
 local s5d1 = manager.machine.images[":fdc:2:35dd"]
 
-a2d.ConfigureRepaintTime(0.25)
-
-
 --[[
   On a IIgs, launch DeskTop. Verify that it appears in monochrome.
   Quit DeskTop and launch another graphical ProDOS-8 program. Verify
@@ -21,7 +18,7 @@ test.Step(
   "Mono in DeskTop, color outside",
   function()
     test.Expect(apple2.IsMono(), "DeskTop should run in monochrome")
-    a2d.OpenPath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {no_validate=true})
+    desktop.InvokePath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {no_wait=true})
     apple2.WaitForBasicSystem()
     apple2.TypeLine("10 HGR2")
     apple2.TypeLine("20 FOR C = 0 to 7")
@@ -29,7 +26,7 @@ test.Step(
     apple2.TypeLine("40 HPLOT C * 35, 0 to 279 - C * 35, 191")
     apple2.TypeLine("50 NEXT")
     apple2.TypeLine("RUN")
-    emu.wait(5)
+    emu.wait(5) -- automating BASIC prompt
     test.Expect(apple2.IsColor(), "Apps should run in color")
     apple2.TypeLine("BYE")
     a2d.WaitForDesktopReady()
@@ -44,9 +41,9 @@ end)
 test.Step(
   "RGB Color vs. IIgs Control Panel",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
+    desktop.InvokePath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
     a2d.OAShortcut("1") -- check RGB Color
-    a2d.CloseWindow()
+    desktop.CloseWindow()
     test.Expect(apple2.IsColor(), "desktop should be in color")
 
     apple2.PressOA()
@@ -56,15 +53,15 @@ test.Step(
     apple2.ReleaseShift()
     apple2.ReleaseControl()
     apple2.ReleaseOA()
-    emu.wait(5)
+    emu.wait(5) -- automating IIgs control panel
     apple2.EscapeKey() -- to Quit
     apple2.ReturnKey()
-    emu.wait(5)
+    emu.wait(5) -- automating IIgs control panel
 
     test.Expect(apple2.IsColor(), "desktop should be in color")
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL", {no_validate=true})
+    desktop.InvokePath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/CONTROL.PANEL")
     a2d.OAShortcut("1") -- uncheck RGB Color
-    a2d.CloseWindow()
+    desktop.CloseWindow()
 end)
 
 --[[
@@ -85,10 +82,10 @@ test.Step(
     apple2.ReleaseShift()
     apple2.ReleaseControl()
     apple2.ReleaseOA()
-    emu.wait(5)
+    emu.wait(5) -- automating IIgs control panel
     apple2.EscapeKey() -- to Quit
     apple2.ReturnKey()
-    emu.wait(5)
+    emu.wait(5) -- automating IIgs control panel
 
     test.Expect(apple2.IsMono(), "desktop should be in monochrome")
 end)
@@ -104,14 +101,14 @@ test.Step(
     local drive = s5d1
     local image = drive.filename
 
-    a2d.SelectPath("/A")
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_EJECT_DISK)
-    emu.wait(5)
+    desktop.SelectPath("/A")
+    a2d.InvokeMenuItem(desktop.SPECIAL_MENU, desktop.SPECIAL_EJECT_DISK)
+    a2dtest.WaitForSystemTask()
     a2dtest.ExpectAlertNotShowing()
 
     -- cleanup
     drive:load(image)
-    a2d.CheckAllDrives()
+    desktop.CheckAllDrives()
 end)
 
 --[[
@@ -130,7 +127,7 @@ test.Step(
     apple2.ReleaseShift()
     apple2.ReleaseControl()
     apple2.ReleaseOA()
-    emu.wait(1)
+    emu.wait(1) -- automating IIgs control panel
 
     -- Navigate to Control Panel / RAM Disk
     while not apple2.GrabInverseText():match("Control Panel") do
@@ -162,11 +159,11 @@ test.Step(
     apple2.ControlOAReset()
     a2d.WaitForDesktopReady()
 
-    a2d.OpenPath("/RAM5")
+    desktop.OpenWindow("/RAM5")
     test.Snap("RAM5 has a RAMCard icon")
 
-    a2d.ToggleOptionCopyToRAMCard()
-    a2d.Reboot()
+    desktop.ToggleOptionCopyToRAMCard()
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
-    a2d.SelectPath("/RAM5/DESKTOP/DESKTOP.SYSTEM")
+    desktop.SelectPath("/RAM5/DESKTOP/DESKTOP.SYSTEM")
 end)

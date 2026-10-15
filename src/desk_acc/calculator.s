@@ -125,7 +125,7 @@ port:           .word   left, top, left+kCalcButtonWidth, top+kCalcButtonHeight
 .params btn_0
         DEFINE_POINT viewloc, kCol1Left - kBorderLeftTop, kRow5Top - kBorderLeftTop
 mapbits:        .addr   wide_button_bitmap
-mapwidth:       .byte   8       ; kBitmapStride (bytes)
+mapwidth:       .byte   kWideBitmapStride
 reserved:       .byte   0
         DEFINE_RECT maprect, 0, 0, 49, kCalcButtonHeight + kBorderLeftTop + kBorderBottomRight ; 0 is extra wide
         REF_MAPINFO_MEMBERS
@@ -315,8 +315,6 @@ textlen:        .byte   15
 text_buffer2:
         .res    kTextBufferSize+2, 0
 
-spaces_string:
-        PASCAL_STRING "          "
 error_string:
         PASCAL_STRING res_string_error_string
 
@@ -491,18 +489,17 @@ intl_deci_sep:  .byte   0
 ;;; Input Loop
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         MGTK_CALL MGTK::GetEvent, event_params
 
-    IF lda event_params::kind : A = #MGTK::EventKind::button_down
+        lda     event_params::kind
+      IF A = #MGTK::EventKind::button_down
         jsr     OnClick
-        jmp     InputLoop
-    END_IF
-
-        cmp     #MGTK::EventKind::key_down
-        bne     InputLoop
+      ELSE_IF A = #MGTK::EventKind::key_down
         jsr     OnKeyPress
-        jmp     InputLoop
+      END_IF
+    FOREVER
 .endproc ; InputLoop
 
 ;;; ============================================================
@@ -511,12 +508,10 @@ intl_deci_sep:  .byte   0
 .proc OnClick
         MGTK_CALL MGTK::FindWindow, findwindow_params
 
-        lda     findwindow_params::which_area
-        cmp     #MGTK::Area::content
-        bcc     ignore_click
+        IF u8 findwindow_params::which_area < #MGTK::Area::content GOTO ignore_click
 
         ;; This window?
-    IF lda findwindow_params::window_id : A <> #kDAWindowId
+    IF u8 findwindow_params::window_id <> #kDAWindowId
 ignore_click:
         rts
     END_IF
@@ -540,8 +535,7 @@ exit:   pla                     ; pop OnClick / OnKeyPress
         jmp     ExitDA
     END_IF
 
-        cmp     #MGTK::Area::dragbar ; Title bar?
-        bne     ignore_click
+        IF A <> #MGTK::Area::dragbar GOTO ignore_click ; Title bar?
 
         copy8   #kDAWindowId, dragwindow_params::window_id
         MGTK_CALL MGTK::DragWindow, dragwindow_params
@@ -610,32 +604,28 @@ rts1:  rts                     ; used by next proc
         FALL_THROUGH_TO FindButtonRow
 
 .proc FindButtonRow
-        cmp     #kRow1Top-kBorderLeftTop ; row 1?
-        bcc     miss
+        IF A < #kRow1Top-kBorderLeftTop GOTO miss ; row 1?
     IF A < #kRow1Bot+kBorderBottomRight
         jsr     FindButtonCol
         bcc     miss
         RETURN  A=row1_lookup,x
     END_IF
 
-        cmp     #kRow2Top-kBorderLeftTop ; row 2?
-        bcc     miss
+        IF A < #kRow2Top-kBorderLeftTop GOTO miss ; row 2?
     IF A < #kRow2Bot+kBorderBottomRight
         jsr     FindButtonCol
         bcc     miss
         RETURN  A=row2_lookup,x
     END_IF
 
-        cmp     #kRow3Top-kBorderLeftTop ; row 3?
-        bcc     miss
+        IF A < #kRow3Top-kBorderLeftTop GOTO miss ; row 3?
     IF A < #kRow3Bot+kBorderBottomRight
         jsr     FindButtonCol
         bcc     miss
         RETURN  A=row3_lookup,x
     END_IF
 
-        cmp     #kRow4Top-kBorderLeftTop ; row 4?
-        bcc     miss
+        IF A < #kRow4Top-kBorderLeftTop GOTO miss ; row 4?
     IF A < #kRow4Bot+kBorderBottomRight
         jsr     FindButtonCol
         bcc     miss
@@ -644,15 +634,11 @@ rts1:  rts                     ; used by next proc
 
     IF A < #kRow5Top-kBorderLeftTop ; special case for tall + button
         lda     screentowindow_params::windowx
-        cmp     #kCol4Left-kBorderLeftTop
-        bcc     miss
-        cmp     #kCol4Right+kBorderBottomRight-1
-        bcs     miss
+        IF A < #kCol4Left-kBorderLeftTop OR A >= #kCol4Right+kBorderBottomRight-1 GOTO miss
         RETURN  A=#'+', C=1
     END_IF
 
-        cmp     #kRow5Bot+kBorderBottomRight ; row 5?
-        bcs     miss
+        IF A >= #kRow5Bot+kBorderBottomRight GOTO miss ; row 5?
 
         jsr     FindButtonCol
     IF CS
@@ -680,26 +666,22 @@ miss:   RETURN  C=0
         ::decimal_lookup := *-2
 
 .proc FindButtonCol
-        cpx     #kCol1Left-kBorderLeftTop ; col 1?
-        bcc     miss
+        IF X < #kCol1Left-kBorderLeftTop GOTO miss; col 1?
     IF X < #kCol1Right+kBorderBottomRight
         RETURN  X=#1, C=1
     END_IF
 
-        cpx     #kCol2Left-kBorderLeftTop ; col 2?
-        bcc     miss
+        IF X < #kCol2Left-kBorderLeftTop GOTO miss ; col 2?
     IF X < #kCol2Right+kBorderBottomRight
         RETURN  X=#2, C=1
     END_IF
 
-        cpx     #kCol3Left-kBorderLeftTop ; col 3?
-        bcc     miss
+        IF X < #kCol3Left-kBorderLeftTop GOTO miss ; col 3?
     IF X < #kCol3Right+kBorderBottomRight
         RETURN  X=#3, C=1
     END_IF
 
-        cpx     #kCol4Left-kBorderLeftTop ; col 4?
-        bcc     miss
+        IF X < #kCol4Left-kBorderLeftTop GOTO miss ; col 4?
     IF X < #kCol4Right+kBorderBottomRight
         RETURN  X=#4, C=1
     END_IF
@@ -765,8 +747,7 @@ miss:   RETURN  C=0
         lda     calc_d          ; already a decimal?
         ora     calc_e          ; or exponent?
       IF ZERO
-        lda     calc_l
-       IF ZERO
+       IF u8 calc_l = #0
         inc     calc_l
        END_IF
         copy8   intl_deci_sep, calc_d
@@ -783,8 +764,7 @@ miss:   RETURN  C=0
     IF A = #'-'                 ; Subtract?
         pha
         ldxy    #btn_sub::port
-        lda     calc_e          ; negate vs. subtract
-      IF NOT_ZERO
+      IF u8 calc_e <> #0        ; negate vs. subtract
         lda     calc_n
        IF ZERO
         SET_BIT7_FLAG calc_n
@@ -955,8 +935,7 @@ empty:  inc     calc_l
         ;; ----------------------------------------
         ;; If there was input, parse it
 
-        lda     calc_g
-    IF NOT ZERO
+    IF u8 calc_g <> #0
         ;; Copy string to `FBUFFR`, mapping decimal char.
         ldx     #kTextBufferSize
       DO
@@ -1026,8 +1005,7 @@ empty:  inc     calc_l
 
         ldy     #0              ; count the size
     DO
-        lda     FBUFFR,y
-        BREAK_IF ZERO
+        BREAK_IF u8 FBUFFR,y = #0
     WHILE iny : NOT_ZERO        ; always
 
         ldx     #kTextBufferSize ; copy to text buffers
@@ -1079,8 +1057,7 @@ empty:  inc     calc_l
 .endproc ; ResetBuffer1AndState
 
 .proc MaybeAddLeadingZero
-        lda     text_buffer1+1,x
-    IF A = intl_deci_sep
+    IF u8 text_buffer1+1,x = intl_deci_sep
         lda     #'0'
         sta     text_buffer1,x
         sta     text_buffer2,x
@@ -1136,9 +1113,9 @@ invert:
 
 check_button:
         MGTK_CALL MGTK::GetEvent, event_params
-        lda     event_params::kind
-        cmp     #MGTK::EventKind::drag ; Button down?
-        bne     done            ; Nope, done immediately
+
+        ;; Button down? If not, done immediately
+        IF u8 event_params::kind <> #MGTK::EventKind::drag GOTO done
 
         copy8   #kDAWindowId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
@@ -1235,9 +1212,7 @@ invert_rect:
 
 .proc PreDisplayBuffer
         MGTK_CALL MGTK::ShieldCursor, clear_display_params
-
-        MGTK_CALL MGTK::MoveTo, text_pos_params ; clear with spaces
-        MGTK_CALL MGTK::DrawStringRight, spaces_string
+        MGTK_CALL MGTK::PaintRect, clear_display_params
         MGTK_CALL MGTK::MoveTo, text_pos_params ; set up for display
         rts
 .endproc ; PreDisplayBuffer

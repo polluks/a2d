@@ -35,7 +35,7 @@
         kMaxDAsToConsider = 16  ; must be power of 2
         ASSERT_EQUALS kMaxDAsToConsider & (kMaxDAsToConsider-1), 0
 
-.proc Init
+.scope Init
         ;; Use time ticks as randomness - low byte is enough entropy
         jsr     JUMP_TABLE_GET_TICKS ; returns A,X,Y = tick count
         and     #kMaxDAsToConsider - 1
@@ -46,8 +46,7 @@
         inx
     DO
         dex
-        lda     dir_path,x
-    WHILE A <> #'/'
+    WHILE u8 dir_path,x <> #'/'
         dex
         txa
         pha                     ; A = new `dir_path` length
@@ -135,19 +134,13 @@ continue:
 .proc _IsDAFile
         ;; Check file type
         ldy     #FileEntry::file_type
-        lda     (entry_ptr),y
-        cmp     #kDAFileType
-        bne     nope
+        IF u8 (entry_ptr),y <> #kDAFileType GOTO nope
 
         ;; Check aux type
         ldy     #FileEntry::aux_type
-        lda     (entry_ptr),y
-        cmp     #<kDAFileAuxType
-        bne     nope
+        IF u8 (entry_ptr),y <> #<kDAFileAuxType GOTO nope
         iny
-        lda     (entry_ptr),y
-        cmp     #>kDAFileAuxType
-        bne     nope
+        IF u8 (entry_ptr),y <> #>kDAFileAuxType GOTO nope
 
         RETURN  C=0
 
@@ -169,9 +162,7 @@ nope:   RETURN  C=1
         ;; Yes, check characters
         ASSERT_EQUALS FileEntry::file_name, 1
     DO
-        lda     (entry_ptr),y
-        cmp     self_filename,y
-        bne     nope
+        IF u8 (entry_ptr),y <> self_filename,y GOTO nope
     WHILE dey : NOT_ZERO
 
         RETURN  C=0
@@ -186,7 +177,7 @@ file_num:
 filename:
         .res    16
 
-.endproc ; Init
+.endscope ; Init
 
 
 ;;; ============================================================
@@ -209,7 +200,7 @@ kEntriesPerBlock = $0D
 
         ;; Open directory
         JUMP_TABLE_MLI_CALL OPEN, open_params
-        jcs     exit
+        bcs     exit
 
         lda     open_params::ref_num
         sta     read_params::ref_num
@@ -218,15 +209,13 @@ kEntriesPerBlock = $0D
 next_block:
         JUMP_TABLE_MLI_CALL READ, read_params
         bcs     close
-        copy8   #AS_BYTE(-1), entry_in_block
+        copy8   #AS_BYTE{-1}, entry_in_block
         entry_ptr := $08
         copy16  #(block_buf+4 - .sizeof(FileEntry)), entry_ptr
 
 next_entry:
         ;; Advance to next entry
-        lda     entry_in_block
-        cmp     #kEntriesPerBlock
-        beq     next_block
+        IF u8 entry_in_block = #kEntriesPerBlock GOTO next_block
 
         inc     entry_in_block
         add16_8 entry_ptr, #.sizeof(FileEntry)

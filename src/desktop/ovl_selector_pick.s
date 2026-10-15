@@ -32,8 +32,7 @@ Exec:
         sta     selector_action
         ldx     #$FF            ; `INC` to clear high bit
         stx     clean_flag      ; set "clean"
-        cmp     #SelectorAction::add
-        beq     DoAdd
+        IF A = #SelectorAction::add GOTO DoAdd
         jmp     Init
 
 ;;; ============================================================
@@ -82,8 +81,7 @@ done:
 ;;; ============================================================
 
 DoAdd:  ldx     #kRunListPrimary
-        lda     selector_menu
-    IF A >= #kSelectorMenuFixedItems + 8
+    IF u8 selector_menu >= #kSelectorMenuFixedItems + 8
         inx                     ; `kRunListSecondary`
     END_IF
 
@@ -120,10 +118,8 @@ DoAdd:  ldx     #kRunListPrimary
 
         copy16  selector_list, num_primary_run_list_entries
 
-    IF lda which_run_list : A = #kRunListPrimary
-        lda     num_primary_run_list_entries
-        cmp     #kSelectorListNumPrimaryRunListEntries
-        beq     ShowFullAlert
+    IF u8 which_run_list = #kRunListPrimary
+        IF u8 num_primary_run_list_entries = #kSelectorListNumPrimaryRunListEntries GOTO ShowFullAlert
         ldy     copy_when       ; Flags
         lda     num_primary_run_list_entries
         inc     selector_list + kSelectorListNumPrimaryRunListOffset
@@ -132,8 +128,7 @@ DoAdd:  ldx     #kRunListPrimary
         jmp     Exit
     END_IF
 
-        lda     num_secondary_run_list_entries
-    IF A <> #kSelectorListNumSecondaryRunListEntries
+    IF u8 num_secondary_run_list_entries <> #kSelectorListNumSecondaryRunListEntries
         ldy     copy_when       ; Flags
         lda     num_secondary_run_list_entries
         clc
@@ -188,15 +183,12 @@ copy_when:
         ;; Which action are we?
         lda     shortcut_picker_record::selected_index
         bmi     DialogLoop
+
         lda     selector_action
-        cmp     #SelectorAction::edit
-        beq     DoEdit
+        IF A = #SelectorAction::edit GOTO DoEdit
+        IF A = #SelectorAction::delete GOTO DoDelete
+        IF A <> #SelectorAction::run GOTO DialogLoop
 
-        cmp     #SelectorAction::delete
-        beq     DoDelete
-
-        cmp     #SelectorAction::run
-        bne     DialogLoop
         jmp     DoRun
 .endproc ; DialogLoop
 
@@ -230,8 +222,7 @@ copy_when:
         jsr     main::CopyToPathBuf0
 
         ldx     #kRunListPrimary
-        lda     shortcut_picker_record::selected_index
-    IF A >= #kSelectorListNumPrimaryRunListEntries
+    IF u8 shortcut_picker_record::selected_index >= #kSelectorListNumPrimaryRunListEntries
         inx                     ; `kRunListSecondary`
     END_IF
 
@@ -274,15 +265,11 @@ copy_when:
         jmp     Exit
     END_IF
 
-        lda     shortcut_picker_record::selected_index
-    IF A >= #kSelectorListNumPrimaryRunListEntries
+    IF u8 shortcut_picker_record::selected_index >= #kSelectorListNumPrimaryRunListEntries
         ;; Was on secondary run list - is it still?
-        lda     which_run_list
-        cmp     #kRunListSecondary
-        beq     reuse_same_index
+        IF u8 which_run_list = #kRunListSecondary GOTO reuse_same_index
 
-        lda     num_primary_run_list_entries
-      IF A = #kSelectorListNumPrimaryRunListEntries
+      IF u8 num_primary_run_list_entries = #kSelectorListNumPrimaryRunListEntries
         jmp     ShowFullAlert
       END_IF
 
@@ -295,12 +282,9 @@ copy_when:
         txa
     ELSE
         ;; Was on primary run list - is it still?
-        lda     which_run_list
-        cmp     #kRunListPrimary
-        beq     reuse_same_index
+        IF u8 which_run_list = #kRunListPrimary GOTO reuse_same_index
 
-        lda     num_secondary_run_list_entries
-      IF A = #kSelectorListNumSecondaryRunListEntries
+      IF u8 num_secondary_run_list_entries = #kSelectorListNumSecondaryRunListEntries
         jmp     ShowFullAlert
       END_IF
 
@@ -416,11 +400,8 @@ clean_flag:                     ; high bit set if "clean", cleared if "dirty"
         jsr     ::main::SystemTask
         jsr     main::GetEvent
 
-        cmp     #MGTK::EventKind::button_down
-        beq     handle_button
-
-        cmp     #MGTK::EventKind::key_down
-        bne     EventLoop
+        IF A = #MGTK::EventKind::button_down GOTO handle_button
+        IF A <> #MGTK::EventKind::key_down GOTO EventLoop
         jmp     HandleKey
 
 handle_button:
@@ -434,8 +415,7 @@ handle_button:
         RETURN  A=#$FF
     END_IF
 
-        lda     findwindow_params::window_id
-    IF A <> winfo_entry_picker
+    IF u8 findwindow_params::window_id <> winfo_entry_picker
         RETURN  A=#$FF
     END_IF
 
@@ -480,18 +460,14 @@ handle_button:
 ;;; Key down handler
 
 .proc HandleKey
-        lda     event_params::modifiers
-    IF A = #MGTK::event_modifier_solid_apple
+    IF u8 event_params::modifiers = #MGTK::event_modifier_solid_apple
         RETURN  A=#$FF
     END_IF
 
         lda     event_params::key
 
-        cmp     #CHAR_RETURN
-        beq     HandleKeyReturn
-
-        cmp     #CHAR_ESCAPE
-        beq     HandleKeyEscape
+        IF A = #CHAR_RETURN GOTO HandleKeyReturn
+        IF A = #CHAR_ESCAPE GOTO HandleKeyEscape
 
         lda     num_primary_run_list_entries
         ora     num_secondary_run_list_entries
@@ -600,7 +576,7 @@ handle_button:
     WHILE dey : POS
 
         ;; If primary run list, update the menu as well
-    IF lda index : A < #kSelectorListNumPrimaryRunListEntries
+    IF u8 index < #kSelectorListNumPrimaryRunListEntries
         jsr     UpdateMenuResources
     END_IF
 
@@ -621,8 +597,7 @@ flags:  .byte   0
         ptr2 := $08
 
         sta     index
-        cmp     #kSelectorListNumPrimaryRunListEntries
-        bcs     secondary_run_list
+        IF A >= #kSelectorListNumPrimaryRunListEntries GOTO secondary_run_list
 
         ;; Primary run list
     DO
@@ -633,7 +608,7 @@ flags:  .byte   0
         TAIL_CALL UpdateMenuResources
       END_IF
 
-        jsr     MoveEntryDown
+        jsr     MoveEntryDown   ; A = `index`
     WHILE inc index : NOT ZERO  ; always
 
         ;; --------------------------------------------------

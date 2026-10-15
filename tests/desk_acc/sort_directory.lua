@@ -5,9 +5,8 @@ DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-a2d.AddShortcut("/TESTS/HUNDRED.FILES")
-a2d.CloseAllWindows()
+desktop.AddShortcut("/TESTS/HUNDRED.FILES")
+desktop.CloseAllWindows()
 
 -- Parse on-screen output of CAT; returns filenames in array
 function ParseCat()
@@ -41,27 +40,27 @@ test.Variants(
     {"Files sorted - open with click", "click"},
   },
   function(idx, name, which)
-    a2d.OpenPath("/TESTS/SORT.DIRECTORY")
+    desktop.OpenWindow("/TESTS/SORT.DIRECTORY")
 
     if which == "keyboard" then
       -- keyboard
-      a2d.SelectAndOpen("ORDER")
+      desktop.SelectAndOpen("ORDER")
     else
       -- click
-      a2d.Select("ORDER")
+      desktop.Select("ORDER")
       local x, y = a2dtest.GetSelectedIconCoords()
-      a2d.ClearSelection()
+      desktop.ClearSelection()
 
       a2d.InMouseKeysMode(function(m)
           m.MoveToApproximately(x, y)
           m.DoubleClick()
       end)
-      emu.wait(5)
+      a2dtest.WaitForSystemTask()
     end
 
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.SORT_DIRECTORY)
-    emu.wait(5) -- directory rewrite
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.RUN_BASIC_HERE)
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.SORT_DIRECTORY)
+    a2dtest.WaitForSystemTask()
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.RUN_BASIC_HERE)
     apple2.WaitForBasicSystem()
 
     function ValidateOrder(filenames)
@@ -77,12 +76,12 @@ test.Variants(
 
     apple2.TypeLine("HOME")
     apple2.TypeLine("CAT, TSYS")
-    emu.wait(5)
+    emu.wait(5) -- automating BASIC prompt
     ValidateOrder(ParseCat())
 
     apple2.TypeLine("HOME")
     apple2.TypeLine("CAT")
-    emu.wait(5)
+    emu.wait(5) -- automating BASIC prompt
     ValidateOrder(ParseCat())
 
     apple2.TypeLine("BYE")
@@ -98,20 +97,19 @@ end)
 test.Step(
   "Lexicographical sorting",
   function()
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
     a2d.OAShortcut("1") -- Open HUNDRED.FILES
-    emu.wait(5)
-    emu.wait(10) -- slower than usual to open
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.SORT_DIRECTORY)
-    emu.wait(10) -- directory rewrite
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.RUN_BASIC_HERE)
+    a2dtest.WaitForSystemTask()
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.SORT_DIRECTORY)
+    a2dtest.WaitForSystemTask()
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.RUN_BASIC_HERE)
     apple2.WaitForBasicSystem()
 
     apple2.TypeLine("HOME")
     apple2.TypeLine("CAT")
     -- snapshot repeatedly so we catch (most) files
     for n=1,50 do
-      emu.wait(0.1)
+      emu.wait(0.1) -- automating BASIC prompt
       local filenames = ParseCat()
       for i = 1,#filenames-1 do
         test.ExpectLessThan(filenames[i], filenames[i+1], "filename order")
@@ -130,16 +128,16 @@ end)
 test.Step(
   "System files sorted",
   function()
-    a2d.OpenPath("/TESTS/SORT.DIRECTORY/TWO.SYS.FILES")
-    emu.wait(5) -- TODO: Why is this needed?
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.SORT_DIRECTORY)
-    emu.wait(5) -- directory rewrite
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.RUN_BASIC_HERE)
+    desktop.OpenWindow("/TESTS/SORT.DIRECTORY/TWO.SYS.FILES")
+    a2dtest.WaitForSystemTask()
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.SORT_DIRECTORY)
+    a2dtest.WaitForSystemTask()
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.RUN_BASIC_HERE)
     apple2.WaitForBasicSystem()
 
     apple2.TypeLine("HOME")
     apple2.TypeLine("CAT")
-    emu.wait(5)
+    emu.wait(5) -- automating BASIC prompt
     local filenames = ParseCat()
     for i = 1,#filenames-1 do
       test.ExpectLessThan(filenames[i], filenames[i+1], "filename order")

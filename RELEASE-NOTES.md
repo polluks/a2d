@@ -6,6 +6,12 @@ Project Page: https://github.com/a2stuff/a2d
 
 ## 1.6 Alpha
 
+The focus of the v1.6 release has been stability and responsiveness, rather than new features.
+
+Significant work went into an automated test harness utilizing the [MAME](https://www.mamedev.org) emulation framework. Scripts can be written to exercise changes and detect regressions. The extensive list of manual verification test cases has been converted to test scripts. Some manual verification is still required, and even the MAME emulation is not a perfect replica of real hardware, but this effort has led to fewer regressions and more confident improvements. Version 1.6 should be the most stable so far.
+
+An 8-bit Apple II running at 1MHz will never be a perfect platform for a graphical user interface, but two big changes in v1.6 improve the experience. The first is to align redrawing the mouse cursor with “vertical blanking” periods when the display is not updated, to eliminate the cursor flickering when the user moves the mouse. The second is to reduce the times when the cursor is temporarily hidden while other parts of the screen are updated. Neither of these are perfect and there is room for further improvement. Combined with other performance improvements, the overall experience should feel more solid.
+
 ### New Features
 
 * Add "Startup.Items" folder support.
@@ -13,6 +19,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Support dragging files onto ProDOS "interpreter" applications. ([#903](https://github.com/a2stuff/a2d/issues/903))
 * New Toy: Minesweeper.
 * New Screen Saver: Maze.
+* Date & Time: Support setting IIgs clock, No-Slot Clock, ThunderClock, ROMX RTC, and The Cricket! clock. ([#38](https://github.com/a2stuff/a2d/issues/38))
 
 ### General
 
@@ -113,6 +120,7 @@ Project Page: https://github.com/a2stuff/a2d
 * Fix overlapping labels during copy in some locales.
 * Fix crash on Apple IIc/IIc+ on mouse activity after some copies. ([#900](https://github.com/a2stuff/a2d/issues/900))
 * Rename "Quick Copy" to "Smart Block Copy" and "Disk Copy" to "Full Disk Copy".
+* Adjust drive list box size to ensure long volume names fit.
 
 ### Desk Accessories
 
@@ -146,7 +154,9 @@ Project Page: https://github.com/a2stuff/a2d
 * New Screen Saver: Maze.
 * Text Preview: Show first 64K of larger files correctly.
 * Control Panels: Handle write protected disk when modifying settings.
-* Control Panel: Fix overlapping button labels in some locales.
+* Control Panel
+  * Fix overlapping button labels in some locales.
+  * Show pencil cursor over desktop pattern editor.
 * Map
   * Fix overlapping labels in some locales.
   * Reduce cursor flickering when blinking position indicator.
@@ -155,12 +165,16 @@ Project Page: https://github.com/a2stuff/a2d
   * Improve single hires file preview quality.
   * Support AXE PACKER image files
 * Lights Out: Add keyboard support: A..Y toggle lights.
-* Eyes: Reduce cursor flickering.
+* Eyes
+  * Reduce cursor flickering.
+  * Reduce pupil flickering.
 * International: Reduce cursor flickering.
 * Joystick
   * Reduce cursor flickering.
   * Don't show second joystick location on IIc. ([#909](https://github.com/a2stuff/a2d/issues/909))
 * CD Remote: Fix shuffle play randomization.
+* Neko: Pace animation on accelerated systems.
+* Date & Time: Support setting IIgs clock, No-Slot Clock, ThunderClock, ROMX RTC, and The Cricket! clock. ([#38](https://github.com/a2stuff/a2d/issues/38))
 
 ### Misc
 

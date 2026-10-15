@@ -6,31 +6,32 @@
 
 local util = {}
 
-function util.WaitFor(message, func, options, level)
+function util.WaitFor(message, func, options)
+  options = util.default_options(options)
   local timeout = 60
   local scale = 20
-  if options and options.timeout then
+  local wait = 1 / scale
+  if options.timeout then
     timeout = options.timeout
   end
-  if level == nil then
-    level = 1
+  if options.wait then
+    wait = options.wait
   end
   for i = 1, timeout*scale do
     if func() then
       return
     end
-    emu.wait(1/scale)
+    emu.wait(wait)
   end
-  error(string.format("Timeout (%ds) waiting for %s", timeout, message), level + 2)
+  error(string.format("Timeout (%ds) waiting for %s", timeout, message), options.level)
 end
 
 function util.WaitForNoError(func, options)
+  options = util.default_options(options)
+
   local timeout = 60
-  if options and options.timeout then
+  if options.timeout then
     timeout = options.timeout
-  end
-  if level == nil then
-    level = 1
   end
   for i = 1, timeout do
     if func() then
@@ -57,5 +58,53 @@ function util.CaseInsensitivePattern(p)
     end
   end))
 end
+
+function util.GetSymbols(envar)
+  local symbols = {}
+  for pair in emu.subst_env("$" .. envar):gmatch("([^ ]+)") do
+    local k,v = pair:match("^(.+)=(.+)$")
+    symbols[k] = tonumber(v, 16)
+  end
+  return symbols
+end
+
+
+--[[
+  Usage:
+
+    function MyExpectFunc(..., options)
+      options = util.default_options(options)
+
+      -- `options` is definitely a table
+      if options.foo then ... end
+
+      -- returns a copy, so this doesn't mutate the caller's copy
+      options.extra = true
+
+      -- options.level automagically set/incremented; will show the
+      -- *caller* of this function as error source.
+      if bad then error("bad", options.level) end
+
+      -- if passed on to other such functions, so the correct caller
+      -- will be shown.
+      OtherExpectFunc(..., options)
+  end
+]]
+function util.default_options(o)
+  local options = {}
+  if o then
+    for k, v in pairs(o) do
+      options[k] = v
+    end
+  end
+
+  if options.level == nil then
+    options.level = 1
+  end
+
+  options.level = options.level + 1
+  return options
+end
+
 
 return util

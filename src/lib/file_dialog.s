@@ -173,14 +173,12 @@ selection_requirement_flags:
         jsr     ResetTypeDown
 
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params+MGTK::FindWindowParams::which_area
-    IF A <> #MGTK::Area::content
+    IF u8 findwindow_params+MGTK::FindWindowParams::which_area <> #MGTK::Area::content
 ret:    rts
     END_IF
 
         ;; Dialog window?
-        lda     findwindow_params+MGTK::FindWindowParams::window_id
-    IF A <> #file_dialog_res::kFilePickerDlgWindowID
+    IF u8 findwindow_params+MGTK::FindWindowParams::window_id <> #file_dialog_res::kFilePickerDlgWindowID
         ;; No, assume list box (will fail gracefully if not)
         COPY_STRUCT MGTK::Point, event_params+MGTK::Event::coords, file_dialog_res::lb_params::coords
         LBTK_CALL LBTK::Click, file_dialog_res::lb_params
@@ -317,8 +315,7 @@ ret:    rts
 found:  ldx     num_file_names
     DO
         dex
-        lda     file_list_index,x
-    WHILE A <> index
+    WHILE u8 file_list_index,x <> index
         txa
         rts
 .endproc ; _FindFilenameIndex
@@ -387,8 +384,7 @@ found:  ldx     num_file_names
 ;;; Trashes: A
 
 .proc _IsRootPath
-        lda     path_buf
-        cmp     #1
+        ucmp8   path_buf, #1
         rts
 .endproc ; _IsRootPath
 
@@ -426,18 +422,18 @@ found:  ldx     num_file_names
 
 ;;; Output: C=0 if allowed, C=1 if not.
 .proc _IsOKAllowed
-        .assert kSelectionOptional           & $80 = $00, error, "enum mismatch"
-        .assert kSelectionOptionalUnlessRoot & $80 = $00, error, "enum mismatch"
-        .assert kSelectionRequiredNoDirs     & $80 = $80, error, "enum mismatch"
-        .assert kSelectionRequiredDirsOK     & $80 = $80, error, "enum mismatch"
+        .assert kSelectionOptional           & N_FLAG_MASK = $00, error, "enum mismatch"
+        .assert kSelectionOptionalUnlessRoot & N_FLAG_MASK = $00, error, "enum mismatch"
+        .assert kSelectionRequiredNoDirs     & N_FLAG_MASK = N_FLAG_MASK, error, "enum mismatch"
+        .assert kSelectionRequiredDirsOK     & N_FLAG_MASK = N_FLAG_MASK, error, "enum mismatch"
 
     IF bit selection_requirement_flags : NS
         ;; Selection required
         bit     selected_index
         bmi     _ReturnNotAllowed ; no selection
 
-        .assert kSelectionRequiredNoDirs & $40 = $00, error, "enum mismatch"
-        .assert kSelectionRequiredDirsOK & $40 = $40, error, "enum mismatch"
+        .assert kSelectionRequiredNoDirs & V_FLAG_MASK = $00, error, "enum mismatch"
+        .assert kSelectionRequiredDirsOK & V_FLAG_MASK = V_FLAG_MASK, error, "enum mismatch"
 
         ;; bit6 = dirs ok?
         bit     selection_requirement_flags
@@ -448,8 +444,8 @@ found:  ldx     num_file_names
     END_IF
 
         ;; No selection required
-        .assert kSelectionOptional           & $40 = $00, error, "enum mismatch"
-        .assert kSelectionOptionalUnlessRoot & $40 = $40, error, "enum mismatch"
+        .assert kSelectionOptional           & V_FLAG_MASK = $00, error, "enum mismatch"
+        .assert kSelectionOptionalUnlessRoot & V_FLAG_MASK = V_FLAG_MASK, error, "enum mismatch"
 
         ;; bit6 = root w/ no selection ok?
         bvc     _ReturnAllowed
@@ -492,7 +488,7 @@ found:  ldx     num_file_names
     IF X <> #0
         ;; With modifiers
         jsr     CheckTypeDown
-        jeq     exit
+        beq     exit
 
         jsr     ResetTypeDown
         ldx     event_params+MGTK::Event::modifiers
@@ -502,7 +498,7 @@ found:  ldx     num_file_names
         ;; No modifiers
 
         jsr     CheckTypeDown
-        jeq     exit
+        beq     exit
 
         jsr     ResetTypeDown
         lda     event_params+MGTK::Event::key
@@ -590,8 +586,7 @@ file_char:
         RETURN  A=#0
 
 .proc _FindMatch
-        lda     num_file_names
-    IF ZERO
+    IF u8 num_file_names = #0
         RETURN  A=#$FF
     END_IF
 
@@ -621,8 +616,8 @@ cloop:  iny
         cpy     #SELF_MODIFIED_BYTE
         bcc     cloop
 
-next:   inc     index
-    WHILE lda index : A <> num_file_names
+next:
+    WHILE u8 ++index <> num_file_names
         dec     index
 found:  RETURN  A=index
 
@@ -679,7 +674,7 @@ found:  RETURN  A=index
         tax
         lda     file_types,x
         rts
-.endproc ; _GetFilenameForIndex
+.endproc ; _GetFileTypeForIndex
 
 ;;; ============================================================
 
@@ -799,8 +794,8 @@ found:  RETURN  A=index
         ;; Separator between button groups
         MGTK_CALL MGTK::SetPenMode, file_dialog_res::notpencopy
         MGTK_CALL MGTK::SetPattern, file_dialog_res::checkerboard_pattern
-        MGTK_CALL MGTK::MoveTo, file_dialog_res::button_sep_start
-        MGTK_CALL MGTK::LineTo, file_dialog_res::button_sep_end
+        MGTK_CALL MGTK::MoveTo, file_dialog_res::button_sep::start
+        MGTK_CALL MGTK::LineTo, file_dialog_res::button_sep::end
 
         ;; List box
         lda     #MGTK::Scroll::option_present | MGTK::Scroll::option_thumb
@@ -911,11 +906,9 @@ found:  RETURN  A=index
         ldx     path_buf
         BREAK_IF ZERO
         dec     path_buf
-        lda     path_buf,x
-    WHILE A <> #'/'
+    WHILE u8 path_buf,x <> #'/'
 
-        lda     path_buf
-    IF ZERO
+    IF u8 path_buf = #0
         jsr     _SetRootPath
     END_IF
 
@@ -949,8 +942,7 @@ err:    jsr     _SetRootPath
         copy8   dir_read_buf+SubdirectoryHeader::entries_per_block, entries_per_block
 
         kMaxEntries = 127
-        lda     dir_read_buf+SubdirectoryHeader::file_count+1
-    IF NOT ZERO
+    IF u8 dir_read_buf+SubdirectoryHeader::file_count+1 <> #0
         lda     #kMaxEntries
     ELSE
         lda     dir_read_buf+SubdirectoryHeader::file_count
@@ -1009,17 +1001,15 @@ do_entry:
 
 done_entry:
         inc     entry_in_block
-        lda     entry_index
-        cmp     num_file_names
-        bne     next
+        IF u8 entry_index <> num_file_names GOTO next
 
 close:  MLI_CALL CLOSE, close_params
         jsr     _SortFileNames
         jsr     _SetCursorPointer
         RETURN  C=0
 
-next:   lda     entry_in_block
-    IF A <> entries_per_block
+next:
+    IF u8 entry_in_block <> entries_per_block
         add16_8 ptr, entry_length
         jmp     do_entry
     END_IF
@@ -1156,8 +1146,7 @@ next:   add16_8 ptr, #16        ; advance to next
         ;; Copy last segment
         ldx     path_buf
       DO
-        lda     path_buf,x
-        BREAK_IF A = #'/'
+        BREAK_IF u8 path_buf,x = #'/'
         dex
       WHILE NOT_ZERO            ; always
         inx
@@ -1190,8 +1179,7 @@ next:   add16_8 ptr, #16        ; advance to next
 ;;; Assert: On entry, `file_list_index` table is populated 0...`num_file_names`-1
 
 .proc _SortFileNames
-        lda     num_file_names
-        RTS_IF A < #2           ; can't sort < 2 records
+        RTS_IF u8 num_file_names < #2 ; can't sort < 2 records
 
         ;; --------------------------------------------------
         ;; Selection sort
@@ -1235,8 +1223,7 @@ next:   add16_8 ptr, #16        ; advance to next
         stax    ptr2
        END_IF
 
-        inc     inner
-      WHILE lda inner : A <> outer
+      WHILE u8 ++inner <> outer
 
     WHILE dec outer : NOT_ZERO
         rts
@@ -1374,11 +1361,11 @@ ResetTypeDown := file_dialog_impl::ResetTypeDown
 
 ;;; Configuration
 kSelectionOptional           = %00000000 ; unused
-kSelectionOptionalUnlessRoot = %01000000
-kSelectionRequiredNoDirs     = %10000000
-kSelectionRequiredDirsOK     = %11000000
+kSelectionOptionalUnlessRoot = V_FLAG_MASK
+kSelectionRequiredNoDirs     = N_FLAG_MASK
+kSelectionRequiredDirsOK     = N_FLAG_MASK|V_FLAG_MASK
 kShowAllFiles                = %00000000
-kShowOnlyDirectories         = %10000000
+kShowOnlyDirectories         = N_FLAG_MASK
 
 ;;; State
 STATE_START := file_dialog_impl::state_start

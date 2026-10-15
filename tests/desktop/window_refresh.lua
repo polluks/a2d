@@ -5,8 +5,6 @@ DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv -flop1 floppy_with_files.dsk"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.5)
-
 local s6d1 = manager.machine.images[":sl6:diskiing:0:525"]
 
 --[[
@@ -16,14 +14,14 @@ local s6d1 = manager.machine.images[":sl6:diskiing:0:525"]
 test.Step(
   "move - failure during enumeration does not repaint window",
   function()
-    a2d.OpenPath("/RAM1")
-    a2d.MoveWindowBy(280, 80)
+    desktop.OpenWindow("/RAM1")
+    desktop.MoveWindowBy(280, 80)
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
     local dst_x, dst_y = x + w / 2, y + h / 2
 
-    a2d.OpenPath("/WITH.FILES", {keep_windows=true})
-    a2d.MoveWindowBy(0, 80)
-    a2d.SelectAll()
+    desktop.OpenWindow("/WITH.FILES", {keep_windows=true})
+    desktop.MoveWindowBy(0, 80)
+    desktop.SelectAll()
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2dtest.DHRDarkness()
@@ -35,12 +33,12 @@ test.Step(
     s6d1:load(current)
     a2d.DialogCancel()
 
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify WITH.FILES window did not repaint")
 
     -- cleanup
-    a2d.CloseAllWindows()
-    a2d.Reboot()
+    desktop.CloseAllWindows()
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)
 
@@ -51,9 +49,9 @@ end)
 test.Step(
   "delete - failure during enumeration does not repaint window",
   function()
-    a2d.OpenPath("/WITH.FILES")
-    a2d.MoveWindowBy(0, 80)
-    a2d.SelectAll()
+    desktop.OpenWindow("/WITH.FILES")
+    desktop.MoveWindowBy(0, 80)
+    desktop.SelectAll()
 
     a2dtest.DHRDarkness()
 
@@ -64,16 +62,14 @@ test.Step(
     s6d1:load(current)
     a2d.DialogCancel()
 
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify WITH.FILES window did not repaint")
 
     -- cleanup
-    a2d.CloseAllWindows()
-    a2d.Reboot()
+    desktop.CloseAllWindows()
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)
-
-a2d.ConfigureRepaintTime(0.5)
 
 --[[
 * Repeat the following test cases for these operations: Copy, Move, Delete:
@@ -93,27 +89,27 @@ test.Variants(
     local dst_x, dst_y
 
     if what == "delete" then
-      a2d.SelectPath("/Trash")
+      desktop.SelectPath("/Trash")
       dst_x, dst_y = a2dtest.GetSelectedIconCoords()
     end
 
-    a2d.CopyPath("/A2.DESKTOP/EXTRAS", "/RAM1")
-    a2d.CloseAllWindows()
+    desktop.CopyPath("/A2.DESKTOP/EXTRAS", "/RAM1")
+    desktop.CloseAllWindows()
 
     if what == "copy" or what == "move" then
-      a2d.CreateFolder("/RAM1/FOLDER")
-      a2d.OpenPath("/RAM1/FOLDER")
-      a2d.MoveWindowBy(300, 60)
+      desktop.CreateFolder("/RAM1/FOLDER")
+      desktop.OpenWindow("/RAM1/FOLDER")
+      desktop.MoveWindowBy(300, 60)
       local x, y, w, h = a2dtest.GetFrontWindowContentRect()
       dst_x, dst_y = x + w / 2, y + h / 2
     end
 
-    a2d.OpenPath("/RAM1/EXTRAS", {keep_windows=true})
-    emu.wait(5)
-    a2d.GrowWindowBy(-200, -200)
-    a2d.MoveWindowBy(0, 60)
-    emu.wait(5)
-    a2d.SelectAll()
+    desktop.OpenWindow("/RAM1/EXTRAS", {keep_windows=true})
+    a2dtest.WaitForSystemTask()
+    desktop.GrowWindowBy(-200, -200)
+    desktop.MoveWindowBy(0, 60)
+    a2dtest.WaitForSystemTask()
+    desktop.SelectAll()
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.InMouseKeysMode(function(m)
@@ -130,11 +126,6 @@ test.Variants(
         else
           m.ButtonUp() -- move or delete
         end
-
-        -- Bypass normal exiting delays
-        -- TODO: Figure out why this is necessary
-        a2d.ExitMouseKeysMode()
-        return false
     end)
 
     if what == "delete" and when == "after" then
@@ -144,7 +135,7 @@ test.Variants(
 
     if when == "during" then
       -- abort during enumeration
-      emu.wait(0.25)
+      emu.wait(0.25) -- during enumeration
       test.ExpectNotMatch(a2dtest.OCRScreen(), "Files remaining:", "should be enumerating")
       apple2.EscapeKey()
     else
@@ -152,13 +143,13 @@ test.Variants(
       if what == "delete" then
         emu.wait(0.5) -- already enumerated, so shorter wait
       else
-        emu.wait(2)
+        emu.wait(2) -- during copu enumeration
       end
       test.ExpectMatch(a2dtest.OCRScreen(), "Files remaining:", "should be performing action")
       apple2.EscapeKey()
     end
 
-    emu.wait(10)
+    a2dtest.WaitForSystemTask()
     if when == "during" then
       if what == "copy" or what == "move" then
         test.Snap("verify EXTRAS and FOLDER windows did not repaint")
@@ -176,8 +167,8 @@ test.Variants(
     end
 
     -- cleanup (and repaint screen)
-    a2d.EraseVolume("RAM1")
-    a2d.Reboot()
+    desktop.EraseVolume("RAM1")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)
 
@@ -192,21 +183,21 @@ end)
 test.Step(
   "copy aborted during enumeration doesn't refresh target window",
   function()
-    a2d.OpenPath("/RAM1")
-    a2d.MoveWindowBy(0, 100)
+    desktop.OpenWindow("/RAM1")
+    desktop.MoveWindowBy(0, 100)
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/TOYS", {keep_windows=true})
-    a2d.SelectAll()
+    desktop.OpenWindow("/A2.DESKTOP/APPLE.MENU/TOYS", {keep_windows=true})
+    desktop.SelectAll()
     a2dtest.DHRDarkness()
-    a2d.CopySelectionTo("/RAM1", false, {no_wait=true})
-    emu.wait(0.25)
+    desktop.CopySelectionTo("/RAM1", false, {no_wait=true})
+    emu.wait(0.25) -- during copy
     apple2.EscapeKey()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify RAM1 window did not refresh")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
-    a2d.Reboot()
+    desktop.EraseVolume("RAM1")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)
 
@@ -221,21 +212,21 @@ end)
 test.Step(
   "copy aborted after enumeration does refresh target window",
   function()
-    a2d.OpenPath("/RAM1")
-    a2d.MoveWindowBy(0, 100)
+    desktop.OpenWindow("/RAM1")
+    desktop.MoveWindowBy(0, 100)
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/TOYS", {keep_windows=true})
-    a2d.SelectAll()
+    desktop.OpenWindow("/A2.DESKTOP/APPLE.MENU/TOYS", {keep_windows=true})
+    desktop.SelectAll()
     a2dtest.DHRDarkness()
-    a2d.CopySelectionTo("/RAM1", false, {no_wait=true})
-    emu.wait(2)
+    desktop.CopySelectionTo("/RAM1", false, {no_wait=true})
+    emu.wait(2) -- during copy
     apple2.EscapeKey()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
     test.Snap("verify RAM1 window did refresh")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
-    a2d.Reboot()
+    desktop.EraseVolume("RAM1")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)

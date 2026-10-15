@@ -4,9 +4,7 @@ MODEL="apple2ee"
 MODELARGS="-sl2 mouse -sl7 cffa2 -aux rw3"
 DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv"
 
-  ======================================== ENDCONFIG ]]
-
-a2d.ConfigureRepaintTime(1)
+======================================== ENDCONFIG ]]
 
 --[[
   Run DeskTop on a system with RAMWorks and using `RAM.DRV.SYSTEM`.
@@ -17,20 +15,21 @@ test.Step(
   "RAM.DRV.SYSTEM",
   function()
     -- Add RAM.DRV.SYSTEM to driver list
-    a2d.CopyPath("/TESTS/DRIVERS/RAM.DRV.SYSTEM", "/A2.DESKTOP")
-    a2d.SelectPath("/A2.DESKTOP/RAM.DRV.SYSTEM")
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.SORT_DIRECTORY)
+    desktop.CopyPath("/TESTS/DRIVERS/RAM.DRV.SYSTEM", "/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP/RAM.DRV.SYSTEM")
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.SORT_DIRECTORY)
+    a2dtest.WaitForSystemTask()
 
-    a2d.ToggleOptionCopyToRAMCard() -- Enable
-    a2d.Reboot()
+    desktop.ToggleOptionCopyToRAMCard() -- Enable
+    desktop.Reboot()
     a2d.WaitForDesktopReady({timeout=120})
 
-    a2d.OpenPath("/RAM/DESKTOP/APPLE.MENU/TOYS")
+    desktop.OpenWindow("/RAM/DESKTOP/APPLE.MENU/TOYS")
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "TOYS", "should be copied to RAMCard")
 
-    a2d.DeletePath("/A2.DESKTOP/RAM.DRV.SYSTEM")
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    a2d.Reboot()
+    desktop.DeletePath("/A2.DESKTOP/RAM.DRV.SYSTEM")
+    desktop.DeletePath("/A2.DESKTOP/LOCAL")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)
 
@@ -38,24 +37,25 @@ test.Step(
   "RAMAUX.SYSTEM",
   function()
     -- Add RAM.DRV.SYSTEM to driver list
-    a2d.CopyPath("/TESTS/DRIVERS/RAMAUX.SYSTEM", "/A2.DESKTOP")
-    a2d.SelectPath("/A2.DESKTOP/RAMAUX.SYSTEM")
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.SORT_DIRECTORY)
+    desktop.CopyPath("/TESTS/DRIVERS/RAMAUX.SYSTEM", "/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP/RAMAUX.SYSTEM")
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.SORT_DIRECTORY)
+    a2dtest.WaitForSystemTask()
 
-    a2d.ToggleOptionCopyToRAMCard() -- Enable
+    desktop.ToggleOptionCopyToRAMCard() -- Enable
 
     -- In Bitsy Bye (since RAMAUX doesn't chain, it QUITs)
-    a2d.Reboot()
+    desktop.Reboot()
     apple2.WaitForBitsy()
     apple2.BitsyInvokePath("/A2.DESKTOP/CLOCK.SYSTEM")
 
     a2d.WaitForCopyToRAMCard()
 
-    a2d.OpenPath("/RAMA/DESKTOP/APPLE.MENU/TOYS")
+    desktop.OpenWindow("/RAMA/DESKTOP/APPLE.MENU/TOYS")
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "TOYS", "should be copied to RAMCard")
 
-    a2d.DeletePath("/A2.DESKTOP/RAMAUX.SYSTEM")
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    a2d.Reboot()
+    desktop.DeletePath("/A2.DESKTOP/RAMAUX.SYSTEM")
+    desktop.DeletePath("/A2.DESKTOP/LOCAL")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)

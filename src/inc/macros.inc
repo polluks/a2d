@@ -4,6 +4,19 @@
 ;;; Common patterns
 ;;; ============================================================
 
+;;; Useful in macros, e.g. .byte value_or_default arg1, kDefaultValue
+.define value_or_default(value, default) value +((.tcount({value}) = 0) * default)
+
+;;; Remember to call as AS_BYTE{...} or AS_WORD{...}. This is because
+;;; the ca65's C-style macro's arguments are delimited by braces or
+;;; commas, but not parentheses. So despite appearances, this:
+;;;
+;;;   IF A = #AS_BYTE(-1) GOTO target
+;;;
+;;; Is actually the same as:
+;;;
+;;;   IF A = #AS_BYTE{(-1) GOTO target}
+
 .define AS_BYTE(arg)        (arg) & $FF
 .define AS_WORD(arg)        (arg) & $FFFF
 
@@ -49,6 +62,16 @@ ep_2:
     .else
         ENTRY_POINTS_FOR_A ep_2, value_2, arg4, arg5, arg6, arg7, arg8, arg9
     .endif
+.endmacro
+
+.macro ENTRY_POINTS_FOR_CS_CC ep_set, ep_clear
+        .local skip
+ep_set:
+        sec
+        bcs     skip            ; TODO: Replace with: .byte $90 ; OPC_BCC
+ep_clear:
+        clc
+skip:
 .endmacro
 
 ;;; Inject a return address to the stack.
@@ -145,7 +168,7 @@ end:
         .res    1
     .endif
   .else
-    .if (* & 1) .and .hibyte(*) <> .hibyte(* + (2 * opt_count))
+    .if (* & 1) && .hibyte(*) <> .hibyte(* + (2 * opt_count))
         .out .sprintf("Padding 1 byte to avoid page boundary at $%04X", *)
         .res    1
     .endif
@@ -228,7 +251,14 @@ end:
 ;;; The `name` argument can be empty, in which case an anonymous block
 ;;; is used, with the parameters defined in the current scope.
 
-.macro PARAM_BLOCK name, addr
+.macro PARAM_BLOCK name, addr, opt_max_size
+    .define _param_block_name name
+    .define _param_block_max_size opt_max_size
+
+    .if .blank({name}) && !(.blank({opt_max_size}))
+      .error "PARAM_BLOCK: need name to check size"
+    .endif
+
     .ifnblank name
         WARN_IF_SHADOWING name
         name := addr
@@ -240,6 +270,13 @@ end:
 
 .macro END_PARAM_BLOCK
         .endstruct
+
+    .if .tcount({_param_block_name}) > 0 && .tcount({_param_block_max_size}) > 0
+      .assert .sizeof(_param_block_name) <= _param_block_max_size, error, "PARAM_BLOCK too large"
+    .endif
+
+    .undef _param_block_name
+    .undef _param_block_max_size
 .endmacro
 
 
@@ -272,7 +309,7 @@ loop:   lda     src,x
 .endmacro
 
 .macro PUSH_BYTES size, src
-        ldx     #AS_BYTE(-size)
+        ldx     #AS_BYTE{-size}
 .local loop
 loop:
         lda     src + size,x

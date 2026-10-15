@@ -3,7 +3,6 @@ local file_menu_x, file_menu_y = 30, 5
 local file_open_y = 30
 local file_separator_y = 60
 local file_get_info_y = 75
-a2d.ConfigureRepaintTime(0.25)
 
 --[[
   Click to open a menu. Without clicking again, move the mouse pointer
@@ -71,44 +70,44 @@ end)
 test.Step(
   "mouse, pull down",
   function()
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 
     -- Pull down, release on item
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(file_menu_x, file_menu_y)
         m.ButtonDown()
-        a2d.WaitForRepaint()
+        a2d.WaitForRepaint() -- during menu selection
         m.MoveToApproximately(file_menu_x, file_open_y)
         m.ButtonUp()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 
     -- Pull down, release on separator
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(file_menu_x, file_menu_y)
         m.ButtonDown()
         m.MoveByApproximately(0, file_separator_y - file_menu_y)
         m.ButtonUp()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 0, "no windows should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 
     -- Pull down, release outside menu
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(file_menu_x, file_menu_y)
         m.ButtonDown()
         m.MoveByApproximately(0, apple2.SCREEN_HEIGHT)
         m.ButtonUp()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 0, "no windows should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -129,43 +128,43 @@ end)
 test.Step(
   "mouse, drop down",
   function()
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 
     -- Drop down, click on item
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(file_menu_x, file_menu_y)
         m.Click()
         m.MoveToApproximately(file_menu_x, file_open_y)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 
     -- Drop down, click on separator
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(file_menu_x, file_menu_y)
         m.Click()
         m.MoveByApproximately(0, file_separator_y - file_menu_y)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 0, "no windows should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 
     -- Drop down, click outside menu
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(file_menu_x, file_menu_y)
         m.Click()
         m.MoveByApproximately(0, apple2.SCREEN_HEIGHT)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 0, "no windows should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -187,53 +186,53 @@ keyboard:
 test.Step(
   "keyboard",
   function()
-    a2d.CloseAllWindows()
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.CloseAllWindows()
+    desktop.SelectPath("/A2.DESKTOP")
 
     -- Show but do nothing
     apple2.EscapeKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     test.ExpectMatch(a2dtest.OCRScreen(), "About Apple II DeskTop", "Apple menu should be showing")
     apple2.EscapeKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectNotMatch(a2dtest.OCRScreen(), "About Apple II DeskTop", "Apple menu should be closed")
 
     -- Navigate but don't invoke anything
     apple2.EscapeKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "About Apple II DeskTop", "should have moved down into menu")
     apple2.RightArrowKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "File", "should have moved right")
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "Open", "should have moved down")
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "Get Info", "should have moved down")
     apple2.UpArrowKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "Open", "should have moved up")
     apple2.LeftArrowKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     test.ExpectMatch(a2dtest.OCRScreen(), "About Apple II DeskTop", "should have moved left")
     apple2.EscapeKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectNotMatch(a2dtest.OCRScreen(), "About Apple II DeskTop", "should have moved left")
 
     -- Pick something
     apple2.EscapeKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     apple2.RightArrowKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     apple2.ReturnKey()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -252,35 +251,35 @@ end)
 test.Step(
   "mouse, then keyboard",
   function()
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 
     -- Drop down, release on item
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(file_menu_x, file_menu_y)
         m.Click()
         m.MoveToApproximately(file_menu_x, file_get_info_y)
     end)
     apple2.UpArrowKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     apple2.EscapeKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 0, "no windows should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 
     -- Drop down, release on item
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(file_menu_x, file_menu_y)
         m.Click()
         m.MoveToApproximately(file_menu_x, file_get_info_y)
     end)
     apple2.UpArrowKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     apple2.ReturnKey()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -300,55 +299,55 @@ end)
 test.Step(
   "keyboard, then mouse",
   function()
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 
     -- Show using keyboard, then click on item
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(file_menu_x, file_menu_y)
     end)
     apple2.EscapeKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     apple2.RightArrowKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     a2d.InMouseKeysMode(function(m)
         m.MoveByApproximately(0, file_open_y - file_menu_y)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 
     -- Show using keyboard, then click on separator
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(file_menu_x, file_menu_y)
     end)
     apple2.EscapeKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     apple2.RightArrowKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     a2d.InMouseKeysMode(function(m)
         m.MoveByApproximately(0, file_separator_y - file_menu_y)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 0, "no windows should be open")
 
     -- Show using keyboard, then click outside menu
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.SelectPath("/A2.DESKTOP")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(file_menu_x, file_menu_y)
     end)
     apple2.EscapeKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     apple2.RightArrowKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- during menu selection
     a2d.InMouseKeysMode(function(m)
         m.MoveByApproximately(0, apple2.SCREEN_HEIGHT)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetWindowCount(), 0, "no windows should be open")
 end)
 
@@ -360,8 +359,8 @@ end)
 test.Step(
   "Menu shortcut while menu is open",
   function()
-    a2d.CloseAllWindows()
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.CloseAllWindows()
+    desktop.SelectPath("/A2.DESKTOP")
 
     -- Open menu with click
     a2d.InMouseKeysMode(function(m)
@@ -370,10 +369,10 @@ test.Step(
     end)
 
     a2d.OAShortcut("O") -- File > Open
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -384,17 +383,17 @@ end)
 test.Step(
   "Menu shortcut while menu is open",
   function()
-    a2d.CloseAllWindows()
-    a2d.SelectPath("/A2.DESKTOP")
+    desktop.CloseAllWindows()
+    desktop.SelectPath("/A2.DESKTOP")
 
     -- Open menu with keyboard
-    a2d.OpenMenu(a2d.APPLE_MENU)
+    a2d.OpenMenu(desktop.APPLE_MENU)
 
     a2d.OAShortcut("O") -- File > Open
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -405,19 +404,19 @@ end)
 test.Step(
   "Non-arrow, non-shortcut keys are ignored",
   function()
-    a2d.CloseAllWindows()
-    a2d.SelectPath("/A2.DESKTOP")
-    a2d.OpenMenu(a2d.FILE_MENU)
+    desktop.CloseAllWindows()
+    desktop.SelectPath("/A2.DESKTOP")
+    a2d.OpenMenu(desktop.FILE_MENU)
 
     apple2.DownArrowKey() -- to File > Open
 
     apple2.Type("_") -- no-op
 
     apple2.ReturnKey() -- invoke
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "one window should be open")
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -429,8 +428,8 @@ end)
 test.Step(
   "View menu items disabled",
   function()
-    a2d.CloseAllWindows()
-    a2d.OpenMenu(a2d.VIEW_MENU)
+    desktop.CloseAllWindows()
+    a2d.OpenMenu(desktop.VIEW_MENU)
 
     test.Snap("note cursor position")
 

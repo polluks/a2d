@@ -4,8 +4,6 @@ DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
   Launch DeskTop. Open a volume window. Apple Menu > Run Basic Here.
   Verify that `/RAM` exists.
@@ -13,15 +11,15 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "/RAM exists",
   function()
-    a2d.OpenPath("/A2.DESKTOP")
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.RUN_BASIC_HERE)
+    desktop.OpenWindow("/A2.DESKTOP")
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.RUN_BASIC_HERE)
     apple2.WaitForBasicSystem()
     apple2.TypeLine("CAT /RAM")
-    emu.wait(1)
+    emu.wait(1) -- automating BASIC prompt
     test.ExpectMatch(apple2.GrabTextScreen(), "BLOCKS FREE", "/RAM should exist")
     apple2.TypeLine("BYE")
     a2d.WaitForDesktopReady()
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -32,15 +30,15 @@ end)
 test.Step(
   "PREFIX set correctly",
   function()
-    a2d.OpenPath("/TESTS")
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.RUN_BASIC_HERE)
+    desktop.OpenWindow("/TESTS")
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.RUN_BASIC_HERE)
     apple2.WaitForBasicSystem()
     apple2.TypeLine("PREFIX")
-    emu.wait(1)
+    emu.wait(1) -- automating BASIC prompt
     test.ExpectMatch(apple2.GrabTextScreen(), "/TESTS/", "Prefix should be /TESTS/")
     apple2.TypeLine("BYE")
     a2d.WaitForDesktopReady()
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -52,12 +50,12 @@ end)
 test.Step(
   "Copied to RAMCard",
   function()
-    a2d.ToggleOptionCopyToRAMCard() -- enable
-    a2d.Reboot()
+    desktop.ToggleOptionCopyToRAMCard() -- enable
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 
-    a2d.OpenPath("/TESTS")
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.RUN_BASIC_HERE)
+    desktop.OpenWindow("/TESTS")
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.RUN_BASIC_HERE)
     apple2.WaitForBasicSystem()
 end)
 

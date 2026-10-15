@@ -63,7 +63,6 @@ sizeof_mli_params = * - mli_params
 visible_flag:                   ; clear until text that should be visible is in view
         .byte   0
 
-params_end := * + 4       ; bug in original? (harmless as this is static)
 ;;; ----------------------------------------
 
         kDAWindowId = $80
@@ -81,8 +80,6 @@ kLinePosLeft = 3
 left:   .word   0
 base:   .word   0
 .endparams
-
-y_remaining:    .word   0
 
 ;;; Height of a line of text
 kLineHeight = kSystemFontHeight + 1
@@ -214,7 +211,7 @@ remainder:      .word   0       ; (out)
         ;; > 64K? Treat as 64K
         ;; TODO: Rework load/display logic to be 24-bit friendly
         kMaxFileSize = $10000 - $200 ; don't wrap adding buffer size
-    IF ucmp24 get_eof_params::eof, #kMaxFileSize : GE
+    IF u24 get_eof_params::eof >= #kMaxFileSize
         copy16  #kMaxFileSize, get_eof_params::eof
     END_IF
 
@@ -236,39 +233,32 @@ remainder:      .word   0       ; (out)
 ;;; Main Input Loop
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
+
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params
-        cmp     #MGTK::EventKind::key_down    ; key?
-        beq     OnKeyDown
-        cmp     #MGTK::EventKind::button_down ; was clicked?
-        bne     InputLoop      ; nope, keep waiting
-
-        FALL_THROUGH_TO OnButtonDown
+      IF A = #MGTK::EventKind::key_down
+        jsr OnKeyDown
+      ELSE_IF A = #MGTK::EventKind::button_down
+        jsr OnButtonDown
+      END_IF
+    FOREVER
 .endproc ; InputLoop
 
 ;;; ============================================================
 
 .proc OnButtonDown
         MGTK_CALL MGTK::FindWindow, event_params::coords
-        lda     findwindow_params::window_id ; in our window?
-        cmp     #kDAWindowId
-        bne     InputLoop
+        RTS_IF u8 findwindow_params::window_id <> #kDAWindowId ; in our window?
 
         ;; which part of the window?
         lda     findwindow_params::which_area
-        cmp     #MGTK::Area::close_box
-        jeq     OnCloseClick
+        IF A = #MGTK::Area::close_box GOTO OnCloseClick
+        IF A = #MGTK::Area::dragbar JUMP OnTitleBarClick
+        RTS_IF A = #MGTK::Area::grow_box ; not enabled, so this will never match
 
-        cmp     #MGTK::Area::dragbar
-        beq     title
-        cmp     #MGTK::Area::grow_box ; not enabled, so this will never match
-        beq     InputLoop
-        jsr     OnContentClick
-        jmp     InputLoop
-
-title:  jsr     OnTitleBarClick
-        jmp     InputLoop
+        TAIL_CALL OnContentClick
 .endproc ; OnButtonDown
 
 ;;; ============================================================
@@ -285,55 +275,48 @@ title:  jsr     OnTitleBarClick
     IF X = #3
         ;; Double modifiers
       IF A = #CHAR_UP           ; OA+SA+Up = Home
-        jsr     ScrollTop
-        jmp     InputLoop
+        TAIL_CALL ScrollTop
+
       END_IF
 
       IF A = #CHAR_DOWN         ; OA+SA+Down = End
-        jsr     ScrollBottom
-        ;; jmp     InputLoop
+        TAIL_CALL ScrollBottom
       END_IF
     ELSE
         ;; Single modifier
       IF A = #CHAR_UP           ; Apple+Up = Page Up
-        jsr     PageUp
-        jmp     InputLoop
+        TAIL_CALL PageUp
       END_IF
 
       IF A = #CHAR_DOWN         ; Apple+Down = Page Down
-        jsr     PageDown
-        ;; jmp     InputLoop
+        TAIL_CALL PageDown
       END_IF
 
-        cmp     #kShortcutCloseWindow
-        jeq     DoClose
+        IF A = #kShortcutCloseWindow GOTO DoClose
     END_IF
 
-        jmp     InputLoop
+        rts
 
         ;; No modifiers
 no_mod:
         lda     event_params::key
 
         cmp     #CHAR_ESCAPE
-        jeq     DoClose
+        beq     DoClose
 
     IF A = #' '
-        jsr     ToggleMode
-        jmp     InputLoop
+        TAIL_CALL ToggleMode
     END_IF
 
     IF A = #CHAR_UP
-        jsr     ScrollUp
-        jmp     InputLoop
+        TAIL_CALL ScrollUp
     END_IF
 
     IF A = #CHAR_DOWN
-        jsr     ScrollDown
-        ;; jmp     InputLoop
+        TAIL_CALL ScrollDown
     END_IF
 
-        jmp     InputLoop
+        rts
 .endproc ; OnKeyDown
 
 ;;; ============================================================
@@ -343,10 +326,13 @@ no_mod:
         MGTK_CALL MGTK::TrackGoAway, trackgoaway_params
         lda     trackgoaway_params::goaway ; did click complete?
         bne     DoClose                    ; yes
-        jmp     InputLoop                  ; no
+        rts
 .endproc ; OnCloseClick
 
 .proc DoClose
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         JSR_TO_MAIN CloseFile
         MGTK_CALL MGTK::CloseWindow, winfo
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
@@ -371,16 +357,11 @@ no_mod:
 
 .proc OnVScrollClick
         lda     findcontrol_params::which_part
-        cmp     #MGTK::Part::thumb
-        beq     OnVScrollThumbClick
-        cmp     #MGTK::Part::page_down
-        beq     OnVScrollBelowClick
-        cmp     #MGTK::Part::page_up
-        beq     OnVScrollAboveClick
-        cmp     #MGTK::Part::up_arrow
-        beq     OnVScrollUpClick
-        cmp     #MGTK::Part::down_arrow
-        beq     OnVScrollDownClick
+        IF A = #MGTK::Part::thumb GOTO OnVScrollThumbClick
+        IF A = #MGTK::Part::page_down GOTO OnVScrollBelowClick
+        IF A = #MGTK::Part::page_up GOTO OnVScrollAboveClick
+        IF A = #MGTK::Part::up_arrow GOTO OnVScrollUpClick
+        IF A = #MGTK::Part::down_arrow GOTO OnVScrollDownClick
         rts
 .endproc ; OnVScrollClick
 
@@ -453,8 +434,8 @@ ret:    rts
         jsr     IsAtTop
         beq     ret
 
-        cmp16   first_visible_line, #kLineScrollDelta ; would be too far?
-        bcc     ForceScrollTop                        ; yes, clamp to top
+        IF u16 first_visible_line < #kLineScrollDelta GOTO ForceScrollTop
+
         sub16   first_visible_line, #kLineScrollDelta, first_visible_line
         jsr     UpdateScrollPos
 
@@ -465,8 +446,8 @@ ret:    rts
         jsr     IsAtTop
         beq     ret
 
-        cmp16   first_visible_line, #kPageScrollDelta ; would be too far?
-        bcc     ForceScrollTop                        ; yes, clamp to top
+        IF u16 first_visible_line < #kPageScrollDelta GOTO ForceScrollTop
+
         sub16   first_visible_line, #kPageScrollDelta, first_visible_line
         jsr     UpdateScrollPos
 
@@ -489,8 +470,8 @@ ForceScrollTop := ScrollTop::force
         beq     ret
 
         add16   first_visible_line, #kLineScrollDelta, first_visible_line
-        cmp16   first_visible_line, max_visible_line ; too far down?
-        bcs     ForceScrollBottom                    ; yes, clamp to bottom
+        IF u16 first_visible_line >= max_visible_line GOTO ForceScrollBottom
+
         jsr     UpdateScrollPos
 
 ret:    rts
@@ -501,8 +482,8 @@ ret:    rts
         beq     ret
 
         add16   first_visible_line, #kPageScrollDelta, first_visible_line
-        cmp16   first_visible_line, max_visible_line ; too far down?
-        bcs     ForceScrollBottom                    ; yes, clamp to bottom
+        IF u16 first_visible_line >= max_visible_line GOTO  ForceScrollBottom
+
         jsr     UpdateScrollPos
 
 ret:    rts
@@ -621,8 +602,7 @@ end:    rts
     END_IF
 
         ;; Select appropriate font
-        lda     fixed_mode_flag
-    IF ZERO
+    IF u8 fixed_mode_flag = #0
         MGTK_CALL MGTK::SetFont, DEFAULT_FONT
     ELSE
         MGTK_CALL MGTK::SetFont, fixed_font
@@ -659,10 +639,8 @@ end:    rts
         copy8   #0, tab_flag
 
         ldx     #0
-      IF cmp16 current_line, first_visible_line : GE
-       IF cmp16 last_visible_line, current_line : GE
+      IF u16 current_line >= first_visible_line AND u16 current_line <= last_visible_line
         inx
-       END_IF
       END_IF
         stx     visible_flag
 
@@ -685,7 +663,7 @@ end:    rts
         add16_8 ptr, drawtext_params::textlen
 
         ;; Did the run end due to a tab?
-    WHILE lda tab_flag : NOT ZERO ; yes, keep going
+    WHILE u8 tab_flag <> #0     ; yes, keep going
 
         ;; --------------------------------------------------
         ;; End of line
@@ -707,12 +685,10 @@ end:    rts
        END_IF
 
         ;; EOF? If so, stop!
-        cmp16   cur_offset, get_eof_params::eof
-        bcs     done
+        IF u16 cur_offset >= get_eof_params::eof GOTO done
       ELSE
         ;; Just rendering what's visible. Are we done?
-        ecmp16  current_line, last_visible_line
-        beq     done
+        IF u16 current_line = last_visible_line GOTO done
       END_IF
 
         ;; Nope - continue on next line
@@ -757,8 +733,7 @@ cur_offset:
 
 .proc GetCharWidth
         tay
-        lda     fixed_mode_flag
-    IF ZERO
+    IF u8 fixed_mode_flag = #0
         lda     DEFAULT_FONT + MGTK::Font::charwidth,y
     ELSE
         lda     fixed_font + MGTK::Font::charwidth,y
@@ -793,7 +768,7 @@ loop:
     END_IF
 
         cmp     #CHAR_TAB
-        jeq     HandleTab
+        beq     HandleTab
 
         jsr     GetCharWidth
         clc
@@ -803,7 +778,7 @@ loop:
         inc     run_width+1
 :
         ;; Is there room?
-    IF cmp16 remaining_width, run_width : GE
+    IF u16 remaining_width >= run_width
         inc     drawtext_params::textlen
         jmp     loop
     END_IF
@@ -839,7 +814,7 @@ run_width:  .word   0
         add16   run_width, line_pos::left, line_pos::left
         ldx     #0
 loop:
-    IF cmp16 times70,x, line_pos::left : LT
+    IF u16 times70,x < line_pos::left
         inx
         inx
         cpx     #14
@@ -881,8 +856,7 @@ end:    rts
         ptr := $06
 
         ;; Pointing at second page already?
-        lda     drawtext_params::textptr+1
-    IF A <> #>default_buffer
+    IF u8 drawtext_params::textptr+1 <> #>default_buffer
         ;; Yes, shift second page down.
         ldy     #0
       DO
@@ -967,8 +941,7 @@ prep:   lda     #$00
 ;;; Title Bar (Proportional/Fixed mode button)
 
 .proc OnTitleBarClick
-        cmp16   event_params::xcoord, mode_mapinfo_viewloc_xcoord
-        bcs     ToggleMode
+        IF u16 event_params::xcoord >= mode_mapinfo_viewloc_xcoord GOTO ToggleMode
         RETURN  C=0             ; Click ignored
 .endproc ; OnTitleBarClick
 
@@ -1018,8 +991,8 @@ window_id:      .byte   kDAWindowId
 
         MGTK_CALL MGTK::GetWinFrameRect, winframerect_params
 
-        sub16_8 winframerect_params::rect::x2, #kLabelWidth+1, mode_mapinfo::viewloc::xcoord
-        add16_8 winframerect_params::rect::y1, #1, mode_mapinfo::viewloc::ycoord
+        sub16   winframerect_params::rect::x2, #kLabelWidth+1, mode_mapinfo::viewloc::xcoord
+        add16   winframerect_params::rect::y1, #1, mode_mapinfo::viewloc::ycoord
 
         FALL_THROUGH_TO DrawMode
 .endproc ; CalcAndDrawMode
@@ -1031,8 +1004,7 @@ window_id:      .byte   kDAWindowId
         ;; Clear background
         MGTK_CALL MGTK::PaintRect, mode_mapinfo::maprect
 
-        lda     fixed_mode_flag
-    IF NOT_ZERO
+    IF u8 fixed_mode_flag <> #0
         ldax    #fixed_str
     ELSE
         ldax    #prop_str
@@ -1082,15 +1054,12 @@ filename:       .res    16
         ;; Don't show directory files (volumes/subdirectories)
         JUMP_TABLE_MLI_CALL GET_FILE_INFO, get_info_params
         bcs     ret
-        lda     get_info_params::file_type
-        cmp     #FT_DIRECTORY
-        beq     ret
+        IF u8 get_info_params::file_type = #FT_DIRECTORY GOTO ret
 
         ;; Set window title to filename
         ldy     INVOKE_PATH
     DO
-        lda     INVOKE_PATH,y       ; find last '/'
-        BREAK_IF A = #'/'
+        BREAK_IF u8 INVOKE_PATH,y = #'/'    ; find last '/'
         dey
     WHILE NOT_ZERO
 

@@ -140,19 +140,22 @@ grafport:       .tag    MGTK::GrafPort
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params::kind
-        cmp     #MGTK::EventKind::button_down ; was clicked?
-        jeq     HandleDown
-
-        cmp     #MGTK::EventKind::key_down  ; any key?
-        jeq     HandleKey
-
-        jmp     InputLoop
+      IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      END_IF
+    FOREVER
 .endproc ; InputLoop
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         MGTK_CALL MGTK::CloseWindow, winfo
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
         rts
@@ -167,14 +170,14 @@ grafport:       .tag    MGTK::GrafPort
     IF NOT_ZERO
         jsr     ToUpperCase
         cmp     #kShortcutCloseWindow
-        jeq     Exit
-        jmp     InputLoop
+        beq     Exit
+        rts
     END_IF
 
         cmp     #CHAR_ESCAPE
-        jeq     Exit
+        beq     Exit
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleKey
 
 ;;; ============================================================
@@ -184,16 +187,12 @@ grafport:       .tag    MGTK::GrafPort
         copy16  event_params::ycoord, findwindow_params::mousey
         MGTK_CALL MGTK::FindWindow, findwindow_params
 
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        jne     InputLoop
+        RTS_IF u8 findwindow_params::window_id <> #kDAWindowId
 
         lda     findwindow_params::which_area
-        cmp     #MGTK::Area::close_box
-        beq     HandleClose
-        cmp     #MGTK::Area::dragbar
-        beq     HandleDrag
-        jmp     InputLoop
+        IF A = #MGTK::Area::close_box GOTO HandleClose
+        IF A = #MGTK::Area::dragbar GOTO HandleDrag
+        rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -201,7 +200,7 @@ grafport:       .tag    MGTK::GrafPort
 .proc HandleClose
         MGTK_CALL MGTK::TrackGoAway, trackgoaway_params
         lda     trackgoaway_params::clicked
-        jeq     InputLoop
+        RTS_IF ZERO
 
         jmp     Exit
 .endproc ; HandleClose
@@ -222,7 +221,7 @@ grafport:       .tag    MGTK::GrafPort
         jsr     DrawWindow
     END_IF
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleDrag
 
 ;;; ============================================================
@@ -269,8 +268,7 @@ line_addrs:
         MGTK_CALL MGTK::MoveTo, pos
         MGTK_CALL MGTK::DrawStringCentered, SELF_MODIFIED, @addr
 
-        inc     index
-    WHILE lda index : A <> #kLineCount
+    WHILE u8 ++index <> #kLineCount
 
         MGTK_CALL MGTK::ShowCursor
         rts
@@ -355,8 +353,7 @@ filename:       .res    16
         bcs     exit
 
         jsr     CalcFontSize
-        ecmp16  expected_size, read_params::trans_count
-        bne     exit
+        IF u16 expected_size <> read_params::trans_count GOTO exit
 
         ;; --------------------------------------------------
         ;; Copy the loaded data to AUX
@@ -371,8 +368,7 @@ filename:       .res    16
 
         ldy     INVOKE_PATH
     DO
-        lda     INVOKE_PATH,y       ; find last '/'
-        BREAK_IF A = #'/'
+        BREAK_IF u8 INVOKE_PATH,y = #'/' ; find last '/'
     WHILE dey : NOT ZERO
 
         ldx     #0

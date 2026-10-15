@@ -5,39 +5,37 @@ DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv -flop1 floppy_with_files.2mg"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
   Move a file by dragging - same volume - target is window.
 ]]
 test.Step(
   "Move a file by dragging - same volume - target is window",
   function()
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.OpenPath("/RAM1")
-    a2d.SelectAll()
-    test.Expect(#a2d.GetSelectedIcons(), 2, "should start with 2 files")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.OpenWindow("/RAM1")
+    desktop.SelectAll()
+    test.Expect(#desktop.GetSelectedIcons(), 2, "should start with 2 files")
 
-    a2d.Select("READ.ME")
+    desktop.Select("READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.Select("FOLDER")
-    a2d.OpenSelection()
-    a2d.MoveWindowBy(0, 100)
+    desktop.Select("FOLDER")
+    desktop.OpenSelection()
+    desktop.MoveWindowBy(0, 100)
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
     local dst_x, dst_y = x + w / 2, y + h / 2
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    a2d.OpenPath("/RAM1")
-    a2d.SelectAll()
-    test.Expect(#a2d.GetSelectedIcons(), 1, "file should have moved")
-    a2d.SelectPath("/RAM1/FOLDER/READ.ME")
+    desktop.OpenWindow("/RAM1")
+    desktop.SelectAll()
+    test.Expect(#desktop.GetSelectedIcons(), 1, "file should have moved")
+    desktop.SelectPath("/RAM1/FOLDER/READ.ME")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -46,27 +44,27 @@ end)
 test.Step(
   "Move a file by dragging - same volume - target is volume icon",
   function()
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1/FOLDER")
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1/FOLDER")
 
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.OpenPath("/RAM1/FOLDER")
-    a2d.Select("READ.ME")
+    desktop.OpenWindow("/RAM1/FOLDER")
+    desktop.Select("READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    a2d.OpenPath("/RAM1/FOLDER")
-    emu.wait(1)
-    a2d.SelectAll()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 0, "file should have moved")
-    a2d.SelectPath("/RAM1/READ.ME")
+    desktop.OpenWindow("/RAM1/FOLDER")
+    a2dtest.WaitForSystemTask()
+    desktop.SelectAll()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 0, "file should have moved")
+    desktop.SelectPath("/RAM1/READ.ME")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -75,26 +73,26 @@ end)
 test.Step(
   "Move a file by dragging - same volume - target is folder icon",
   function()
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.OpenPath("/RAM1")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.OpenWindow("/RAM1")
 
-    a2d.Select("READ.ME")
+    desktop.Select("READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.Select("FOLDER")
+    desktop.Select("FOLDER")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    a2d.OpenPath("/RAM1")
-    a2d.SelectAll()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "file should have moved")
-    a2d.SelectPath("/RAM1/FOLDER/READ.ME")
+    desktop.OpenWindow("/RAM1")
+    desktop.SelectAll()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 1, "file should have moved")
+    desktop.SelectPath("/RAM1/FOLDER/READ.ME")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -104,31 +102,31 @@ end)
 test.Step(
   "Copy a file by dragging - same volume - target is window",
   function()
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.OpenPath("/RAM1")
-    a2d.SelectAll()
-    test.Expect(#a2d.GetSelectedIcons(), 2, "should start with 2 files")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.OpenWindow("/RAM1")
+    desktop.SelectAll()
+    test.Expect(#desktop.GetSelectedIcons(), 2, "should start with 2 files")
 
-    a2d.Select("READ.ME")
+    desktop.Select("READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.Select("FOLDER")
-    a2d.OpenSelection()
-    a2d.MoveWindowBy(0, 100)
+    desktop.Select("FOLDER")
+    desktop.OpenSelection()
+    desktop.MoveWindowBy(0, 100)
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
     local dst_x, dst_y = x + w / 2, y + h / 2
 
     a2d.Drag(src_x, src_y, dst_x, dst_y, {sa_drop=true})
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    a2d.OpenPath("/RAM1")
-    a2d.SelectAll()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 2, "file should have copied")
-    a2d.SelectPath("/RAM1/FOLDER/READ.ME")
+    desktop.OpenWindow("/RAM1")
+    desktop.SelectAll()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 2, "file should have copied")
+    desktop.SelectPath("/RAM1/FOLDER/READ.ME")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -138,27 +136,27 @@ end)
 test.Step(
   "Copy a file by dragging - same volume - target is volume icon",
   function()
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1/FOLDER")
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1/FOLDER")
 
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.OpenPath("/RAM1/FOLDER")
-    a2d.Select("READ.ME")
+    desktop.OpenWindow("/RAM1/FOLDER")
+    desktop.Select("READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y, {sa_drop=true})
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    a2d.OpenPath("/RAM1/FOLDER")
-    emu.wait(1)
-    a2d.SelectAll()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "file should have copied")
-    a2d.SelectPath("/RAM1/READ.ME")
+    desktop.OpenWindow("/RAM1/FOLDER")
+    a2dtest.WaitForSystemTask()
+    desktop.SelectAll()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 1, "file should have copied")
+    desktop.SelectPath("/RAM1/READ.ME")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -168,24 +166,24 @@ end)
 test.Step(
   "Copy a file by dragging - same volume - target is folder icon",
   function()
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.OpenPath("/RAM1")
-    a2d.Select("READ.ME")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.OpenWindow("/RAM1")
+    desktop.Select("READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
-    a2d.Select("FOLDER")
+    desktop.Select("FOLDER")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y, {sa_drop=true})
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    a2d.OpenPath("/RAM1")
-    a2d.SelectAll()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 2, "file should have copied")
-    a2d.SelectPath("/RAM1/FOLDER/READ.ME")
+    desktop.OpenWindow("/RAM1")
+    desktop.SelectAll()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 2, "file should have copied")
+    desktop.SelectPath("/RAM1/FOLDER/READ.ME")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -194,21 +192,21 @@ end)
 test.Step(
   "Copy a file by dragging - different volume - target is window",
   function()
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.OpenPath("/RAM1", {keep_windows=true})
-    a2d.MoveWindowBy(0, 100)
+    desktop.OpenWindow("/RAM1", {keep_windows=true})
+    desktop.MoveWindowBy(0, 100)
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
     local dst_x, dst_y = x + w / 2, y + h / 2
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    emu.wait(1)
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
-    a2d.SelectPath("/RAM1/READ.ME")
+    a2dtest.WaitForSystemTask()
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
+    desktop.SelectPath("/RAM1/READ.ME")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -217,20 +215,20 @@ end)
 test.Step(
   "Copy a file by dragging - different volume - target is volume icon",
   function()
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.SelectPath("/RAM1", {keep_windows=true})
+    desktop.SelectPath("/RAM1", {keep_windows=true})
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
-    a2d.SelectPath("/RAM1/READ.ME")
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
+    desktop.SelectPath("/RAM1/READ.ME")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -251,18 +249,18 @@ test.Variants(
     {"Copying count is accurate", "copy"},
   },
   function(idx, name, action)
-    a2d.CreateFolder("/RAM1/SRC")
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
-    a2d.CopyPath("/A2.DESKTOP/PRODOS", "/RAM1/SRC")
-    a2d.CopyPath("/A2.DESKTOP/DESKTOP.SYSTEM", "/RAM1/SRC")
-    a2d.CreateFolder("/RAM1/DST")
+    desktop.CreateFolder("/RAM1/SRC")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
+    desktop.CopyPath("/A2.DESKTOP/PRODOS", "/RAM1/SRC")
+    desktop.CopyPath("/A2.DESKTOP/DESKTOP.SYSTEM", "/RAM1/SRC")
+    desktop.CreateFolder("/RAM1/DST")
 
-    a2d.OpenPath("/RAM1")
-    a2d.Select("READ.ME")
+    desktop.OpenWindow("/RAM1")
+    desktop.Select("READ.ME")
     local x1, y1 = a2dtest.GetSelectedIconCoords()
-    a2d.Select("SRC")
+    desktop.Select("SRC")
     local x2, y2 = a2dtest.GetSelectedIconCoords()
-    a2d.Select("DST")
+    desktop.Select("DST")
     local x3, y3 = a2dtest.GetSelectedIconCoords()
 
     a2d.InMouseKeysMode(function(m)
@@ -272,7 +270,8 @@ test.Variants(
         apple2.PressOA()
         m.Click()
         apple2.ReleaseOA()
-        emu.wait(1)
+        a2dtest.WaitForSystemTask()
+
         m.ButtonDown()
         m.MoveToApproximately(x3, y3)
 
@@ -280,9 +279,9 @@ test.Variants(
           m.ButtonUp()
         else
           apple2.PressSA()
-          emu.wait(1)
+          m.Wait()
           m.ButtonUp()
-          emu.wait(1)
+          m.Wait()
           apple2.ReleaseSA()
         end
 
@@ -299,10 +298,10 @@ test.Variants(
       test.ExpectMatch(a2dtest.OCRFrontWindowContent(), "Copying: 4 files", "correct count should be shown")
     end
 
-    emu.wait(10)
+    a2dtest.WaitForSystemTask()
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -315,33 +314,33 @@ end)
 test.Step(
   "copy multiple files and folder to another volume",
   function()
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
-    a2d.CopyPath("/A2.DESKTOP/DESKTOP.SYSTEM", "/RAM1/FOLDER")
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
+    desktop.CopyPath("/A2.DESKTOP/DESKTOP.SYSTEM", "/RAM1/FOLDER")
 
-    a2d.SelectPath("/RAM5")
+    desktop.SelectPath("/RAM5")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.OpenPath("/RAM1")
-    a2d.Select("READ.ME")
+    desktop.OpenWindow("/RAM1")
+    desktop.Select("READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
-    a2d.SelectAll()
+    desktop.SelectAll()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    emu.wait(0.25)
+    emu.wait(0.25) -- during copy
     test.ExpectMatch(a2dtest.OCRScreen(), "Copying: 3 files", "correct count should be shown")
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/RAM1/READ.ME")
-    a2d.SelectPath("/RAM1/FOLDER")
-    a2d.SelectPath("/RAM1/FOLDER/DESKTOP.SYSTEM")
-    a2d.SelectPath("/RAM5/READ.ME")
-    a2d.SelectPath("/RAM5/FOLDER")
-    a2d.SelectPath("/RAM5/FOLDER/DESKTOP.SYSTEM")
+    desktop.SelectPath("/RAM1/READ.ME")
+    desktop.SelectPath("/RAM1/FOLDER")
+    desktop.SelectPath("/RAM1/FOLDER/DESKTOP.SYSTEM")
+    desktop.SelectPath("/RAM5/READ.ME")
+    desktop.SelectPath("/RAM5/FOLDER")
+    desktop.SelectPath("/RAM5/FOLDER/DESKTOP.SYSTEM")
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
-    a2d.EraseVolume("/RAM5")
+    desktop.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM5")
 end)
 
 --[[
@@ -353,36 +352,36 @@ end)
 test.Step(
   "dragging volume icon with Solid-Apple",
   function()
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
-    a2d.CopyPath("/A2.DESKTOP/DESKTOP.SYSTEM", "/RAM1/FOLDER")
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
+    desktop.CopyPath("/A2.DESKTOP/DESKTOP.SYSTEM", "/RAM1/FOLDER")
 
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.SelectPath("/RAM5")
+    desktop.SelectPath("/RAM5")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y, {sa_drop=true})
-    emu.wait(0.25)
+    emu.wait(0.25) -- during copy
     test.ExpectMatch(a2dtest.OCRScreen(), "Copying: 4 files", "correct count should be shown")
     -- vol becomes folder, makes it +1
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/RAM1/READ.ME")
-    a2d.SelectPath("/RAM1/FOLDER")
-    a2d.SelectPath("/RAM1/FOLDER/DESKTOP.SYSTEM")
+    desktop.SelectPath("/RAM1/READ.ME")
+    desktop.SelectPath("/RAM1/FOLDER")
+    desktop.SelectPath("/RAM1/FOLDER/DESKTOP.SYSTEM")
 
-    a2d.OpenPath("/RAM5")
-    a2d.OpenPath("/RAM5/RAM1")
-    emu.wait(1)
-    a2d.SelectPath("/RAM5/RAM1/READ.ME")
-    a2d.SelectPath("/RAM5/RAM1/FOLDER")
-    a2d.SelectPath("/RAM5/RAM1/FOLDER/DESKTOP.SYSTEM")
+    desktop.OpenWindow("/RAM5")
+    desktop.OpenWindow("/RAM5/RAM1")
+    a2dtest.WaitForSystemTask()
+    desktop.SelectPath("/RAM5/RAM1/READ.ME")
+    desktop.SelectPath("/RAM5/RAM1/FOLDER")
+    desktop.SelectPath("/RAM5/RAM1/FOLDER/DESKTOP.SYSTEM")
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
-    a2d.EraseVolume("/RAM5")
+    desktop.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM5")
 end)
 
 --[[
@@ -393,19 +392,19 @@ end)
 test.Step(
   "copy new folder progress bottoms out at 0",
   function()
-    a2d.OpenPath("/RAM1")
-    a2d.CreateFolder("FOLDER")
+    desktop.OpenWindow("/RAM1")
+    desktop.CreateFolder("FOLDER")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.SelectPath("/RAM5", {keep_windows=true})
+    desktop.SelectPath("/RAM5", {keep_windows=true})
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
     a2dtest.VerifyFilesRemainingCountdown(60, "copy")
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
-    a2d.EraseVolume("/RAM5")
+    desktop.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM5")
 end)
 
 
@@ -417,19 +416,19 @@ end)
 test.Step(
   "move new folder progress bottoms out at 0",
   function()
-    a2d.OpenPath("/RAM1")
-    a2d.CreateFolder("FOLDER")
+    desktop.OpenWindow("/RAM1")
+    desktop.CreateFolder("FOLDER")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.SelectPath("/RAM5", {keep_windows=true})
+    desktop.SelectPath("/RAM5", {keep_windows=true})
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y,dst_x, dst_y, {sa_drop=true})
     a2dtest.VerifyFilesRemainingCountdown(60, "move")
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
-    a2d.EraseVolume("/RAM5")
+    desktop.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM5")
 end)
 
 --[[
@@ -440,43 +439,43 @@ end)
 test.Step(
   "copy progress ends at 0 even if files skipped",
   function()
-    a2d.CopyPath("/A2.DESKTOP/APPLE.MENU/TOYS/BOUNCE", "/RAM1")
-    a2d.CopyPath("/A2.DESKTOP/APPLE.MENU/TOYS/EYES", "/RAM1")
-    a2d.CopyPath("/A2.DESKTOP/APPLE.MENU/TOYS/LIGHTS.OUT", "/RAM1")
-    a2d.CopyPath("/A2.DESKTOP/APPLE.MENU/TOYS/NEKO", "/RAM1")
-    a2d.CopyPath("/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE", "/RAM1")
+    desktop.CopyPath("/A2.DESKTOP/APPLE.MENU/TOYS/BOUNCE", "/RAM1")
+    desktop.CopyPath("/A2.DESKTOP/APPLE.MENU/TOYS/EYES", "/RAM1")
+    desktop.CopyPath("/A2.DESKTOP/APPLE.MENU/TOYS/LIGHTS.OUT", "/RAM1")
+    desktop.CopyPath("/A2.DESKTOP/APPLE.MENU/TOYS/NEKO", "/RAM1")
+    desktop.CopyPath("/A2.DESKTOP/APPLE.MENU/TOYS/PUZZLE", "/RAM1")
 
-    a2d.SelectPath("/RAM5")
+    desktop.SelectPath("/RAM5")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.OpenPath("/RAM1")
-    a2d.SelectAll()
+    desktop.OpenWindow("/RAM1")
+    desktop.SelectAll()
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
     -- Now copy again
     a2d.Drag(src_x, src_y, dst_x, dst_y)
     a2dtest.WaitForAlert({match='already exists.*replace it%?'})
     apple2.Type("Y")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     a2dtest.WaitForAlert({match='already exists.*replace it%?'})
     apple2.Type("N")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     a2dtest.WaitForAlert({match='already exists.*replace it%?'})
     apple2.Type("Y")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     a2dtest.WaitForAlert({match='already exists.*replace it%?'})
     apple2.Type("N")
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     a2dtest.WaitForAlert({match='already exists.*replace it%?'})
     apple2.Type("Y")
     a2dtest.VerifyFilesRemainingCountdown(60, "copy")
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
-    a2d.EraseVolume("/RAM5")
+    desktop.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM5")
 end)
 
 --[[
@@ -486,13 +485,14 @@ end)
 test.Step(
   "Error copying folder into itself using File > Copy To",
   function()
-    a2d.CreateFolder("/RAM1/F")
-    a2d.CopyPath("/RAM1/F", "/RAM1/F")
+    desktop.CreateFolder("/RAM1/F")
+    desktop.CopyPath("/RAM1/F", "/RAM1/F")
     a2dtest.WaitForAlert({match="into itself"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -503,22 +503,23 @@ end)
 test.Step(
   "Error moving folder into itself using drag/drop",
   function()
-    a2d.CreateFolder("/RAM1/F")
+    desktop.CreateFolder("/RAM1/F")
 
-    a2d.OpenPath("/RAM1/F")
+    desktop.OpenWindow("/RAM1/F")
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
     local dst_x, dst_y = x + w / 2, y + h / 2
 
-    a2d.SelectPath("/RAM1/F", {keep_windows=true})
-    a2d.MoveWindowBy(0, 100)
+    desktop.SelectPath("/RAM1/F", {keep_windows=true})
+    desktop.MoveWindowBy(0, 100)
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
     a2dtest.WaitForAlert({match="into itself"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -531,30 +532,31 @@ end)
 test.Step(
   "Invalid move into self stopped before anything actually happens",
   function()
-    a2d.CreateFolder("/RAM1/F")
-    a2d.CreateFolder("/RAM1/B")
+    desktop.CreateFolder("/RAM1/F")
+    desktop.CreateFolder("/RAM1/B")
 
-    a2d.OpenPath("/RAM1/F")
+    desktop.OpenWindow("/RAM1/F")
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
     local dst_x, dst_y = x + w / 2, y + h / 2
 
-    a2d.OpenPath("/RAM1", {keep_windows=true})
-    a2d.MoveWindowBy(0, 100)
-    a2d.SelectAll()
+    desktop.OpenWindow("/RAM1", {keep_windows=true})
+    desktop.MoveWindowBy(0, 100)
+    desktop.SelectAll()
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
 
     a2dtest.WaitForAlert({match="into itself"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/RAM1/F")
-    a2d.SelectPath("/RAM1/B")
-    a2d.OpenPath("/RAM1/F")
-    test.Expect(#a2d.GetSelectedIcons(), 0, "no files should be moved")
+    desktop.SelectPath("/RAM1/F")
+    desktop.SelectPath("/RAM1/B")
+    desktop.OpenWindow("/RAM1/F")
+    test.Expect(#desktop.GetSelectedIcons(), 0, "no files should be moved")
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -565,22 +567,23 @@ end)
 test.Step(
   "Error copying folder into itself using drag/drop",
   function()
-    a2d.CreateFolder("/RAM1/F")
+    desktop.CreateFolder("/RAM1/F")
 
-    a2d.OpenPath("/RAM1/F")
+    desktop.OpenWindow("/RAM1/F")
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
     local dst_x, dst_y = x + w / 2, y + h / 2
 
-    a2d.SelectPath("/RAM1/F", {keep_windows=true})
-    a2d.MoveWindowBy(0, 100)
+    desktop.SelectPath("/RAM1/F", {keep_windows=true})
+    desktop.MoveWindowBy(0, 100)
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y, {sa_drop=true})
     a2dtest.WaitForAlert({match="into itself"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -590,15 +593,16 @@ end)
 test.Step(
   "Error dragging file onto its own volume",
   function()
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.SelectPath("/A2.DESKTOP", {keep_windows=true})
+    desktop.SelectPath("/A2.DESKTOP", {keep_windows=true})
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
     a2dtest.WaitForAlert({match="by itself"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 end)
 
 --[[
@@ -610,14 +614,15 @@ end)
 test.Step(
   "Error copying file over ancestor using File > Copy To",
   function()
-    a2d.CreateFolder("/RAM1/F")
-    a2d.CreateFolder("/RAM1/F/F")
-    a2d.CopyPath("/RAM1/F/F", "/RAM1")
+    desktop.CreateFolder("/RAM1/F")
+    desktop.CreateFolder("/RAM1/F/F")
+    desktop.CopyPath("/RAM1/F/F", "/RAM1")
     a2dtest.WaitForAlert({match="by itself"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -629,21 +634,22 @@ end)
 test.Step(
   "Error copying file over ancestor using drag/drop",
   function()
-    a2d.CreateFolder("/RAM1/F")
-    a2d.CreateFolder("/RAM1/F/F")
+    desktop.CreateFolder("/RAM1/F")
+    desktop.CreateFolder("/RAM1/F/F")
 
-    a2d.SelectPath("/RAM1/F/F")
+    desktop.SelectPath("/RAM1/F/F")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.SelectPath("/RAM1", {keep_windows=true})
+    desktop.SelectPath("/RAM1", {keep_windows=true})
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
     a2dtest.WaitForAlert({match="by itself"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -656,29 +662,30 @@ end)
 test.Step(
   "Invalid move over ancestor stopped  before anything actually happens",
   function()
-    a2d.CreateFolder("/RAM1/F")
-    a2d.CreateFolder("/RAM1/F/F")
-    a2d.CreateFolder("/RAM1/F/B")
+    desktop.CreateFolder("/RAM1/F")
+    desktop.CreateFolder("/RAM1/F/F")
+    desktop.CreateFolder("/RAM1/F/B")
 
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.OpenPath("/RAM1/F")
-    a2d.SelectAll()
+    desktop.OpenWindow("/RAM1/F")
+    desktop.SelectAll()
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
     a2dtest.WaitForAlert({match="by itself"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/RAM1/F/F")
-    a2d.SelectPath("/RAM1/F/B")
-    a2d.OpenPath("/RAM1")
-    a2d.SelectAll()
-    test.Expect(#a2d.GetSelectedIcons(), 1, "no files should be moved")
+    desktop.SelectPath("/RAM1/F/F")
+    desktop.SelectPath("/RAM1/F/B")
+    desktop.OpenWindow("/RAM1")
+    desktop.SelectAll()
+    test.Expect(#desktop.GetSelectedIcons(), 1, "no files should be moved")
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -690,26 +697,26 @@ end)
 test.Step(
   "Overwrite file with empty folder",
   function()
-    a2d.CreateFolder("/RAM1/NAME")
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM5")
-    a2d.RenamePath("/RAM5/READ.ME", "NAME")
+    desktop.CreateFolder("/RAM1/NAME")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM5")
+    desktop.RenamePath("/RAM5/READ.ME", "NAME")
 
-    a2d.SelectPath("/RAM1/NAME")
+    desktop.SelectPath("/RAM1/NAME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.SelectPath("/RAM5", {keep_windows=true})
+    desktop.SelectPath("/RAM5", {keep_windows=true})
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
     a2d.Drag(src_x, src_y, dst_x, dst_y)
     a2dtest.WaitForAlert({match="already exists"})
     apple2.Type("Y")
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
-    a2d.OpenPath("/RAM5/NAME") -- copy exists
-    a2d.SelectPath("/RAM1/NAME") -- original exists
+    desktop.OpenWindow("/RAM5/NAME") -- copy exists
+    desktop.SelectPath("/RAM1/NAME") -- original exists
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
-    a2d.EraseVolume("/RAM5")
+    desktop.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM5")
 end)
 
 --[[
@@ -722,27 +729,27 @@ end)
 test.Step(
   "Error overwriting file with non-empty folder",
   function()
-    a2d.CreateFolder("/RAM1/NAME")
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1/NAME")
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM5")
-    a2d.RenamePath("/RAM5/READ.ME", "NAME")
+    desktop.CreateFolder("/RAM1/NAME")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1/NAME")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM5")
+    desktop.RenamePath("/RAM5/READ.ME", "NAME")
 
-    a2d.SelectPath("/RAM1/NAME")
+    desktop.SelectPath("/RAM1/NAME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.SelectPath("/RAM5", {keep_windows=true})
+    desktop.SelectPath("/RAM5", {keep_windows=true})
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
     a2d.Drag(src_x, src_y, dst_x, dst_y)
     a2dtest.WaitForAlert({match="already exists"})
     apple2.Type("Y")
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/RAM5/NAME/READ.ME") -- copy exists
-    a2d.SelectPath("/RAM1/NAME/READ.ME") -- original exists
+    desktop.SelectPath("/RAM5/NAME/READ.ME") -- copy exists
+    desktop.SelectPath("/RAM1/NAME/READ.ME") -- original exists
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
-    a2d.EraseVolume("/RAM5")
+    desktop.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM5")
 end)
 
 --[[
@@ -754,19 +761,20 @@ end)
 test.Step(
   "Error overwriting folder with file",
   function()
-    a2d.CreateFolder("/RAM1/READ.ME")
+    desktop.CreateFolder("/RAM1/READ.ME")
 
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
     a2d.Drag(src_x, src_y, dst_x, dst_y)
     a2dtest.WaitForAlert({match="folder cannot be replaced"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -776,10 +784,10 @@ end)
 test.Step(
   "Copy actually copies",
   function()
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/A2.DESKTOP/EXTRAS")
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
-    a2d.SelectPath("/A2.DESKTOP/EXTRAS/READ.ME")
-    a2d.DeletePath("/A2.DESKTOP/EXTRAS/READ.ME")
+    desktop.CopyPath("/A2.DESKTOP/PRODOS", "/A2.DESKTOP/EXTRAS")
+    desktop.SelectPath("/A2.DESKTOP/PRODOS")
+    desktop.SelectPath("/A2.DESKTOP/EXTRAS/PRODOS")
+    desktop.DeletePath("/A2.DESKTOP/EXTRAS/PRODOS")
 end)
 
 --[[
@@ -790,25 +798,25 @@ end)
 test.Step(
   "Copy actually copies, even after a move",
   function()
-    a2d.CreateFolder("/RAM1/A")
-    a2d.CreateFolder("/RAM1/B")
-    a2d.OpenPath("/RAM1")
-    a2d.Select("B")
+    desktop.CreateFolder("/RAM1/A")
+    desktop.CreateFolder("/RAM1/B")
+    desktop.OpenWindow("/RAM1")
+    desktop.Select("B")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
-    a2d.Select("A")
+    desktop.Select("A")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    emu.wait(1)
-    a2d.SelectAll()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "file should have moved")
+    a2dtest.WaitForSystemTask()
+    desktop.SelectAll()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 1, "file should have moved")
 
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/A2.DESKTOP/EXTRAS")
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
-    a2d.SelectPath("/A2.DESKTOP/EXTRAS/READ.ME")
-    a2d.DeletePath("/A2.DESKTOP/EXTRAS/READ.ME")
+    desktop.CopyPath("/A2.DESKTOP/PRODOS", "/A2.DESKTOP/EXTRAS")
+    desktop.SelectPath("/A2.DESKTOP/PRODOS")
+    desktop.SelectPath("/A2.DESKTOP/EXTRAS/PRODOS")
+    desktop.DeletePath("/A2.DESKTOP/EXTRAS/PRODOS")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[For the following cases, open `/TESTS` and `/TESTS/FOLDER`:]]
@@ -850,27 +858,27 @@ test.Variants(
     {"Same-volume child window updates when activated - File > Copy To", nil},
   },
   function(idx, name, target)
-    a2d.CreateFolder("/RAM1/FOLDER")
+    desktop.CreateFolder("/RAM1/FOLDER")
     local dst_x, dst_y
     if target == "icon" then
-      a2d.SelectPath("/RAM1")
+      desktop.SelectPath("/RAM1")
       dst_x, dst_y = a2dtest.GetSelectedIconCoords()
     end
 
-    a2d.OpenPath("/RAM1/FOLDER")
-    a2d.MoveWindowBy(200, 120)
+    desktop.OpenWindow("/RAM1/FOLDER")
+    desktop.MoveWindowBy(200, 120)
     local click_x, click_y = a2dtest.GetFrontWindowDragCoords()
 
-    a2d.OpenPath("/RAM1", {keep_windows=true})
-    a2d.MoveWindowBy(0, 100)
+    desktop.OpenWindow("/RAM1", {keep_windows=true})
+    desktop.MoveWindowBy(0, 100)
     if target == "window" then
       local x, y, w, h = a2dtest.GetFrontWindowContentRect()
       dst_x, dst_y = x + w / 2, y + h / 2
     end
 
-    a2d.OpenPath("/A2.DESKTOP", {keep_windows=true})
-    a2d.GrowWindowBy(-100, -100)
-    a2d.Select("READ.ME")
+    desktop.OpenWindow("/A2.DESKTOP", {keep_windows=true})
+    desktop.GrowWindowBy(-100, -100)
+    desktop.Select("READ.ME")
 
     local ocr = a2dtest.OCRScreen()
     local ram1_items, ram1_used, ram1_free = GetNumbers(ocr, 2)
@@ -880,9 +888,9 @@ test.Variants(
       local src_x, src_y = a2dtest.GetSelectedIconCoords()
       a2d.Drag(src_x, src_y, dst_x, dst_y)
     else
-      a2d.CopySelectionTo("/RAM1")
+      desktop.CopySelectionTo("/RAM1")
     end
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "RAM1", "target should be activated")
     local ocr = a2dtest.OCRScreen()
@@ -907,7 +915,7 @@ test.Variants(
                 new_folder_free ~= folder_free, "FOLDER numbers should have updated")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 
@@ -930,20 +938,20 @@ test.Variants(
     {"Same-volume parent window updates when activated - File > Copy To", false},
   },
   function(idx, name, drag)
-    a2d.CreateFolder("/RAM1/FOLDER")
+    desktop.CreateFolder("/RAM1/FOLDER")
 
-    a2d.OpenPath("/RAM1/FOLDER")
-    a2d.MoveWindowBy(200, 120)
+    desktop.OpenWindow("/RAM1/FOLDER")
+    desktop.MoveWindowBy(200, 120)
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
     local dst_x, dst_y = x + w / 2, y + h / 2
 
-    a2d.OpenPath("/RAM1", {keep_windows=true})
-    a2d.MoveWindowBy(0, 100)
+    desktop.OpenWindow("/RAM1", {keep_windows=true})
+    desktop.MoveWindowBy(0, 100)
     local click_x, click_y = a2dtest.GetFrontWindowDragCoords()
 
-    a2d.OpenPath("/A2.DESKTOP", {keep_windows=true})
-    a2d.GrowWindowBy(-100, -100)
-    a2d.Select("READ.ME")
+    desktop.OpenWindow("/A2.DESKTOP", {keep_windows=true})
+    desktop.GrowWindowBy(-100, -100)
+    desktop.Select("READ.ME")
 
     local ocr = a2dtest.OCRScreen()
     local ram1_items, ram1_used, ram1_free = GetNumbers(ocr, 2)
@@ -953,9 +961,9 @@ test.Variants(
       local src_x, src_y = a2dtest.GetSelectedIconCoords()
       a2d.Drag(src_x, src_y, dst_x, dst_y)
     else
-      a2d.CopySelectionTo("/RAM1/FOLDER")
+      desktop.CopySelectionTo("/RAM1/FOLDER")
     end
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "FOLDER", "target should be activated")
     local ocr = a2dtest.OCRScreen()
@@ -979,7 +987,7 @@ test.Variants(
     test.Expect(new_ram1_used ~= ram1_used and
                 new_ram1_free ~= ram1_free, "RAM1 numbers should have updated")
 
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -999,20 +1007,20 @@ test.Variants(
     {"Same-volume child window updates when activated - File > Delete", false},
   },
   function(idx, name, drag)
-    a2d.SelectPath("/Trash")
+    desktop.SelectPath("/Trash")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
 
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.OpenPath("/RAM1/FOLDER")
-    a2d.MoveWindowBy(200, 120)
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.OpenWindow("/RAM1/FOLDER")
+    desktop.MoveWindowBy(200, 120)
     local click_x, click_y = a2dtest.GetFrontWindowDragCoords()
 
-    a2d.OpenPath("/RAM1", {keep_windows=true})
-    a2d.MoveWindowBy(0, 100)
+    desktop.OpenWindow("/RAM1", {keep_windows=true})
+    desktop.MoveWindowBy(0, 100)
 
-    a2d.Select("READ.ME")
+    desktop.Select("READ.ME")
 
     local ocr = a2dtest.OCRScreen()
     local ram1_items, ram1_used, ram1_free = GetNumbers(ocr, 1)
@@ -1023,10 +1031,10 @@ test.Variants(
       a2d.Drag(src_x, src_y, dst_x, dst_y)
       a2dtest.WaitForAlert({match="Are you sure"})
       a2d.DialogOK()
+      a2dtest.WaitForSystemTask()
     else
-      a2d.DeleteSelection()
+      desktop.DeleteSelection()
     end
-    emu.wait(1)
 
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "RAM1", "target should be activated")
     local ocr = a2dtest.OCRScreen()
@@ -1051,7 +1059,7 @@ test.Variants(
                 new_folder_free ~= folder_free, "FOLDER numbers should have updated")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -1071,21 +1079,21 @@ test.Variants(
     {"Same-volume parent window updates when activated - File > Delete", false},
   },
   function(idx, name, drag)
-    a2d.SelectPath("/Trash")
+    desktop.SelectPath("/Trash")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1/FOLDER")
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1/FOLDER")
 
-    a2d.OpenPath("/RAM1/FOLDER")
-    a2d.MoveWindowBy(200, 120)
+    desktop.OpenWindow("/RAM1/FOLDER")
+    desktop.MoveWindowBy(200, 120)
 
-    a2d.OpenPath("/RAM1", {keep_windows=true})
-    a2d.MoveWindowBy(0, 100)
+    desktop.OpenWindow("/RAM1", {keep_windows=true})
+    desktop.MoveWindowBy(0, 100)
     local click_x, click_y = a2dtest.GetFrontWindowDragCoords()
 
-    a2d.CycleWindows()
-    a2d.Select("READ.ME")
+    desktop.CycleWindows()
+    desktop.Select("READ.ME")
 
     local ocr = a2dtest.OCRScreen()
     local ram1_items, ram1_used, ram1_free = GetNumbers(ocr, 1)
@@ -1096,10 +1104,10 @@ test.Variants(
       a2d.Drag(src_x, src_y, dst_x, dst_y)
       a2dtest.WaitForAlert({match="Are you sure"})
       a2d.DialogOK()
+      a2dtest.WaitForSystemTask()
     else
-      a2d.DeleteSelection()
+      desktop.DeleteSelection()
     end
-    emu.wait(1)
 
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "FOLDER", "target should be activated")
     local ocr = a2dtest.OCRScreen()
@@ -1124,7 +1132,7 @@ test.Variants(
                 new_ram1_free ~= ram1_free, "RAM1 numbers should have updated")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -1136,25 +1144,25 @@ end)
 test.Step(
   "Same-volume child window updates when activated - Duplicate",
   function()
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1/FOLDER")
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1/FOLDER")
 
-    a2d.OpenPath("/RAM1/FOLDER")
-    a2d.MoveWindowBy(200, 120)
+    desktop.OpenWindow("/RAM1/FOLDER")
+    desktop.MoveWindowBy(200, 120)
 
-    a2d.OpenPath("/RAM1", {keep_windows=true})
-    a2d.MoveWindowBy(0, 100)
+    desktop.OpenWindow("/RAM1", {keep_windows=true})
+    desktop.MoveWindowBy(0, 100)
     local click_x, click_y = a2dtest.GetFrontWindowDragCoords()
 
-    a2d.CycleWindows()
-    a2d.Select("READ.ME")
+    desktop.CycleWindows()
+    desktop.Select("READ.ME")
 
     local ocr = a2dtest.OCRScreen()
     local ram1_items, ram1_used, ram1_free = GetNumbers(ocr, 1)
     local folder_items, folder_used, folder_free = GetNumbers(ocr, 2)
 
-    a2d.DuplicateSelection("DUPE")
-    emu.wait(1)
+    desktop.DuplicateSelection("DUPE")
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "FOLDER", "target should be activated")
     local ocr = a2dtest.OCRScreen()
@@ -1179,7 +1187,7 @@ test.Step(
                 new_ram1_free ~= ram1_free, "RAM1 numbers should have updated")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -1201,27 +1209,27 @@ test.Variants(
     {"Same-volume child window updates when activated - copy - drag to window", "window"},
   },
   function(idx, name, target)
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
 
     local dst_x, dst_y
-    a2d.OpenPath("/RAM1/FOLDER")
-    a2d.MoveWindowBy(200, 120)
+    desktop.OpenWindow("/RAM1/FOLDER")
+    desktop.MoveWindowBy(200, 120)
     if target == "window" then
       local x, y, w, h = a2dtest.GetFrontWindowContentRect()
       dst_x, dst_y = x + w / 2, y + h / 2
     end
 
-    a2d.OpenPath("/RAM1", {keep_windows=true})
-    a2d.MoveWindowBy(0, 100)
+    desktop.OpenWindow("/RAM1", {keep_windows=true})
+    desktop.MoveWindowBy(0, 100)
     local click_x, click_y = a2dtest.GetFrontWindowDragCoords()
 
-    a2d.Select("FOLDER")
+    desktop.Select("FOLDER")
     if target == "icon" then
       dst_x, dst_y = a2dtest.GetSelectedIconCoords()
     end
 
-    a2d.Select("READ.ME")
+    desktop.Select("READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     local ocr = a2dtest.OCRScreen()
@@ -1229,7 +1237,7 @@ test.Variants(
     local folder_items, folder_used, folder_free = GetNumbers(ocr, 3)
 
     a2d.Drag(src_x, src_y, dst_x, dst_y, {sa_drop=true})
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "FOLDER", "target should be activated")
     local ocr = a2dtest.OCRScreen()
@@ -1240,8 +1248,8 @@ test.Variants(
     test.Expect(new_ram1_used == ram1_used and
                 new_ram1_free == ram1_free, "RAM1 numbers should be the same")
 
-    a2d.SelectAll()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "file should be copied")
+    desktop.SelectAll()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 1, "file should be copied")
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(click_x, click_y)
         m.Click()
@@ -1255,11 +1263,11 @@ test.Variants(
     test.Expect(new_ram1_used ~= ram1_used and
                 new_ram1_free ~= ram1_free, "RAM1 numbers should have updated")
 
-    a2d.SelectAll()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 2, "file should be copied")
+    desktop.SelectAll()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 2, "file should be copied")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 
@@ -1275,19 +1283,19 @@ function ActiveInactiveTest(name, func1, func2)
       {name .. " - inactive", false},
     },
     function(idx, name, active)
-      a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
-      a2d.CopyPath("/A2.DESKTOP/PRODOS", "/RAM1")
-      a2d.CloseAllWindows()
+      desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
+      desktop.CopyPath("/A2.DESKTOP/PRODOS", "/RAM1")
+      desktop.CloseAllWindows()
 
       if not active then
-        a2d.OpenPath("/RAM5")
-        a2d.MoveWindowBy(0, 100)
+        desktop.OpenWindow("/RAM5")
+        desktop.MoveWindowBy(0, 100)
       end
 
       local x, y = func1()
 
       if not active then
-        a2d.CycleWindows()
+        desktop.CycleWindows()
       end
 
       func2(x, y)
@@ -1297,7 +1305,7 @@ function ActiveInactiveTest(name, func1, func2)
       end
 
       -- cleanup
-      a2d.EraseVolume("RAM1")
+      desktop.EraseVolume("RAM1")
   end)
 end
 
@@ -1307,17 +1315,17 @@ end
 ActiveInactiveTest(
   "Drag a single file icon and drop it within the same window",
   function()
-    a2d.SelectPath("/RAM1/READ.ME", {keep_windows=true})
+    desktop.SelectPath("/RAM1/READ.ME", {keep_windows=true})
     return a2dtest.GetSelectedIconCoords()
   end,
   function(x, y)
-    local before = a2d.GetSelectedIcons()
+    local before = desktop.GetSelectedIcons()
     test.ExpectEquals(#before, 1, "one icon should be selected")
 
     a2d.Drag(x, y, x + 20, y + 10)
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    local after = a2d.GetSelectedIcons()
+    local after = desktop.GetSelectedIcons()
     test.ExpectEquals(#before, #after, "same icons should be selected")
     test.ExpectEquals(before[1].name, after[1].name, "same icon should be selected")
     test.ExpectNotEquals(before[1].x, after[1].x, "icon should have moved")
@@ -1329,17 +1337,17 @@ end)
 ActiveInactiveTest(
   "Drag multiple file icons and drop them within the same window",
   function()
-    a2d.OpenPath("/RAM1", {keep_windows=true})
-    a2d.SelectAll()
+    desktop.OpenWindow("/RAM1", {keep_windows=true})
+    desktop.SelectAll()
     return a2dtest.GetSelectedIconCoords()
   end,
   function(x, y)
-    local before = a2d.GetSelectedIcons()
+    local before = desktop.GetSelectedIcons()
     test.ExpectEquals(#before, 2, "two icons should be selected")
 
     a2d.Drag(x, y, x + 20, y + 10)
-    emu.wait(1)
-    local after = a2d.GetSelectedIcons()
+    a2dtest.WaitForSystemTask()
+    local after = desktop.GetSelectedIcons()
     test.ExpectEquals(#before, #after, "same icons should be selected")
     test.ExpectEquals(before[1].name, after[1].name, "same icon should be selected")
     test.ExpectEquals(before[2].name, after[2].name, "same icon should be selected")
@@ -1353,22 +1361,22 @@ end)
 ActiveInactiveTest(
   "Drag a single file icon and drop it within the same window w/ OA or SA",
   function()
-    a2d.SelectPath("/RAM1/READ.ME", {keep_windows=true})
+    desktop.SelectPath("/RAM1/READ.ME", {keep_windows=true})
     return a2dtest.GetSelectedIconCoords()
   end,
   function(x, y)
-    local before = a2d.GetSelectedIcons()
+    local before = desktop.GetSelectedIcons()
     test.ExpectEquals(#before, 1, "one icon should be selected")
 
     a2d.Drag(x, y, x + 20, y + 10, {sa_drop=true})
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
-    local after = a2d.GetSelectedIcons()
+    local after = desktop.GetSelectedIcons()
     test.ExpectEquals(#after, 1, "one icon should be selected")
     test.ExpectNotEquals(before[1].name, after[1].name, "different icon should be selected")
 
     apple2.ReturnKey()
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 end)
 
 --[[
@@ -1377,18 +1385,18 @@ end)
 ActiveInactiveTest(
   "Drag multiple file icons and drop them within the same window w/ OA or SA",
   function()
-    a2d.OpenPath("/RAM1", {keep_windows=true})
-    a2d.SelectAll()
+    desktop.OpenWindow("/RAM1", {keep_windows=true})
+    desktop.SelectAll()
     return a2dtest.GetSelectedIconCoords()
   end,
   function(x, y)
-    local before = a2d.GetSelectedIcons()
+    local before = desktop.GetSelectedIcons()
     test.ExpectEquals(#before, 2, "two icons should be selected")
 
     a2d.Drag(x, y, x + 20, y + 10, {sa_drop=true})
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    local after = a2d.GetSelectedIcons()
+    local after = desktop.GetSelectedIcons()
     test.ExpectEquals(#before, #after, "same icons should be selected")
     test.ExpectEquals(before[1].name, after[1].name, "same icon should be selected")
     test.ExpectEquals(before[2].name, after[2].name, "same icon should be selected")
@@ -1402,23 +1410,23 @@ end)
 ActiveInactiveTest(
   "Drag a single file icon and drop it within the same window w/ OA + SA",
   function()
-    a2d.SelectPath("/RAM1/READ.ME", {keep_windows=true})
+    desktop.SelectPath("/RAM1/READ.ME", {keep_windows=true})
     return a2dtest.GetSelectedIconCoords()
   end,
   function(x, y)
-    local before = a2d.GetSelectedIcons()
+    local before = desktop.GetSelectedIcons()
     test.ExpectEquals(#before, 1, "one icon should be selected")
 
     a2d.Drag(x, y, x + 20, y + 10, {oa_drop=true, sa_drop=true})
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
-    local after = a2d.GetSelectedIcons()
+    local after = desktop.GetSelectedIcons()
     test.ExpectEquals(#after, 1, "one icon should be selected")
     test.ExpectNotEquals(before[1].name, after[1].name, "different icon should be selected")
-    test.ExpectEquals(after[1].type, a2d.IconTypes.link, "new icon should be alias")
+    test.ExpectEquals(after[1].type, desktop.IconTypes.link, "new icon should be alias")
 
     apple2.ReturnKey()
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 end)
 
 --[[
@@ -1427,18 +1435,18 @@ end)
 ActiveInactiveTest(
   "Drag multiple file icons and drop them within the same window w/ OA + SA",
   function()
-    a2d.OpenPath("/RAM1", {keep_windows=true})
-    a2d.SelectAll()
+    desktop.OpenWindow("/RAM1", {keep_windows=true})
+    desktop.SelectAll()
     return a2dtest.GetSelectedIconCoords()
   end,
   function(x, y)
-    local before = a2d.GetSelectedIcons()
+    local before = desktop.GetSelectedIcons()
     test.ExpectEquals(#before, 2, "two icons should be selected")
 
     a2d.Drag(x, y, x + 20, y + 10, {oa_drop=true, sa_drop=true})
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    local after = a2d.GetSelectedIcons()
+    local after = desktop.GetSelectedIcons()
     test.ExpectEquals(#before, #after, "same icons should be selected")
     test.ExpectEquals(before[1].name, after[1].name, "same icon should be selected")
     test.ExpectEquals(before[2].name, after[2].name, "same icon should be selected")
@@ -1459,23 +1467,23 @@ test.Variants(
   function(idx, name, target)
     local dst_x, dst_y
     if target == "icon" then
-      a2d.SelectPath("/RAM1")
+      desktop.SelectPath("/RAM1")
       dst_x, dst_y = a2dtest.GetSelectedIconCoords()
     else
-      a2d.OpenPath("/RAM1")
-      a2d.MoveWindowBy(0, 100)
+      desktop.OpenWindow("/RAM1")
+      desktop.MoveWindowBy(0, 100)
       local x, y, w, h = a2dtest.GetFrontWindowContentRect()
       dst_x, dst_y = x + w / 2, y + h / 2
     end
 
-    a2d.SelectPath("/WITH.FILES", {keep_windows=true})
+    desktop.SelectPath("/WITH.FILES", {keep_windows=true})
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    emu.wait(30)
+    a2dtest.WaitForSystemTask()
     a2dtest.ExpectAlertNotShowing()
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 
@@ -1486,19 +1494,19 @@ end)
 test.Step(
   "Empty folders get copied too",
   function()
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.SelectPath("/TESTS/EMPTY.FOLDER")
+    desktop.SelectPath("/TESTS/EMPTY.FOLDER")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/RAM1/EMPTY.FOLDER")
+    desktop.SelectPath("/RAM1/EMPTY.FOLDER")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 
@@ -1512,29 +1520,31 @@ end)
 test.Step(
   "Overwriting locked files works",
   function()
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
-    a2d.RenamePath("/RAM1/READ.ME", "PRODOS")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
+    desktop.RenamePath("/RAM1/READ.ME", "PRODOS")
 
-    a2d.SelectPath("/RAM1/PRODOS")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_GET_INFO)
+    desktop.SelectPath("/RAM1/PRODOS")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_GET_INFO)
+    a2dtest.WaitForSystemTask()
     apple2.ControlKey("L")
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/A2.DESKTOP/PRODOS")
+    desktop.SelectPath("/A2.DESKTOP/PRODOS")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.SelectPath("/RAM1", {keep_windows=true})
+    desktop.SelectPath("/RAM1", {keep_windows=true})
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
     a2d.Drag(src_x, src_y, dst_x, dst_y)
     a2dtest.WaitForAlert({match="already exists"})
     apple2.Type("Y")
     a2d.DialogOK()
-    emu.wait(10)
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/RAM1/PRODOS")
+    desktop.SelectPath("/RAM1/PRODOS")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 

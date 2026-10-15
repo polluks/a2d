@@ -1,4 +1,4 @@
---[[ BEGINCONFIG ==================================================
+--[[ BEGINCONFIG ========================================
 
 MODEL="apple2ee"
   MODELARGS="-sl2 mouse -sl5 scsi -sl6 '' -sl7 cffa2 \
@@ -17,9 +17,7 @@ DISKARGS="\
   -hard6 tests.hdv \
   "
 
-================================================== ENDCONFIG ]]
-
-a2d.ConfigureRepaintTime(0.25)
+======================================== ENDCONFIG ]]
 
 --[[
   Configure a system with more than 2 drives on a SmartPort
@@ -39,17 +37,18 @@ test.Variants(
   },
   function(idx, name, version)
     if version == 2.0 then
-      a2d.CopyPath("/TESTS/PRODOS/PRODOS.203", "/A2.DESKTOP")
-      a2d.RenamePath("/A2.DESKTOP/PRODOS", "PRODOS.24")
-      a2d.RenamePath("/A2.DESKTOP/PRODOS.203", "PRODOS")
-      a2d.CloseAllWindows()
-      a2d.Reboot()
+      desktop.CopyPath("/TESTS/PRODOS/PRODOS.203", "/A2.DESKTOP")
+      desktop.RenamePath("/A2.DESKTOP/PRODOS", "PRODOS.24")
+      desktop.RenamePath("/A2.DESKTOP/PRODOS.203", "PRODOS")
+      desktop.CloseAllWindows()
+      desktop.Reboot()
       a2d.WaitForDesktopReady()
     end
 
-    a2d.CloseAllWindows()
-    a2d.ClearSelection()
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK-2)
+    desktop.CloseAllWindows()
+    desktop.ClearSelection()
+    a2d.InvokeMenuItem(desktop.SPECIAL_MENU, desktop.SPECIAL_FORMAT_DISK-2)
+    a2dtest.WaitForSystemTask()
 
     local ocr = a2dtest.OCRScreen()
     test.ExpectIMatch(ocr, "S7,D1: Compact Flash", "S7,D1 HD should be present")
@@ -62,30 +61,32 @@ test.Variants(
     a2d.DialogCancel()
 
     for i, name in ipairs({"A", "B", "C", "D"}) do
-      a2d.CopyPath("/A2.DESKTOP/READ.ME", "/"..name)
-      a2d.CloseAllWindows()
-      a2d.ClearSelection()
-      a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK-2)
+      desktop.CopyPath("/A2.DESKTOP/READ.ME", "/"..name)
+      desktop.CloseAllWindows()
+      desktop.ClearSelection()
+      a2d.InvokeMenuItem(desktop.SPECIAL_MENU, desktop.SPECIAL_FORMAT_DISK-2)
       for j = 1, i+2 do -- skip over S7,D1/2
         apple2.DownArrowKey()
       end
       a2d.DialogOK()
+      a2dtest.WaitForSystemTask()
       apple2.Type(name) -- should match existing, so no alert
       a2d.DialogOK()
+      a2dtest.WaitForSystemTask()
       a2dtest.WaitForAlert({match="Are you sure"})
       a2d.DialogOK()
-      emu.wait(5)
-      a2d.OpenPath("/"..name)
-      a2d.SelectAll()
-      test.ExpectEquals(#a2d.GetSelectedIcons(), 0, "should have been formatted")
+      a2dtest.WaitForSystemTask()
+      desktop.OpenWindow("/"..name)
+      desktop.SelectAll()
+      test.ExpectEquals(#desktop.GetSelectedIcons(), 0, "should have been formatted")
     end
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
 
     if version == 2.0 then
-      a2d.DeletePath("/A2.DESKTOP/PRODOS")
-      a2d.RenamePath("/A2.DESKTOP/PRODOS.24", "PRODOS")
-      a2d.CloseAllWindows()
-      a2d.Reboot()
+      desktop.DeletePath("/A2.DESKTOP/PRODOS")
+      desktop.RenamePath("/A2.DESKTOP/PRODOS.24", "PRODOS")
+      desktop.CloseAllWindows()
+      desktop.Reboot()
       a2d.WaitForDesktopReady()
     end
 end)
@@ -97,6 +98,6 @@ end)
 test.Step(
   "mirrored drives show up",
   function()
-    a2d.SelectAll()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 7, "expect Trash plus 6 volumes")
+    desktop.SelectAll()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 7, "expect Trash plus 6 volumes")
 end)

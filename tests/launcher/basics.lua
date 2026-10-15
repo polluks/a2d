@@ -6,15 +6,9 @@ DISKARGS="-hard1 $HARDIMG"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 -- Speed up the rest of these tests
-a2d.DeletePath("/A2.DESKTOP/SAMPLE.MEDIA")
-util.WaitFor(
-  "done deleting", function()
-    emu.wait(5)
-    return not a2dtest.OCRFrontWindowContent():match("Deleting")
-end)
+desktop.DeletePath("/A2.DESKTOP/SAMPLE.MEDIA")
+a2dtest.WaitForSystemTask()
 
 --[[
   Without starting DeskTop, launch `BASIC.SYSTEM`. Set a prefix (e.g.
@@ -24,7 +18,7 @@ end)
 test.Step(
   "launch with PREFIX set",
   function()
-    a2d.Quit()
+    desktop.Quit()
     apple2.BitsyInvokePath("A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
     apple2.WaitForBasicSystem()
     apple2.TypeLine("PREFIX /RAM")
@@ -43,21 +37,21 @@ end)
 test.Step(
   "Running with a prefix and relative path works",
   function()
-    a2d.ToggleOptionCopyToRAMCard()
-    a2d.CopyPath("/A2.DESKTOP", "/RAM1")
+    desktop.ToggleOptionCopyToRAMCard()
+    desktop.CopyPath("/A2.DESKTOP", "/RAM1")
     util.WaitFor(
       "done copying", function()
         return not a2dtest.HasOpenWindow()
       end, {timeout=120})
-    a2d.Quit()
+    desktop.Quit()
     apple2.BitsyInvokePath("/RAM1/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
     apple2.WaitForBasicSystem()
     apple2.TypeLine("PREFIX /RAM1")
     apple2.TypeLine("-A2.DESKTOP/DESKTOP.SYSTEM")
     a2d.WaitForDesktopReady()
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    a2d.EraseVolume("RAM1")
-    a2d.Reboot()
+    desktop.DeletePath("/A2.DESKTOP/LOCAL")
+    desktop.EraseVolume("RAM1")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)
 
@@ -71,10 +65,10 @@ end)
 test.Step(
   "Esc to abort gets cleared from input buffer",
   function()
-    a2d.ToggleOptionCopyToRAMCard()
-    a2d.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="boot"})
-    a2d.CloseAllWindows()
-    a2d.Reboot()
+    desktop.ToggleOptionCopyToRAMCard()
+    desktop.AddShortcut("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM", {copy="boot"})
+    desktop.CloseAllWindows()
+    desktop.Reboot()
     util.WaitFor(
       "shortcut copying", function()
         return apple2.GrabTextScreen():upper():match("/EXTRAS/")
@@ -84,9 +78,9 @@ test.Step(
     a2d.WaitForDesktopReady()
     test.Snap("verify menu not showing")
 
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    a2d.EraseVolume("RAM1")
-    a2d.Reboot()
+    desktop.DeletePath("/A2.DESKTOP/LOCAL")
+    desktop.EraseVolume("RAM1")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)
 
@@ -99,7 +93,7 @@ end)
 test.Step(
   "/RAM not empty warning",
   function()
-    a2d.Quit()
+    desktop.Quit()
     apple2.BitsyInvokePath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
     apple2.WaitForBasicSystem()
     apple2.TypeLine("10 PRINT \"HELLO WORLD\"")
@@ -116,7 +110,7 @@ test.Step(
     apple2.BitsyInvokePath("/A2.DESKTOP/EXTRAS/BASIC.SYSTEM")
     apple2.WaitForBasicSystem()
     apple2.TypeLine("CAT /RAM")
-    emu.wait(5)
+    emu.wait(5) -- automating BASIC prompt
     test.ExpectMatch(apple2.GrabTextScreen(), "HELLO", "file should be present")
     apple2.TypeLine("DELETE /RAM/HELLO")
     apple2.TypeLine("-/A2.DESKTOP/DESKTOP.SYSTEM")
@@ -133,22 +127,22 @@ end)
 test.Step(
   "Manual copy to ramcard doesn't cause badness",
   function()
-    a2d.ToggleOptionCopyToRAMCard()
-    a2d.CopyPath("/A2.DESKTOP", "/RAM1")
+    desktop.ToggleOptionCopyToRAMCard()
+    desktop.CopyPath("/A2.DESKTOP", "/RAM1")
     util.WaitFor(
       "done copying", function()
         return not a2dtest.HasOpenWindow()
       end, {timeout=120})
-    a2d.Quit()
+    desktop.Quit()
     apple2.BitsyInvokePath("/RAM1/A2.DESKTOP/DESKTOP.SYSTEM")
     a2d.WaitForDesktopReady()
-    a2d.OpenPath("/RAM1")
-    a2d.SelectAll()
-    for i,icon in ipairs(a2d.GetSelectedIcons()) do
+    desktop.OpenWindow("/RAM1")
+    desktop.SelectAll()
+    for i,icon in ipairs(desktop.GetSelectedIcons()) do
       test.ExpectNotEquals(icon.name:upper(), "DESKTOP", "should not be copied")
     end
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    a2d.EraseVolume("RAM1")
-    a2d.Reboot()
+    desktop.DeletePath("/A2.DESKTOP/LOCAL")
+    desktop.EraseVolume("RAM1")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)

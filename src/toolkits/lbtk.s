@@ -425,15 +425,13 @@ update: jmp     _UpdateThumbAndDraw
         sta     ctl
 
         MGTK_CALL MGTK::PeekEvent, event_params
-        lda     event_params::kind
-    IF A = #MGTK::EventKind::drag
+    IF u8 event_params::kind = #MGTK::EventKind::drag
         MGTK_CALL MGTK::GetEvent, event_params
         MGTK_CALL MGTK::FindWindow, findwindow_params
         lda     findwindow_params::window_id
         ldy     #MGTK::Winfo::window_id
       IF A = (winfo_ptr),y
-        lda     findwindow_params::which_area
-       IF A = #MGTK::Area::content
+       IF u8 findwindow_params::which_area = #MGTK::Area::content
         jsr     _FindControlIsVerticalScrollBar
         IF EQ
 
@@ -465,8 +463,7 @@ key             .byte
 modifiers       .byte
         END_PARAM_BLOCK
 
-        lda     lbr_copy + LBTK::ListBoxRecord::num_items
-    IF ZERO
+    IF u8 lbr_copy + LBTK::ListBoxRecord::num_items = #0
 ret:    rts
     END_IF
 
@@ -505,7 +502,8 @@ ret:    rts
         ;; Double modifiers
 
         ;; Home/End move selection to first/last
-    IF X = #3
+    IF X = #(MGTK::event_modifier_open_apple | MGTK::event_modifier_solid_apple)
+
       IF A = #CHAR_UP
         lda     lbr_copy + LBTK::ListBoxRecord::selected_index
         beq     ret
@@ -627,16 +625,13 @@ new_size        .byte
         ;; Reset thumb pos
         CALL    _UpdateThumb, A=#0
 
-        lda     lbr_copy + LBTK::ListBoxRecord::num_rows
-        cmp     lbr_copy + LBTK::ListBoxRecord::num_items
-        bcc     greater         ; inverted comparison
-
+    IF u8 lbr_copy + LBTK::ListBoxRecord::num_items <= lbr_copy + LBTK::ListBoxRecord::num_rows
         ;; Deactivate
         lda     #MGTK::activatectl_deactivate
         ASSERT_EQUALS MGTK::activatectl_deactivate, 0
         beq     activate        ; always
+    END_IF
 
-greater:
         ;; Set max and activate
         lda     lbr_copy + LBTK::ListBoxRecord::num_items
         sec
@@ -784,14 +779,12 @@ update:
 
         add16_8 tmp_point+MGTK::Point::ycoord, #kListItemHeight
 
-        lda     index
-      IF A = lbr_copy + LBTK::ListBoxRecord::selected_index
+      IF u8 index = lbr_copy + LBTK::ListBoxRecord::selected_index
         jsr     _HighlightIndex
       END_IF
 
         inc     index
-        lda     index
-        BREAK_IF A = lbr_copy + LBTK::ListBoxRecord::num_items
+        BREAK_IF u8 index = lbr_copy + LBTK::ListBoxRecord::num_items
     WHILE dec rows : NOT_ZERO
 
 finish: MGTK_CALL MGTK::UnshieldCursor

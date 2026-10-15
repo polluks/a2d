@@ -202,17 +202,13 @@ ret:    rts
         ;; Verify type/auxtype
         JUMP_TABLE_MLI_CALL GET_FILE_INFO, get_info_params
         bcs     ret
-        lda     get_info_params::file_type
-        cmp     #FT_MUSIC
-        bne     ret
-        ecmp16  get_info_params::aux_type, #$D0E7
-        bne     ret
+        IF u8 get_info_params::file_type <> #FT_MUSIC GOTO ret
+        IF u16 get_info_params::aux_type <> #$D0E7 GOTO ret
 
         ;; Extract filename
         ldy     INVOKE_PATH
     DO
-        lda     INVOKE_PATH,y   ; find last '/'
-        BREAK_IF A = #'/'
+        BREAK_IF u8 INVOKE_PATH,y = #'/' ; find last '/'
     WHILE dey : NOT_ZERO
 
         ldx     #0
@@ -265,7 +261,7 @@ ret:    rts
         JSR_TO_AUX aux::Init
 
         ;; Page DeskTop's code back in.
-        CALL    JUMP_TABLE_RESTORE_OVL, A=#kDynamicRoutineRestoreBuffer
+        CALL    JUMP_TABLE_RESTORE_OVL
 
         jsr     JUMP_TABLE_CLEAR_UPDATES
 
@@ -304,7 +300,6 @@ play:   ldax    #data_buf
         play_routine := *+1
         jsr     Player
 
-redo:
         ;; If a key was pressed, maybe restart with alt player
         lda     KBD
     IF NS
@@ -822,8 +817,7 @@ probe:  CALL    WithInterruptsDisabled, AX=#DetectMockingboard
     END_IF
 
         dec     ptr+1
-        lda     ptr+1
-        cmp     #$C0
+        ucmp8   ptr+1, #$C0
         bne     probe
 
         RETURN  C=0             ; C=0 is not found

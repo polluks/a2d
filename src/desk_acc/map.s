@@ -297,24 +297,27 @@ buf_search:     .res    kBufSize, 0 ; search term
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         LETK_CALL LETK::Idle, le_params
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         jsr     IdlePositionIndicator
         jsr     GetNextEvent
 
-        cmp     #kEventKindMouseMoved
-        jeq     HandleMouseMove
+      IF A = #kEventKindMouseMoved
+        jsr     HandleMouseMove
+      ELSE_IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      END_IF
 
-        cmp     #MGTK::EventKind::button_down
-        beq     HandleDown
-
-        cmp     #MGTK::EventKind::key_down
-        beq     HandleKey
-
-        bne     InputLoop       ; always
+    FOREVER
 .endproc ; InputLoop
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         MGTK_CALL MGTK::CloseWindow, winfo
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
         rts
@@ -331,41 +334,34 @@ buf_search:     .res    kBufSize, 0 ; search term
         ldx     event_params::modifiers
     IF NOT_ZERO
         jsr     ToUpperCase
-        cmp     #kShortcutCloseWindow
-        beq     Exit
+        IF A = #kShortcutCloseWindow GOTO Exit
 
         LETK_CALL LETK::Key, le_params
-        jmp     InputLoop
+        rts
     END_IF
 
-        cmp     #CHAR_ESCAPE
-        beq     Exit
+        IF A = #CHAR_ESCAPE GOTO Exit
 
     IF A = #CHAR_RETURN
         BTK_CALL BTK::Flash, find_button
-        jsr     DoFind
-        jmp     InputLoop
+        TAIL_CALL DoFind
     END_IF
 
         LETK_CALL LETK::Key, le_params
-        jmp     InputLoop
+        rts
 .endproc ; HandleKey
 
 ;;; ============================================================
 
 .proc HandleDown
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        jne     InputLoop
+        RTS_IF u8 findwindow_params::window_id <> #kDAWindowId
+
         lda     findwindow_params::which_area
-        cmp     #MGTK::Area::close_box
-        beq     HandleClose
-        cmp     #MGTK::Area::dragbar
-        beq     HandleDrag
-        cmp     #MGTK::Area::content
-        jeq     HandleClick
-        jmp     InputLoop
+        IF A = #MGTK::Area::close_box GOTO HandleClose
+        IF A = #MGTK::Area::dragbar GOTO HandleDrag
+        IF A = #MGTK::Area::content JUMP HandleClick
+        rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -374,7 +370,7 @@ buf_search:     .res    kBufSize, 0 ; search term
         MGTK_CALL MGTK::TrackGoAway, trackgoaway_params
         lda     trackgoaway_params::clicked
         bne     Exit
-        jmp     InputLoop
+        rts
 .endproc ; HandleClose
 
 ;;; ============================================================
@@ -392,7 +388,7 @@ buf_search:     .res    kBufSize, 0 ; search term
         LETK_CALL LETK::Update, le_params ; window moved
     END_IF
 
-        jmp     InputLoop
+        rts
 
 .endproc ; HandleDrag
 
@@ -413,8 +409,7 @@ buf_search:     .res    kBufSize, 0 ; search term
     REPEAT
         ;; Compare lengths
         ldy     #0
-        lda     (ptr),y
-        cmp     buf_search
+        ucmp8   (ptr),y, buf_search
         bcc     next            ; longer, so no match
 
         ;; Is it a prefix?
@@ -449,8 +444,7 @@ buf_search:     .res    kBufSize, 0 ; search term
 
         ;; Advance pointer to next record
 next:   inc     index
-        lda     index
-        BREAK_IF A = #kNumLocations
+        BREAK_IF u8 index = #kNumLocations
 
         ldy     #0              ; string length
         lda     (ptr),y
@@ -512,7 +506,7 @@ len:    .byte   0
 
         ;; Click in map?
         MGTK_CALL MGTK::InRect, map_rect
-        jeq     done            ; nope
+        beq     done            ; nope
 
         ;; Erase old position
         jsr     SetPort
@@ -538,7 +532,7 @@ len:    .byte   0
         jsr     DrawLatLong
     END_IF
 
-done:   jmp     InputLoop
+done:   rts
 .endproc ; HandleClick
 
 ;;; ============================================================
@@ -570,7 +564,7 @@ notpencopy:     .byte   MGTK::notpencopy
     ELSE
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
     END_IF
-        jmp     InputLoop
+        rts
 .endproc ; HandleMouseMove
 
 ;;; ============================================================
@@ -762,8 +756,8 @@ blink_counter:
     .else
         UPPERCASE_PASCAL_STRING name
     .endif
-        .word   AS_WORD(lat)
-        .word   AS_WORD(long)
+        .word   AS_WORD{lat}
+        .word   AS_WORD{long}
         loc_count .set loc_count+1
 .endmacro
 

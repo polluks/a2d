@@ -6,8 +6,6 @@ DISKARGS="-flop1 $FLOP1IMG"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(5)
-
 --[[
   Boot a system with only the 140k_disk1 image. Verify that About This
   Apple II is present in the Apple Menu.
@@ -15,8 +13,8 @@ a2d.ConfigureRepaintTime(5)
 test.Step(
   "About This Apple II is present on floppy",
   function()
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.ABOUT_THIS_APPLE_II)
-    emu.wait(5)
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.ABOUT_THIS_APPLE_II)
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2dtest.GetFrontWindowTitle(), "About This Apple II",
                       "accessory should be present in image")
 end)

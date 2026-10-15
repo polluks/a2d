@@ -38,21 +38,19 @@ event_params:   .tag MGTK::Event
 ;;; Main Input Loop
 
 .proc InputLoop
+    REPEAT
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params + MGTK::Event::kind
-        cmp     #MGTK::EventKind::button_down ; was clicked?
-        beq     exit
-        cmp     #MGTK::EventKind::key_down  ; any key?
-        beq     exit
+        BREAK_IF A = #MGTK::EventKind::button_down ; was clicked?
+        BREAK_IF A = #MGTK::EventKind::key_down ; any key?
 
         MGTK_CALL MGTK::WaitVBL
         jsr     Animate
         jsr     Animate
         jsr     Animate
         jsr     Animate
-        jmp     InputLoop
+    FOREVER
 
-exit:
         MGTK_CALL MGTK::RedrawDeskTop
 
         MGTK_CALL MGTK::DrawMenuBar

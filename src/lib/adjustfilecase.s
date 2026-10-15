@@ -64,12 +64,9 @@ file_entry:
         ;; AppleWorks?
         ldy     #FileEntry::file_type
         lda     (ptr),y
-        cmp     #FT_ADB
-        beq     appleworks
-        cmp     #FT_AWP
-        beq     appleworks
-        cmp     #FT_ASP
-        beq     appleworks
+        IF A = #FT_ADB GOTO appleworks
+        IF A = #FT_AWP GOTO appleworks
+        IF A = #FT_ASP GOTO appleworks
 
         ldy     #FileEntry::case_bits
         copy16in (ptr),y, case_bits
@@ -102,7 +99,7 @@ apply_bits:
         asl16   case_bits   ; NOTE: Shift out high byte first
       IF CS
         lda     (ptr),y
-        ora     #AS_BYTE(~CASE_MASK) ; guarded by `kBuildSupportsLowercase`
+        ora     #AS_BYTE{~CASE_MASK} ; guarded by `kBuildSupportsLowercase`
         sta     (ptr),y
       END_IF
         iny

@@ -30,9 +30,8 @@ kDAMaxSize      = DA_IO_BUFFER - DA_LOAD_ADDRESS
 ;;; Used by DAs for window definitions
 DEFAULT_FONT    := $8800
 
-;;; A 16k buffer that can be restored using overlays; load
-;;; `kDynamicRoutineRestoreBuffer` and call `JUMP_TABLE_RESTORE_OVL`
-;;; to restore DeskTop afterwards.
+;;; A 16k buffer that can be restored using overlays; call
+;;; `JUMP_TABLE_RESTORE_OVL` to restore DeskTop afterwards.
 OVERLAY_BUFFER      := $5000
 kOverlayBufferSize   = $4000
 
@@ -81,7 +80,6 @@ kMaxDeskTopWindows      = 8
 kShortcutCloseWindow  = res_char_shortcut_close
 kShortcutGrowWindow   = res_char_shortcut_resize
 kShortcutMoveWindow   = res_char_shortcut_move
-kShortcutScrollWindow = res_char_shortcut_scroll
 
 ;;; ============================================================
 ;;; Direct Calls (from main memory)
@@ -116,7 +114,7 @@ JT_ENTRY JUMP_TABLE_BELL          ; Play settings-specified alert sound *
 JT_ENTRY JUMP_TABLE_SLOW_SPEED    ; Disable accelerator *
 JT_ENTRY JUMP_TABLE_RESUME_SPEED  ; Resume accelerator *
 JT_ENTRY JUMP_TABLE_READ_SETTING  ; Read setting byte (in: X=offset) *
-JT_ENTRY JUMP_TABLE_GET_TICKS     ; Read 24-bit tick counter (out: A,X) *
+JT_ENTRY JUMP_TABLE_GET_TICKS     ; Read 24-bit tick counter (out: A,X,Y) *
 JT_ENTRY JUMP_TABLE_LAST
 
 ;;; ============================================================
@@ -156,17 +154,6 @@ JT_ENTRY JUMP_TABLE_LAST
         .addr 0
 .endif
 .endmacro
-
-;;; ============================================================
-;;; Overlay routines, for JUMP_TABLE_LOAD_OVL
-
-kDynamicRoutineFormatErase      = 0 ; restoration not needed
-kDynamicRoutineShortcutPick     = 1 ; restoration required
-kDynamicRoutineFileDialog       = 2 ; restoration not needd
-kDynamicRoutineFileCopy         = 3 ; restoration not needd
-kDynamicRoutineShortcutEdit     = 4 ; restoration not needd
-kDynamicRoutineRestoreSP        = 5
-kDynamicRoutineRestoreBuffer    = 6
 
 ;;; ============================================================
 ;;; Error codes used for alerts which are not ProDOS errors

@@ -8,8 +8,6 @@ DISKARGS="-flop3 $HARDIMG -flop1 floppy_with_files.dsk"
 local s7d1 = manager.machine.images[":sl7:superdrive:fdc:0:35hd"]
 local s6d1 = manager.machine.images[":sl6:diskiing:0:525"]
 
-a2d.ConfigureRepaintTime(2)
-
 --[[
   Eject a floppy disk. Select the disk. File > Open. Verify that the
   prompt for system disk offers only "OK".
@@ -20,7 +18,7 @@ test.Step(
     local disk = s6d1.filename
     s6d1:unload()
 
-    a2d.OpenPath("/WITH.FILES", {no_validate=true})
+    desktop.InvokePath("/WITH.FILES")
 
     a2d.OAShortcut("O") -- File > Open
 
@@ -29,9 +27,10 @@ test.Step(
     test.ExpectNotMatch(ocr, "Try Again", "no Try Again button should be present")
     test.ExpectNotMatch(ocr, "Cancel", "no Cancel button should be present")
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     s6d1:load(disk)
-    a2d.CheckAllDrives()
+    desktop.CheckAllDrives()
 end)
 
 --[[
@@ -42,7 +41,7 @@ test.Step(
   "Alert after New Folder on ejected disk has no Try Again option",
   function()
     local disk = s6d1.filename
-    a2d.OpenPath("/WITH.FILES")
+    desktop.OpenWindow("/WITH.FILES")
 
     s6d1:unload()
 
@@ -53,6 +52,7 @@ test.Step(
     test.ExpectNotMatch(ocr, "Try Again", "no Try Again button should be present")
     test.ExpectNotMatch(ocr, "Cancel", "no Cancel button should be present")
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     s6d1:load(disk)
 end)
@@ -66,7 +66,7 @@ test.Step(
   "Alert after Duplicate on ejected disk has no Try Again option",
   function()
     local disk = s6d1.filename
-    a2d.SelectPath("/WITH.FILES/LOREM.IPSUM")
+    desktop.SelectPath("/WITH.FILES/LOREM.IPSUM")
 
     s6d1:unload()
 
@@ -77,6 +77,7 @@ test.Step(
     test.ExpectNotMatch(ocr, "Try Again", "no Try Again button should be present")
     test.ExpectNotMatch(ocr, "Cancel", "no Cancel button should be present")
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     s6d1:load(disk)
 end)
@@ -90,17 +91,17 @@ test.Step(
   "Alert after Make Alias on ejected disk has no Try Again option",
   function()
     local disk = s6d1.filename
-    a2d.SelectPath("/WITH.FILES/LOREM.IPSUM")
+    desktop.SelectPath("/WITH.FILES/LOREM.IPSUM")
 
     s6d1:unload()
 
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, -1) -- Special > Make Alias
-
+    a2d.InvokeMenuItem(desktop.SPECIAL_MENU, -1) -- Special > Make Alias
     a2dtest.WaitForAlert({match="volume cannot be found"})
     local ocr = a2dtest.OCRScreen()
     test.ExpectNotMatch(ocr, "Try Again", "no Try Again button should be present")
     test.ExpectNotMatch(ocr, "Cancel", "no Cancel button should be present")
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     s6d1:load(disk)
 end)
@@ -115,7 +116,7 @@ test.Step(
     local disk = s7d1.filename
     s7d1:unload()
 
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_ADD_A_SHORTCUT)
     a2dtest.WaitForAlert({match="insert the system disk"})
 
     local ocr = a2dtest.OCRScreen()
@@ -125,7 +126,7 @@ test.Step(
     a2d.DialogCancel()
 
     s7d1:load(disk)
-    emu.wait(5)
+    emu.wait(5) -- async drive checking
 end)
 
 --[[
@@ -137,8 +138,8 @@ test.Step(
   function()
     local disk = s7d1.filename
 
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
-    emu.wait(10)
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_ADD_A_SHORTCUT)
+    a2dtest.WaitForSystemTask()
 
     s7d1:unload()
     a2d.DialogCancel()
@@ -152,4 +153,5 @@ test.Step(
     s7d1:load(disk)
 
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 end)

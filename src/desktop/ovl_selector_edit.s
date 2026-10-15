@@ -205,8 +205,8 @@ consume:
         MGTK_CALL MGTK::FrameRect, shortcut_dialog_res::line_edit_rect
 
         ;; Vertical separator
-        MGTK_CALL MGTK::MoveTo, shortcut_dialog_res::dialog_sep_start
-        MGTK_CALL MGTK::LineTo, shortcut_dialog_res::dialog_sep_end
+        MGTK_CALL MGTK::MoveTo, shortcut_dialog_res::dialog_sep::start
+        MGTK_CALL MGTK::LineTo, shortcut_dialog_res::dialog_sep::end
 
         ;; Radio buttons
         MGTK_CALL MGTK::MoveTo, add_a_new_entry_to_label_pos
@@ -248,11 +248,10 @@ jt_callbacks:
         CALL    file_dialog::GetPath, AX=#main::tmp_path_buf
 
         ;; If name is empty, use last path segment
-    IF lda text_input_buf : ZERO
+    IF u8 text_input_buf = #0
         ldx     path_buf0
       DO
-        lda     path_buf0,x
-        BREAK_IF A = #'/'
+        BREAK_IF u8 path_buf0,x = #'/'
       WHILE dex : NOT_ZERO      ; always, since path is valid
         inx
 
@@ -270,22 +269,16 @@ jt_callbacks:
     END_IF
 
         ;; Disallow copying some types to ramcard
-        lda     copy_when
-        cmp     #kCopyNever
-        beq     ok
-
+    IF u8 copy_when <> #kCopyNever
         MLI_CALL GET_FILE_INFO, get_file_info_params
         bcs     alert
         ;; Volume?
-        lda     get_file_info_params::storage_type
-        cmp     #ST_VOLUME_DIRECTORY
-        beq     invalid
+        IF u8 get_file_info_params::storage_type = #ST_VOLUME_DIRECTORY GOTO invalid
         ;; Link?
-        lda     get_file_info_params::file_type
-        cmp     #FT_LINK
-        beq     invalid
+        IF u8 get_file_info_params::file_type = #FT_LINK GOTO invalid
+    END_IF
 
-ok:     jsr     file_dialog::CloseWindow
+        jsr     file_dialog::CloseWindow
         ldx     saved_stack
         txs
         ldx     which_run_list
@@ -353,7 +346,7 @@ is_add_flag:                    ; high bit set = Add, clear = Edit
 .endproc ; HandleClick
 
 .proc ClickPrimaryRunListCtrl
-    IF lda which_run_list : A <> #kRunListPrimary
+    IF u8 which_run_list <> #kRunListPrimary
         CALL    UpdateRunListButton, C=0
         copy8   #kRunListPrimary, which_run_list
         CALL    UpdateRunListButton, C=1
@@ -362,7 +355,7 @@ is_add_flag:                    ; high bit set = Add, clear = Edit
 .endproc ; ClickPrimaryRunListCtrl
 
 .proc ClickSecondaryRunListCtrl
-    IF lda which_run_list : A <> #kRunListSecondary
+    IF u8 which_run_list <> #kRunListSecondary
         CALL    UpdateRunListButton, C=0
         copy8   #kRunListSecondary, which_run_list
 	CALL    UpdateRunListButton, C=1
@@ -371,7 +364,7 @@ is_add_flag:                    ; high bit set = Add, clear = Edit
 .endproc ; ClickSecondaryRunListCtrl
 
 .proc ClickAtFirstBootCtrl
-    IF lda copy_when : A <> #kCopyOnBoot
+    IF u8 copy_when <> #kCopyOnBoot
         CALL    DrawCopyWhenButton, C=0
         lda     #kCopyOnBoot
         sta     copy_when
@@ -381,7 +374,7 @@ is_add_flag:                    ; high bit set = Add, clear = Edit
 .endproc ; ClickAtFirstBootCtrl
 
 .proc ClickAtFirstUseCtrl
-    IF lda copy_when : A <> #kCopyOnUse
+    IF u8 copy_when <> #kCopyOnUse
         CALL    DrawCopyWhenButton, C=0
         lda     #kCopyOnUse
         sta     copy_when
@@ -391,7 +384,7 @@ is_add_flag:                    ; high bit set = Add, clear = Edit
 .endproc ; ClickAtFirstUseCtrl
 
 .proc ClickNeverCtrl
-    IF lda copy_when : A <> #kCopyNever
+    IF u8 copy_when <> #kCopyNever
         CALL    DrawCopyWhenButton, C=0
         lda     #kCopyNever
         sta     copy_when
@@ -446,20 +439,11 @@ is_add_flag:                    ; high bit set = Add, clear = Edit
 
 ;;; Input: A=`event_params::key`
 .proc HandleKey
-        cmp     #res_char_shortcut_apple_1
-        jeq     ClickPrimaryRunListCtrl
-
-        cmp     #res_char_shortcut_apple_2
-        jeq     ClickSecondaryRunListCtrl
-
-        cmp     #res_char_shortcut_apple_3
-        jeq     ClickAtFirstBootCtrl
-
-        cmp     #res_char_shortcut_apple_4
-        jeq     ClickAtFirstUseCtrl
-
-        cmp     #res_char_shortcut_apple_5
-        jeq     ClickNeverCtrl
+        IF A = #res_char_shortcut_apple_1 JUMP ClickPrimaryRunListCtrl
+        IF A = #res_char_shortcut_apple_2 JUMP ClickSecondaryRunListCtrl
+        IF A = #res_char_shortcut_apple_3 JUMP ClickAtFirstBootCtrl
+        IF A = #res_char_shortcut_apple_4 JUMP ClickAtFirstUseCtrl
+        IF A = #res_char_shortcut_apple_5 JUMP ClickNeverCtrl
 
         rts
 .endproc ; HandleKey

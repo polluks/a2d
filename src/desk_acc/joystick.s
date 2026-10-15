@@ -210,20 +210,26 @@ joystick_bitmap:
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
+
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params::kind
-        cmp     #MGTK::EventKind::button_down
-        beq     HandleDown
-        cmp     #MGTK::EventKind::key_down
-        beq     HandleKey
+
+      IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      END_IF
 
         jsr     DoJoystick
-
-        jmp     InputLoop
+    FOREVER
 .endproc ; InputLoop
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         MGTK_CALL MGTK::CloseWindow, winfo
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
         rts
@@ -237,14 +243,12 @@ joystick_bitmap:
         ldx     event_params::modifiers
     IF NOT_ZERO
         jsr     ToUpperCase
-        cmp     #kShortcutCloseWindow
-        beq     Exit
-        bne     InputLoop       ; always
+        IF A = #kShortcutCloseWindow GOTO Exit
+        rts
     END_IF
 
-        cmp     #CHAR_ESCAPE
-        beq     Exit
-        bne     InputLoop       ; always
+        IF A = #CHAR_ESCAPE GOTO Exit
+        rts
 .endproc ; HandleKey
 
 ;;; ============================================================
@@ -253,17 +257,14 @@ joystick_bitmap:
         copy16  event_params::xcoord, findwindow_params::mousex
         copy16  event_params::ycoord, findwindow_params::mousey
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        bne     InputLoop
+        RTS_IF u8 findwindow_params::window_id <> #kDAWindowId
+
         lda     findwindow_params::which_area
-        cmp     #MGTK::Area::close_box
-        beq     HandleClose
-        cmp     #MGTK::Area::dragbar
-        beq     HandleDrag
-        cmp     #MGTK::Area::content
-        beq     HandleClick
-        jmp     InputLoop
+        IF A = #MGTK::Area::close_box GOTO HandleClose
+        IF A = #MGTK::Area::dragbar   GOTO HandleDrag
+        IF A = #MGTK::Area::content   GOTO HandleClick
+
+        rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -272,7 +273,8 @@ joystick_bitmap:
         MGTK_CALL MGTK::TrackGoAway, trackgoaway_params
         lda     trackgoaway_params::clicked
         bne     Exit
-        jmp     InputLoop
+
+        rts
 .endproc ; HandleClose
 
 ;;; ============================================================
@@ -291,7 +293,7 @@ joystick_bitmap:
         jsr     DrawWindow
     END_IF
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleDrag
 
 
@@ -299,7 +301,7 @@ joystick_bitmap:
 
 .proc HandleClick
         ;; no-op
-        jmp     InputLoop
+        rts
 .endproc ; HandleClick
 
 ;;; ============================================================
@@ -338,7 +340,7 @@ num_analog_inputs:
         .byte   4               ; IIc only has 2 analog inputs
 
 .struct InputState
-        valid   .byte
+        valid   .byte           ; bit7
 
         pdl0    .byte
         pdl1    .byte
@@ -378,36 +380,30 @@ num_analog_inputs:
         sta     curr+InputState::butn2
 
         ;; Mark current state as valid
-        copy8   #$80, curr+InputState::valid
+        SET_BIT7_FLAG curr+InputState::valid
 
         ;; --------------------------------------------------
 
         ;; If last state was valid, see if joystick 2 registered
         ;; a change; if so, set a flag.
     IF bit last+InputState::valid : NS
-        lda     curr+InputState::pdl2
-        cmp     last+InputState::pdl2
-        bne     set
-        lda     curr+InputState::pdl3
-        cmp     last+InputState::pdl3
-        beq     :+
-set:    SET_BIT7_FLAG joy2_valid_flag
-:
+      IF u8 curr+InputState::pdl2 <> last+InputState::pdl2 \
+        OR u8 curr+InputState::pdl3 <> last+InputState::pdl3
+        SET_BIT7_FLAG joy2_valid_flag
+      END_IF
     END_IF
 
         ;; Changed? (or first time through)
     IF bit force_draw_flag : NC
         ldx     #.sizeof(InputState)-1
       DO
-        lda     curr,x
-        cmp     last,x
-        bne     :+              ; changed - draw
+        IF u8 curr,x <> last,x GOTO draw ; changed
       WHILE dex : POS
         rts                     ; no change - skip
-:
     END_IF
 
         ;; --------------------------------------------------
+draw:
 
         COPY_STRUCT InputState, curr, last
         CLEAR_BIT7_FLAG force_draw_flag
@@ -457,7 +453,7 @@ set:    SET_BIT7_FLAG joy2_valid_flag
 
         lda     curr+InputState::butn0
         and     #$80
-        ASSERT_EQUALS BTK::kButtonStateChecked, $80
+        ASSERT_EQUALS BTK::kButtonStateChecked, ::N_FLAG_MASK
         eor     joy_btn0_button::state ; changed?
     IF NS
         eor     joy_btn0_button::state ; changed?
@@ -467,7 +463,7 @@ set:    SET_BIT7_FLAG joy2_valid_flag
 
         lda     curr+InputState::butn1
         and     #$80
-        ASSERT_EQUALS BTK::kButtonStateChecked, $80
+        ASSERT_EQUALS BTK::kButtonStateChecked, ::N_FLAG_MASK
         eor     joy_btn1_button::state ; changed?
     IF NS
         eor     joy_btn1_button::state
@@ -477,7 +473,7 @@ set:    SET_BIT7_FLAG joy2_valid_flag
 
         lda     curr+InputState::butn2
         and     #$80
-        ASSERT_EQUALS BTK::kButtonStateChecked, $80
+        ASSERT_EQUALS BTK::kButtonStateChecked, ::N_FLAG_MASK
         eor     joy_btn2_button::state ; changed?
     IF NS
         eor     joy_btn2_button::state

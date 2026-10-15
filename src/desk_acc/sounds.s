@@ -152,7 +152,6 @@ nextwinfo:      .addr   0
         kListWidth = kDAWidth - kMarginX*2 - kLabelWidth
         kListInnerWidth = kListWidth - kScrollBarWidth - 1
         kListHeight = kListItemHeight * kListRows - 1
-        kListBottom = kListTop + kListHeight
 
 ;;; ============================================================
 ;;; List Box
@@ -251,18 +250,23 @@ grafport_win:       .tag    MGTK::GrafPort
 .endproc ; Init
 
 .proc InputLoop
+     REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
+
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params::kind
-        cmp     #MGTK::EventKind::button_down
-        jeq     HandleDown
-        cmp     #MGTK::EventKind::key_down
-        beq     HandleKey
-
-        jmp     InputLoop
+      IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      END_IF
+     FOREVER
 .endproc ; InputLoop
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         MGTK_CALL MGTK::CloseWindow, winfo_listbox
         MGTK_CALL MGTK::CloseWindow, winfo
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
@@ -279,14 +283,14 @@ grafport_win:       .tag    MGTK::GrafPort
         sta     lb_params::key
         stx     lb_params::modifiers
         LBTK_CALL LBTK::Key, lb_params
-        jmp     InputLoop
+        rts
     END_IF
 
     IF X <> #0
         jsr     ToUpperCase
         cmp     #kShortcutCloseWindow
-        jeq     Exit
-        jmp     InputLoop
+        beq     Exit
+        rts
     END_IF
 
     IF A = #CHAR_ESCAPE
@@ -299,7 +303,7 @@ grafport_win:       .tag    MGTK::GrafPort
         jmp     Exit
     END_IF
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleKey
 
 ;;; ============================================================
@@ -309,10 +313,9 @@ grafport_win:       .tag    MGTK::GrafPort
 
         lda     findwindow_params::window_id
     IF A = #kDAWindowId
-        lda     findwindow_params::which_area
-        cmp     #MGTK::Area::content
+        ucmp8   findwindow_params::which_area, #MGTK::Area::content
         beq     HandleDialogClick
-        jmp     InputLoop
+        rts
     END_IF
 
     IF A = #kListBoxWindowId
@@ -320,11 +323,11 @@ grafport_win:       .tag    MGTK::GrafPort
       IF A = #MGTK::Area::content
         COPY_STRUCT event_params::coords, lb_params::coords
         LBTK_CALL LBTK::Click, lb_params
-        jmp     InputLoop
+        rts
       END_IF
     END_IF
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -343,19 +346,19 @@ grafport_win:       .tag    MGTK::GrafPort
     IF NOT_ZERO
         BTK_CALL BTK::Track, ok_button
         jeq     Exit
-        jmp     InputLoop
+        rts
     END_IF
 
         MGTK_CALL MGTK::InRect, cancel_button::rect
     IF NOT_ZERO
         BTK_CALL BTK::Track, cancel_button
         jeq     DoCancel
-        jmp     InputLoop
+        rts
     END_IF
 
         ;; ----------------------------------------
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleDialogClick
 
 ;;; ============================================================
@@ -448,9 +451,9 @@ grafport_win:       .tag    MGTK::GrafPort
         stx     crc_hi
 
         copy8   #0, index
-
+    DO
         index := *+1
-loop:   lda     #SELF_MODIFIED_BYTE
+        lda     #SELF_MODIFIED_BYTE
 
         asl
         tay
@@ -458,19 +461,17 @@ loop:   lda     #SELF_MODIFIED_BYTE
 
         crc_lo := *+1
         cmp     #SELF_MODIFIED_BYTE
-        bne     next
+        CONTINUE_IF NE
+
         crc_hi := *+1
         cpx     #SELF_MODIFIED_BYTE
-        bne     next
+        CONTINUE_IF NE
 
         ;; Match!
         lda     index
         jmp     finish
 
-next:   inc     index
-        lda     index
-        cmp     listbox_rec::num_items
-        bne     loop
+    WHILE u8 ++index <> listbox_rec::num_items
 
         ;; Not Found
         lda     #$FF

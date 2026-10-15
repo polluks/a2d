@@ -81,7 +81,7 @@
         lastchar        .byte   ; char code of last character (usually $7F)
         height          .byte   ; pixels (1-16)
         charwidth       .byte   ; pixels, for each char
-        ;; kRow0        .res N    bits
+        ;; row0         .res N    bits
         ;; row0right    .res N    bits (double-width only)
 .endstruct
 
@@ -234,7 +234,7 @@ ScaleMouse      = $21           ; Set mouse/screen scaling
 ;;; .byte       x_exponent      x-scale factor for mouse, 0...3
 ;;; .byte       y_exponent      y-scale factor for mouse, 0...3
 
-KeyboardMouse   = $22           ; Next kOperation will be performed by keyboard
+KeyboardMouse   = $22           ; Next operation will be performed by keyboard
 ;;; (no parameters)
 
 GetIntHandler   = $23           ; Get address of interrupt handler
@@ -852,7 +852,7 @@ END_PARAM_BLOCK
         .refto ident::bottomright
         .refto ident::x2
         .refto ident::y2
-        .word AS_WORD(left), AS_WORD(top), AS_WORD(right), AS_WORD(bottom)
+        .word AS_WORD{left}, AS_WORD{top}, AS_WORD{right}, AS_WORD{bottom}
 .endmacro
 
 ;;; Define a rect by size (right = left + width, bottom = top + height)
@@ -871,10 +871,19 @@ END_PARAM_BLOCK
         WARN_IF_SHADOWING ident
         ident := *
 .scope ident
-xcoord: .word   AS_WORD(left)
-ycoord: .word   AS_WORD(top)
+xcoord: .word   AS_WORD{left}
+ycoord: .word   AS_WORD{top}
         .refto xcoord
         .refto ycoord
+.endscope ; ident
+.endmacro
+
+;;; Convenience for start/end points of a line
+.macro DEFINE_LINE ident, x1, y1, x2, y2
+        WARN_IF_SHADOWING ident
+.scope ident
+        DEFINE_POINT start, x1, y1
+        DEFINE_POINT end, x2, y2
 .endscope ; ident
 .endmacro
 
@@ -906,7 +915,6 @@ ycoord: .word   AS_WORD(top)
 ;;; NOTE: If shortcut is A-Z, char2 is to_lower(char1)
 .macro DEFINE_MENU_ITEM saddr, shortcut
     .ifnblank shortcut
-
         .byte   MGTK::MenuOpt::open_apple|MGTK::MenuOpt::solid_apple ; option byte
         .byte   0               ; mark_char
         .byte   shortcut        ; char1
@@ -916,17 +924,14 @@ ycoord: .word   AS_WORD(top)
       .else
         .byte   MGTK::no_shortcut
       .endif
-        .addr   saddr           ; item_str_pointer
-
     .else
-
         .byte   0               ; option byte
         .byte   0               ; mark_char
         .byte   MGTK::no_shortcut ; char1
         .byte   MGTK::no_shortcut ; char2
-        .addr   saddr           ; item_str_pointer
-
     .endif
+
+        .addr   saddr           ; item_str_pointer
 .endmacro
 
 ;;; For menu items with control keys (e.g. CHAR_RETURN), requiring no modifiers
@@ -934,11 +939,7 @@ ycoord: .word   AS_WORD(top)
         .byte   0               ; option byte
         .byte   0               ; mark_char
         .byte   shortcut1       ; char1
-    .ifnblank shortcut2
-        .byte   shortcut2       ; char2
-    .else
-        .byte   MGTK::no_shortcut
-    .endif
+        .byte   value_or_default shortcut2, MGTK::no_shortcut ; char2
         .addr   saddr           ; item_str_pointer
 .endmacro
 

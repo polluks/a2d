@@ -319,8 +319,7 @@ fail:   RETURN  A=#auxlc::kSourceDiskFormatOther
         .addr   status_params
 
       IF CC
-        lda     dib_buffer+SPDIB::Device_Type_Code
-       IF A = #SPDeviceType::Disk35
+       IF u8 dib_buffer+SPDIB::Device_Type_Code = #SPDeviceType::Disk35
         ;; Assume all 3.5" drives are ejectable
         RETURN  A=#$80
        END_IF
@@ -364,8 +363,7 @@ fail:   RETURN  A=#auxlc::kSourceDiskFormatOther
         ;; Loop over blocks until we hit memory limit or are done
     DO
         ;; Check for keypress
-        lda     KBD
-      IF A = #(CHAR_ESCAPE | $80)
+      IF u8 KBD = #(CHAR_ESCAPE | $80)
         bit     KBDSTRB
         RETURN  A=#1
       END_IF
@@ -396,8 +394,7 @@ fail:   RETURN  A=#auxlc::kSourceDiskFormatOther
       END_IF
 
         ;; Next block
-        inc16   auxlc::block_num
-    WHILE cmp16 auxlc::block_num, auxlc::source_block_count : LT
+    WHILE u16 ++auxlc::block_num < auxlc::source_block_count
 
         ;; That was last block so we're done
         RETURN  A=#$80
@@ -513,7 +510,7 @@ mem_block_addr:
       END_IF
 
         inc16   block
-      IF cmp16 block, auxlc::source_block_count : GE
+      IF u16 block >= auxlc::source_block_count
         RETURN  AX=count
       END_IF
     FOREVER
@@ -609,8 +606,7 @@ ok:     RETURN  C=0
         lda     #7
         sta     auxlc::block_index_shift
         inc     auxlc::block_index_div8
-        lda     auxlc::block_index_div8
-        cmp     #kMemoryBitmapSize
+        ucmp8   auxlc::block_index_div8, #kMemoryBitmapSize
         bcc     ok
 
         RETURN  C=1
@@ -811,8 +807,7 @@ done:   rts
         ptr1 := $06
         ptr2 := $08             ; one page up
 
-        ldy     #$FF
-        iny
+        ldy     #0
     DO
         lda     default_block_buffer,y
         sta     (ptr1),y
@@ -881,8 +876,7 @@ done:   rts
         ptr1 := $06
         ptr2 := $08             ; one page up
 
-        ldy     #$FF
-        iny
+        ldy     #0
     DO
         lda     (ptr1),y
         sta     default_block_buffer,y

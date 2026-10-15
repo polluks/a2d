@@ -509,33 +509,29 @@ scrambled_flag:                 ; bit7
 ;;; Input loop and processing
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         MGTK_CALL MGTK::GetEvent, event_params
 
-    IF bit scrambled_flag : NC
+      IF bit scrambled_flag : NC
         jsr     PreScramble
-    END_IF
+      END_IF
 
         lda     event_params::kind
-    IF A = #MGTK::EventKind::button_down
+      IF A = #MGTK::EventKind::button_down
         jsr     OnClick
-        jmp     InputLoop
-    END_IF
-
-        ;; key?
-        cmp     #MGTK::EventKind::key_down
-        bne     InputLoop
+      ELSE_IF A = #MGTK::EventKind::key_down
         jsr     CheckKey
-        jmp     InputLoop
+      END_IF
+    FOREVER
+
 .endproc ; InputLoop
 
         ;; click - where?
 .proc OnClick
         MGTK_CALL MGTK::FindWindow, findwindow_params
 
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        bne     bail
+        IF u8 findwindow_params::window_id <> #kDAWindowId GOTO bail
 
         lda     findwindow_params::which_area
     IF ZERO
@@ -730,18 +726,13 @@ nope:   RETURN  C=0
         clc
         adc     hole_x
         tay
-        lda     click_x
-        cmp     hole_x
-        beq     ClickInCol
-        lda     click_y
-        cmp     hole_y
-        beq     ClickInRow
+        IF u8 click_x = hole_x GOTO ClickInCol
+        IF u8 click_y = hole_y GOTO ClickInRow
 
 miss:   rts                     ; Click on hole, or not row/col with hole
 
 .proc ClickInRow
-        lda     click_x
-        cmp     hole_x
+        ucmp8   click_x, hole_x
         beq     miss
     IF LT
         lda     hole_x          ; click before of hole
@@ -768,26 +759,25 @@ miss:   rts                     ; Click on hole, or not row/col with hole
 .endproc ; ClickInRow
 
 .proc ClickInCol
-        lda     click_y
-        cmp     hole_y
+        ucmp8   click_y, hole_y
         beq     miss
-        bcs     after
-
+    IF LT
         lda     hole_y          ; click before hole
         sec
         sbc     click_y
         tax
 
-    DO
+      DO
         copy8   position_table-4,y, position_table,y
         dey
         dey
         dey
         dey
-    WHILE dex : NOT_ZERO
-        beq     col
+      WHILE dex : NOT_ZERO
+        beq     col             ; always
+    END_IF
 
-after:  lda     click_y         ; click after hole
+        lda     click_y         ; click after hole
         sec
         sbc     hole_y
         tax
@@ -954,8 +944,7 @@ ret:    rts
         ;; Returns with carry set if puzzle complete
 .proc CheckVictory        ; Allows for swapped indistinct pieces, etc.
         ;; 0/12 can be swapped
-        lda     position_table
-    IF NOT_ZERO
+    IF u8 position_table <> #0
         cmp     #12
         bne     nope
     END_IF
@@ -969,50 +958,22 @@ ret:    rts
     WHILE iny : Y < #5
 
         ;; 5/6 are identical
-        lda     position_table+5
-    IF A <> #5
-        cmp     #6
-        bne     nope
-    END_IF
-
-        lda     position_table+6
-    IF A <> #5
-        cmp     #6
-        bne     nope
-    END_IF
+        IF lda position_table+5 : A <> #5 AND A <> #6 GOTO nope
+        IF lda position_table+6 : A <> #5 AND A <> #6 GOTO nope
 
         ;; Check 7/8
-        lda     position_table+7
-        cmp     #7
-        bne     nope
-        lda     position_table+8
-        cmp     #8
-        bne     nope
+        IF u8 position_table+7 <> #7 GOTO nope
+        IF u8 position_table+8 <> #8 GOTO nope
 
         ;; 9/10 are identical
-        lda     position_table+9
-    IF A <> #9
-        cmp     #10
-        bne     nope
-    END_IF
-
-        lda     position_table+10
-    IF A <> #9
-        cmp     #10
-        bne     nope
-    END_IF
+        IF lda position_table+9 : A <> #9 AND A <> #10 GOTO nope
+        IF lda position_table+10 : A <> #9 AND A <> #10 GOTO nope
 
         ;; Check 11
-        lda     position_table+11
-        cmp     #11
-        bne     nope
+        IF u8 position_table+11 <> #11 GOTO nope
 
         ;; 0/12 can be swapped
-        lda     position_table+12
-    IF NOT_ZERO
-        cmp     #12
-        bne     nope
-    END_IF
+        IF lda position_table+12 : NOT ZERO AND A <> #12 GOTO nope
 
         ;; Check 13/14/15/16
         ldy     #13
@@ -1032,8 +993,7 @@ nope:   RETURN  C=0
 .proc FindHole
         ldy     #15
     DO
-        lda     position_table,y
-        BREAK_IF A = #kHolePiece
+        BREAK_IF u8 position_table,y = #kHolePiece
     WHILE dey : POS             ; always
 
         lda     #0

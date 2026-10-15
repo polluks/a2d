@@ -88,7 +88,9 @@ xcoord  .word
 ```
 
 
-## Flow control
+## Control Flow
+
+See [Flow.md](Flow.md) for details of the control flow macros used heavily in the project.
 
 * **Do** use `IF` / `ELSE_IF` / `ELSE` / `END_IF` macros to avoid throw-away local labels.
 
@@ -179,7 +181,7 @@ xcoord  .word
 
 * Use binary `%00110110` for bit patterns
 * Use decimal for numbers (counts, dimensions, etc)
-    * For negative numbers, the `AS_BYTE(-1)` and `AS_WORD(-1)` macros are handy.
+    * For negative numbers, the `AS_BYTE{-1}` and `AS_WORD{-1}` macros are handy.
 * Use hex for geeky values, e.g. $7F (bit mask), $80 (high bit), $FF (all bits set) when bits would be less readable.
 * Avoid magic numbers where possible:
     * Define local symbols (e.g. `ptr := $06`)
@@ -261,13 +263,16 @@ SomeRoutine := SomeRoutineImpl::start
 The following macros should be used to improve code readability by eliminating repetition:
 
 * pseudo-ops:
-  * `add16`/`sub16`/`cmp16`/`lsr16`/`asl16`/`inc16`/`dec16` for 16-bit operations
+  * `add16`/`sub16`/`lsr16`/`asl16`/`inc16`/`dec16` for 16-bit operations
+  * `ucmp16`/`scmp16`/`ecmp16` for unsigned/signed/equality 16-bit comparisons
+  * `ucmp8` for consistency
   * `ldax`/`ldxy`/`stax`/`stxy` for 16-bit load/stores
   * `copy8`/`copy16` for load-then-store
+  * See [MultiByte.md](MultiByte.md) for more details.
   * `jcc`/`jeq`/etc for long branches
 * memory:
   * `COPY_xx` for fixed size copy loops
-* flow control:
+* control flow:
   * `IF`/`ELSE_IF`/`ELSE`/`END_IF` for conditional branches, to avoid throw-away labels
   * `DO`/`REDO_IF`/`CONTINUE_IF`/`BREAK_IF`/`WHILE` for loopings, to avoid throw-away labels
   * `CALL proc, AX=params, Y=#opt` (and `TAIL_CALL`) for more semantic function calls

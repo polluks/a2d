@@ -32,10 +32,6 @@
         fmi       :=   $E4
         fmk       :=   $E5
 
-        key       :=   $C000
-        strobe    :=   $C010
-        fullscr   :=   $C052
-
         pread     :=   $FB1E
         settx     :=   $FB39
         setgr     :=   $FB40
@@ -62,7 +58,7 @@ event_params:   .tag MGTK::Event
 kMainPageClearByte = ' '|$80    ; space
 kAuxPageClearByte  = $C0        ; light-green on black, for RGB cards
 
-.proc Start
+.scope Start
         JUMP_TABLE_MGTK_CALL MGTK::FlushEvents
         JUMP_TABLE_MGTK_CALL MGTK::HideCursor
 
@@ -115,7 +111,7 @@ kAuxPageClearByte  = $C0        ; light-green on black, for RGB cards
         JUMP_TABLE_MGTK_CALL MGTK::ShowCursor
         jmp     JUMP_TABLE_RGB_MODE
 
-.endproc ; Start
+.endscope ; Start
 
 ;;; ============================================================
 
@@ -153,9 +149,7 @@ kAuxPageClearByte  = $C0        ; light-green on black, for RGB cards
         dey
       WHILE POS
 
-        inc     CV
-        lda     CV
-    WHILE A <> #24
+    WHILE u8 ++CV <> #24
 
         sta     CLR80STORE
         rts
@@ -191,9 +185,7 @@ kAuxPageClearByte  = $C0        ; light-green on black, for RGB cards
         dey
       WHILE POS
 
-        inc     CV
-        lda     CV
-    WHILE A <> #24
+    WHILE u8 ++CV <> #24
 
         sta     CLR80STORE
         rts
@@ -306,16 +298,14 @@ del1:   ;; See if there's an event that should make us exit.
         jsr     CopyEventAuxToMain
 
         lda     event_params + MGTK::Event::kind
-        cmp     #MGTK::EventKind::button_down
-        beq     exit
-        cmp     #MGTK::EventKind::key_down
-        beq     exit
+        IF A = #MGTK::EventKind::button_down GOTO exit
+        IF A = #MGTK::EventKind::key_down GOTO exit
         rts
 
 exit:   pla                     ;pop stack
         pla
         jsr     settx
-        lda     fullscr
+        lda     MIXCLR
         lda     HIRESON
         rts                     ;return to A2D
 ;
@@ -437,8 +427,6 @@ bcnt:   dex
 .endproc ; Run
 
 ;;; ============================================================
-
-da_end  := *
 
 save_buffer := *
 

@@ -203,8 +203,8 @@ pensize_frame:  .byte   kBorderDX, kBorderDY
         DEFINE_RECT rect_erase_dialog_upper, kEraseLeft, 20, kEraseRight, 103 ; under title to bottom of buttons
         DEFINE_RECT rect_erase_dialog_lower, kEraseLeft, 103, kEraseRight, kDialogHeight-4 ; top of buttons to bottom of dialog
 
-        kButtonsLeft = 210
-        kButtonsRight = 440
+        kButtonsLeft = 240
+        kButtonsRight = 450
 
         DEFINE_BUTTON dialog_ok_button, winfo_dialog::kWindowId, res_string_button_ok, kGlyphReturn, kButtonsRight-90, 90
 
@@ -393,7 +393,7 @@ kListBoxOffsetLeft = 20
 kListBoxOffsetTop = 30
 kListBoxLeft = kDialogLeft + kListBoxOffsetLeft
 kListBoxTop = kDialogTop + kListBoxOffsetTop
-kListBoxWidth = 150
+kListBoxWidth = 170
 kListBoxHeight = kListItemHeight*kListRows-1
 
         kListBoxWindowId = 2
@@ -590,9 +590,8 @@ check_source_finish:
         lda     main::on_line_buffer2
         and     #NAME_LENGTH_MASK
     IF ZERO                     ; 0 signals error
-        lda     main::on_line_buffer2+1
-        cmp     #ERR_NOT_PRODOS_VOLUME
-        jne     try_format      ; Some other error - proceed with format
+        ucmp8   main::on_line_buffer2+1, #ERR_NOT_PRODOS_VOLUME
+        bne     try_format      ; Some other error - proceed with format
     END_IF
 
 dest_ok:
@@ -690,7 +689,7 @@ do_copy:
         ;; Get actual block count. If source is ProDOS, use volume
         ;; header. Otherwise infer from device details.
         bit     source_disk_format
-        ASSERT_EQUALS auxlc::kSourceDiskFormatProDOS & $80, $00
+        ASSERT_EQUALS auxlc::kSourceDiskFormatProDOS & ::N_FLAG_MASK, $00
     IF NC
         ;; ProDOS - use volume header
         ldx     source_drive_index
@@ -720,7 +719,7 @@ do_copy:
         jsr     DrawTotalBlocks
 
         ;; Blocks read/written so far
-        ldax    #AS_WORD(-1)
+        ldax    #AS_WORD{-1}
         stax    blocks_read
         stax    blocks_written
 
@@ -796,8 +795,7 @@ check:  lda     current_drive_selection
 .proc MaybePromptDiskSwap
         stx     message
 
-        lda     source_drive_index
-    IF A = dest_drive_index
+    IF u8 source_drive_index = dest_drive_index
 
         tax                     ; A = index
         lda     drive_unitnum_table,x
@@ -831,11 +829,9 @@ loop:   jsr     SystemTask
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params::kind
 
-        cmp     #MGTK::EventKind::button_down
-        jeq     HandleClick
+        IF A = #MGTK::EventKind::button_down JUMP HandleClick
+        IF A <> #MGTK::EventKind::key_down GOTO loop
 
-        cmp     #MGTK::EventKind::key_down
-        bne     loop
         jmp     HandleKey
 
 ;;; ============================================================
@@ -868,10 +864,8 @@ menu_offset_table:
         RETURN  A=#$FF
       END_IF
 
-        lda     event_params::modifiers
-    IF ZERO
-        lda     event_params::key
-      IF A <> #CHAR_ESCAPE
+    IF u8 event_params::modifiers = #0
+      IF u8 event_params::key <> #CHAR_ESCAPE
         CALL    ToUpperCase, A=event_params::key
 
        IF A = #kShortcutReadDisk
@@ -1004,8 +998,7 @@ CmdDiskCopy := SetCopyModeImpl::disk_copy
 
 .proc UpdateOKButton
         lda     current_drive_selection
-        and     #$80
-        .assert BTK::kButtonStateDisabled = $80, error, "const mismatch"
+        and     #BTK::kButtonStateDisabled
 
         cmp     dialog_ok_button::state
         beq     ret
@@ -1136,15 +1129,8 @@ params: .res    3
 ;;; Output: C=0 if Pascal volume, C=1 otherwise
 
 .proc IsPascalBootBlock
-        lda     default_block_buffer+1
-        cmp     #$E0
-        bne     fail
-
-        lda     default_block_buffer+2
-        cmp     #$70
-        beq     match
-        cmp     #$60
-        beq     match
+        IF u8 default_block_buffer+1 <> #$E0 GOTO fail
+        IF lda default_block_buffer+2 : A = #$70 OR A = #$60 GOTO match
 
 fail:   RETURN  C=1
 
@@ -1156,16 +1142,10 @@ match:  RETURN  C=0
 ;;; Output: C=0 if DOS 3.3 volume, C=1 otherwise
 
 .proc IsDOS33BootBlock
-        lda     default_block_buffer+1
-        cmp     #$A5
-        bne     fail
-        lda     default_block_buffer+2
-        cmp     #$27
-        beq     match
-
-fail:   RETURN  C=1
-
-match:  RETURN  C=0
+    IF u8 default_block_buffer+1 <> #$A5 OR u8 default_block_buffer+2 <> #$27
+        RETURN  C=1
+    END_IF
+        RETURN  C=0
 .endproc ; IsDOS33BootBlock
 
 ;;; ============================================================
@@ -1262,7 +1242,7 @@ match:  RETURN  C=0
         asl16   case_bits       ; Shift out high byte first
       IF CS
         lda     (ptr),y
-        ora     #AS_BYTE(~CASE_MASK) ; guarded by `kBuildSupportsLowercase`
+        ora     #AS_BYTE{~CASE_MASK} ; guarded by `kBuildSupportsLowercase`
         sta     (ptr),y
       END_IF
     WHILE iny : Y < #16         ; bits
@@ -1403,8 +1383,7 @@ fallback:
         ;; Valid ProDOS volume
 
         ldx     num_drives
-        lda     drive_unitnum_table,x
-       IF A = DISK_COPY_INITIAL_UNIT_NUM
+       IF u8 drive_unitnum_table,x = DISK_COPY_INITIAL_UNIT_NUM
         copy8   num_drives, current_drive_selection
        END_IF
 
@@ -1451,7 +1430,7 @@ next_device:
         asl     a
         tax
 
-      IF ecmp16 block_count_table,x, src_block_count : EQ
+      IF u16 block_count_table,x = src_block_count
         ;; Same - add it
         pla                     ; A = index
         pha
@@ -1686,10 +1665,10 @@ remainder:      .word   0              ; (out)
         MGTK_CALL MGTK::DrawStringForward, str_slot_drive_pattern
 
         bit     source_disk_format
-        ASSERT_EQUALS auxlc::kSourceDiskFormatProDOS & $80, $00
+        ASSERT_EQUALS auxlc::kSourceDiskFormatProDOS & ::N_FLAG_MASK, $00
         bpl     show_name       ; ProDOS
 
-        ASSERT_EQUALS auxlc::kSourceDiskFormatDOS33 & $40, $00
+        ASSERT_EQUALS auxlc::kSourceDiskFormatDOS33 & ::V_FLAG_MASK, $00
         bvc     ret             ; DOS 3.3
 
         lda     source_disk_format
@@ -1727,13 +1706,13 @@ ret:    rts
         MGTK_CALL MGTK::MoveTo, point_disk_copy
 
         bit     source_disk_format
-        ASSERT_EQUALS auxlc::kSourceDiskFormatProDOS & $80, $00
+        ASSERT_EQUALS auxlc::kSourceDiskFormatProDOS & ::N_FLAG_MASK, $00
     IF NC                       ; ProDOS
         MGTK_CALL MGTK::DrawStringForward, str_prodos_disk_copy
         rts
     END_IF
 
-        ASSERT_EQUALS auxlc::kSourceDiskFormatDOS33 & $40, $00
+        ASSERT_EQUALS auxlc::kSourceDiskFormatDOS33 & ::V_FLAG_MASK, $00
     IF VC                       ; DOS 3.3
         MGTK_CALL MGTK::DrawStringForward, str_dos33_disk_copy
         rts
@@ -1781,8 +1760,7 @@ ret:    rts
         jsr     SetPortForDialog
         CALL    IntToStringWithSeparators, AX=main::block_params::block_num
 
-        lda     err_writing_flag
-    IF ZERO
+    IF u8 err_writing_flag = #0
         MGTK_CALL MGTK::MoveTo, error_reading_label_pos
         MGTK_CALL MGTK::DrawStringForward, error_reading_label_str
         jsr     DrawIntString
@@ -2168,18 +2146,15 @@ ShowAlertDialog := ShowAlertDialogImpl::start
         lda     main::on_line_buffer
         and     #NAME_LENGTH_MASK
         bne     done
-        lda     main::on_line_buffer+1
-        cmp     #ERR_NOT_PRODOS_VOLUME
+        ucmp8   main::on_line_buffer+1, #ERR_NOT_PRODOS_VOLUME
         beq     done
 
         jsr     SystemTask
         MGTK_CALL MGTK::GetEvent, Alert::event_params
-        lda     Alert::event_kind
-        cmp     #MGTK::EventKind::key_down
+        ucmp8   Alert::event_kind, #MGTK::EventKind::key_down
         bne     @retry
 
-        lda     Alert::event_key
-        cmp     #CHAR_ESCAPE
+        ucmp8   Alert::event_key, #CHAR_ESCAPE
         bne     @retry
         RETURN  A=#$80
 
@@ -2194,6 +2169,9 @@ Alert := alert_dialog::Alert
 ;;; Returns 0 if the periodic tasks were run.
 
 .proc SystemTask
+
+TestInterceptSystemTask:
+
         kMaxCounter = $E0       ; arbitrary
 
         inc     loop_counter

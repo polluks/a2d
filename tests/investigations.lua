@@ -11,20 +11,17 @@ DISKARGS="-hard1 $HARDIMG -flop1 prodos_floppy1.dsk"
 
   ============================================================]]
 
-a2d.ConfigureRepaintTime(0.25)
-
-
 test.Step(
   "clicking title bar in inactive window treated as drag",
   function()
-    a2d.AddShortcut("/A2.DESKTOP")
+    desktop.AddShortcut("/A2.DESKTOP")
     function OpenVolumeWindow() a2d.OAShortcut("1") end
 
-    a2d.OpenPath("/RAM1")
+    desktop.OpenWindow("/RAM1")
     local ram_id = a2dtest.GetFrontWindowID()
 
     OpenVolumeWindow()
-    a2d.MoveWindowBy(0, 100)
+    desktop.MoveWindowBy(0, 100)
 
     local x,y = a2dtest.GetWindowDragCoords(ram_id)
     -- click title bar of inactive window
@@ -58,7 +55,8 @@ test.Step(
 
     apple2.ControlOAReset()
     a2d.WaitForDesktopReady()
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_ADD_A_SHORTCUT)
+    a2dtest.WaitForSystemTask()
     test.Snap("keyboard shortcuts should not be enabled")
     a2d.DialogCancel()
 end)

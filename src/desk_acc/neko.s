@@ -192,8 +192,8 @@ grow_box_bitmap:
 
 .proc DrawGrowBox
         MGTK_CALL MGTK::SetPenMode, notpencopy
-        sub16_8 winfo::maprect::x2, #kGrowBoxWidth, grow_box_params::viewloc::xcoord
-        sub16_8 winfo::maprect::y2, #kGrowBoxHeight, grow_box_params::viewloc::ycoord
+        sub16   winfo::maprect::x2, #kGrowBoxWidth, grow_box_params::viewloc::xcoord
+        sub16   winfo::maprect::y2, #kGrowBoxHeight, grow_box_params::viewloc::ycoord
         MGTK_CALL MGTK::PaintBits, grow_box_params
         rts
 .endproc ; DrawGrowBox
@@ -264,8 +264,8 @@ reserved:       .byte   0
 
         ;; Stash rect of this frame so we can optionally erase it next time
         COPY_STRUCT frame_params::viewloc, erase_rect::topleft
-        add16_8 frame_params::viewloc::xcoord, #kNekoWidth-1, erase_rect::x2
-        add16_8 frame_params::viewloc::ycoord, #kNekoHeight-1, erase_rect::y2
+        add16   frame_params::viewloc::xcoord, #kNekoWidth-1, erase_rect::x2
+        add16   frame_params::viewloc::ycoord, #kNekoHeight-1, erase_rect::y2
 
         ;; And conveniently it's what we can use to minimize cursor flash
         MGTK_CALL MGTK::SetPenMode, notpencopy
@@ -393,17 +393,21 @@ ep_size := * - ep_start
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         jsr JUMP_TABLE_SYSTEM_TASK
+
         JUMP_TABLE_MGTK_CALL MGTK::GetEvent, aux::event_params
         jsr     CopyEventDataToMain
         lda     event_params::kind
-        cmp     #MGTK::EventKind::button_down
-        beq     HandleDown
-        cmp     #MGTK::EventKind::key_down
-        beq     HandleKey
-        cmp     #MGTK::EventKind::no_event
-        bne     InputLoop
-        jmp     HandleNoEvent
+      IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      ELSE_IF A = #MGTK::EventKind::no_event
+        jsr     HandleNoEvent
+      END_IF
+
+    FOREVER
 .endproc ; InputLoop
 
 ;;; ============================================================
@@ -416,15 +420,18 @@ ep_size := * - ep_start
         jsr     ToUpperCase
         cmp     #kShortcutCloseWindow
         beq     Exit
-        bne     InputLoop       ; always
+        rts
     END_IF
 
-        cmp     #CHAR_ESCAPE
-        bne     InputLoop
+        RTS_IF A <> #CHAR_ESCAPE
+
         FALL_THROUGH_TO Exit
 .endproc ; HandleKey
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         JUMP_TABLE_MGTK_CALL MGTK::CloseWindow, aux::winfo
         jmp JUMP_TABLE_CLEAR_UPDATES
 .endproc ; Exit
@@ -434,17 +441,13 @@ ep_size := * - ep_start
 .proc HandleDown
         JUMP_TABLE_MGTK_CALL MGTK::FindWindow, aux::findwindow_params
         jsr     CopyEventDataToMain
-        lda     findwindow_params::window_id
-        cmp     #aux::kDAWindowId
-        bne     InputLoop
+        RTS_IF u8 findwindow_params::window_id <> #aux::kDAWindowId
+
         lda     findwindow_params::which_area
-        cmp     #MGTK::Area::close_box
-        beq     HandleClose
-        cmp     #MGTK::Area::dragbar
-        beq     HandleDrag
-        cmp     #MGTK::Area::content
-        beq     HandleGrow
-        bne     InputLoop       ; always
+        IF A = #MGTK::Area::close_box GOTO HandleClose
+        IF A = #MGTK::Area::dragbar GOTO HandleDrag
+        IF A = #MGTK::Area::content GOTO HandleGrow
+        rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -454,7 +457,7 @@ ep_size := * - ep_start
         jsr     CopyEventDataToMain
         lda     trackgoaway_params::clicked
         bne     Exit
-        beq     InputLoop       ; always
+        rts
 .endproc ; HandleClose
 
 ;;; ============================================================
@@ -473,7 +476,7 @@ common: jsr     CopyEventDataToMain
         ;; Draw DA's window
         jsr     DrawWindow
 
-finish: jmp     InputLoop
+finish: rts
 .endproc ; HandleDrag
 
 ;;; ============================================================
@@ -490,11 +493,10 @@ finish: jmp     InputLoop
         jsr     CopyEventDataToMain
         jsr     GetWindowRect
         sub16   win_rect::x2, screentowindow_params::windowx, tmpw
-        cmp16   #aux::kGrowBoxWidth, tmpw
-        bcc     HandleDrag::finish
+        IF u16 tmpw > #aux::kGrowBoxWidth GOTO HandleDrag::finish
+
         sub16   win_rect::y2, screentowindow_params::windowy, tmpw
-        cmp16   #aux::kGrowBoxHeight, tmpw
-        bcc     HandleDrag::finish
+        IF u16 tmpw > #aux::kGrowBoxHeight GOTO HandleDrag::finish
 
         ;; Initiate the grow... re-using the drag logic
         copy8   #aux::kDAWindowId, growwindow_params::window_id
@@ -523,15 +525,17 @@ kMove      = 8                   ; scaled 2x in x dimension
 skip:   .word   0
 
 .proc HandleNoEvent
+        JUMP_TABLE_MGTK_CALL MGTK::WaitVBL
+
         ;; Throttle animation
         lda     skip
         ora     skip+1
     IF NOT_ZERO
         dec16   skip
-        jmp     InputLoop
+        rts
     END_IF
 
-        copy16  #175, skip
+        copy16  #20, skip
 
         ;; --------------------------------------------------
         ;; Tick once per frame; used to alternate frames
@@ -574,18 +578,15 @@ skip:   .word   0
         lsr16   y_delta          ; force down to 8 bits
 
         ;; Beyond threshold?
-        lda     x_delta
-    IF A < #kThreshold
-        lda     y_delta
-      IF A < #kThreshold
+    IF u8 x_delta < #kThreshold
+      IF u8 y_delta < #kThreshold
         ldx     #0              ; no; null out the deltas
         beq     skip_encode     ; always
       END_IF
     END_IF
 
         ;; Yes - do math to scale the deltas
-        lda     x_delta
-    IF A >= y_delta
+    IF u8 x_delta >= y_delta
         ;; x dominant:
         ;; * y_delta = kMove * y_delta / x_delta
         ;; * x_delta = kMove
@@ -617,8 +618,7 @@ skip:   .word   0
         ;; Encode direction into 4 bits %0000xxyy
         ;;  00 = no, 01 = +ve, 10 = -ve, 11 = (not used)
         ldx     #0
-        lda     x_delta
-    IF A >= #kMove/2
+    IF u8 x_delta >= #kMove/2
       IF bit x_neg: NEG
         inx
       END_IF
@@ -629,8 +629,7 @@ skip:   .word   0
         asl
         tax
 
-        lda     y_delta
-    IF A >= #kMove/2
+    IF u8 y_delta >= #kMove/2
       IF bit y_neg : NEG
         inx
       END_IF
@@ -659,7 +658,7 @@ new_state:
         ;; ------------------------------
     IF A = #NekoState::rest
         ;; ------------------------------
-      IF lda dir : NOT_ZERO
+      IF u8 dir <> #0
         TAIL_CALL set_state_and_frame, X=#NekoState::chase, A=#NekoFrame::surprise
       END_IF
 
@@ -681,7 +680,7 @@ new_state:
         ;; ------------------------------
     IF A = #NekoState::chase
         ;; ------------------------------
-      IF lda dir : ZERO
+      IF u8 dir = #0
         TAIL_CALL set_state_and_frame, X=#NekoState::rest, A=#NekoFrame::sitting
       END_IF
 
@@ -746,8 +745,7 @@ new_state:
         ;; ------------------------------
         ;; IF A = #NekoState::sleep
         ;; ------------------------------
-        lda     dir
-      IF NOT_ZERO
+      IF u8 dir <> #0
         ldx     #NekoState::chase
         lda     #NekoFrame::surprise
         bne     set_state_and_frame ; always
@@ -764,7 +762,7 @@ set_frame:
         sta     cur_frame
         jsr     DrawCurrentFrame
 
-        jmp     InputLoop
+        rts
 
 ;;; Apply the deltas and clamp
 ;;; Outputs: Y = number of clampings done (0, 1 or 2)
@@ -802,17 +800,17 @@ set_frame:
         jsr     GetWindowRect
 
         sub16   win_rect::x2, win_rect::x1, tmp16
-        sub16_8 tmp16, #kNekoWidth-1, tmp16
+        sub16   tmp16, #kNekoWidth-1, tmp16
 
-    IF cmp16 x_pos, tmp16 : GE
+    IF u16 x_pos >= tmp16
         copy16  tmp16, x_pos
         iny
     END_IF
 
         sub16   win_rect::y2, win_rect::y1, tmp16
-        sub16_8 tmp16, #kNekoHeight + aux::kGrowBoxHeight, tmp16
+        sub16   tmp16, #kNekoHeight + aux::kGrowBoxHeight, tmp16
 
-    IF cmp16 y_pos, tmp16 : GE
+    IF u16 y_pos >= tmp16
         copy16  tmp16, y_pos
         iny
     END_IF

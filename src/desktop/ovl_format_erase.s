@@ -39,8 +39,8 @@
 
 ;;; A = operation (Format/Erase); X = unit num (or 0)
 Exec:
-        cmp     #FormatEraseAction::format
-        jeq     FormatDisk
+        IF A = #FormatEraseAction::format \
+          JUMP FormatDisk
         jmp     EraseDisk
 
 ;;; ============================================================
@@ -115,7 +115,7 @@ Exec:
         CALL    main::DrawDialogLabel, Y=#2, AX=#aux::str_location
 
         ;; Find `DEVLST` index of selected/specified device
-        ldx     #AS_BYTE(-1)
+        ldx     #AS_BYTE{-1}
     DO
         inx
         lda     DEVLST,x
@@ -162,8 +162,7 @@ loop2:
         push16  #ovl_string_buf
         FORMAT_MESSAGE 1, aux::str_confirm_erase_format
         CALL    ShowAlertParams, Y=#AlertButtonOptions::OKCancel, AX=#text_input_buf
-        cmp     #kAlertResultOK
-        bne     cancel
+        IF A <> #kAlertResultOK GOTO cancel
 .endscope
 
         ;; Confirmed!
@@ -217,8 +216,7 @@ l12:    pha
     END_IF
 
         CALL    ShowAlertParams, Y=#AlertButtonOptions::TryAgainCancel, AX=#aux::str_formatting_error
-        cmp     #kAlertResultCancel
-        bne     retry
+        IF A <> #kAlertResultCancel GOTO retry
 
 finish:
         pha
@@ -267,8 +265,7 @@ retry:
     END_IF
 
         CALL    ShowAlertParams, Y=#AlertButtonOptions::TryAgainCancel, AX=#aux::str_erasing_error
-        cmp     #kAlertResultCancel
-        bne     retry
+        IF A <> #kAlertResultCancel GOTO retry
 
 finish:
         pha
@@ -378,7 +375,7 @@ END_PARAM_BLOCK
         copy16  #buf, string_width_params::str
       DO
         MGTK_CALL MGTK::StringWidth, string_width_params
-        BREAK_IF cmp16 string_width_params::width, #kVolPickerItemWidth : LT
+        BREAK_IF u16 string_width_params::width < #kVolPickerItemWidth
         ;; Shrink by one character, replace last 3 with "..."
         dec     buf
         ldy     buf
@@ -672,14 +669,12 @@ got_blocks:
 
         lda     write_block_params::block_num+1 ; Are we at a block >255?
         bne     fail            ; Then something's gone horribly wrong and we need to stop
-        lda     write_block_params::block_num
-        cmp     #6              ; Are we anywhere other than block 6?
+        ucmp8   write_block_params::block_num, #6 ; Are we anywhere other than block 6?
         bne     gowrite         ; Then go ahead and write the bitmap block as-is
 
         ;; Block 6 - Set up the volume bitmap to protect the blocks at the beginning of the volume
         copy8   #$01, block_buffer ; Mark blocks 0-6 in use
-        lda     lastblock       ; What's the last block we need to protect?
-        cmp     #7
+        ucmp8   lastblock, #7   ; What's the last block we need to protect?
         bcc     gowrite         ; If it's less than 7, default to always protecting 0-6
 
         copy8   #$00, block_buffer ; Otherwise (>=7) mark blocks 0-7 as "in use"
@@ -702,7 +697,7 @@ got_blocks:
         ;; Call the write/increment/zero routine, and loop back if we're not done
 gowrite:
         jsr     WriteBlockAndZero
-    WHILE lda lastblock : A >= write_block_params::block_num
+    WHILE u8 lastblock >= write_block_params::block_num
 
         ;; Success
         lda     #$00
@@ -743,8 +738,7 @@ lastblock:
         sta     block_buffer+$100,y ; with $FF bytes
     WHILE iny : NOT_ZERO
 
-        lda     write_block_params::block_num
-        cmp     lastblock       ; Is this the last block?
+        ucmp8   write_block_params::block_num, lastblock ; Is this the last block?
         bne     builddone       ; No, then just use the full block of $FF's
 
         ldy     total_blocks    ; Get the offset to the last byte that needs to be updated
@@ -865,16 +859,11 @@ prodos_loader_blocks:
         copy16  #0, read_block_params::block_num
         MLI_CALL READ_BLOCK, read_block_params
     IF CC
-        lda     read_buffer + 1
-      IF A <> #kPascalSig1      ; DOS 3.3?
+      IF u8 read_buffer + 1 <> #kPascalSig1 ; DOS 3.3?
         jmp     maybe_dos       ; Maybe...
       END_IF
 
-        lda     read_buffer + 2
-        cmp     #kPascalSig2a
-        beq     pascal
-        cmp     #kPascalSig2b
-        beq     pascal
+        IF lda read_buffer + 2 : A = #kPascalSig2a OR A = #kPascalSig2b GOTO pascal
         FALL_THROUGH_TO unknown
     END_IF
 
@@ -896,11 +885,7 @@ pascal: CALL    pascal_disk, AX=#ovl_string_buf
 
         ;; Maybe DOS 3.3, not sure yet...
 maybe_dos:
-        cmp     #kDOS33Sig1
-        bne     unknown
-        lda     read_buffer + 2
-        cmp     #kDOS33Sig2
-        bne     unknown
+        IF A <> #kDOS33Sig1 OR u8 read_buffer + 2 <> #kDOS33Sig2 GOTO unknown
 
         ;; DOS 3.3, use slot and drive
         CALL    _GetSlotNum, A=read_block_params::unit_num

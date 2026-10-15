@@ -211,19 +211,24 @@ port:           .addr   grafport_win
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         jsr     GetNextEvent
 
-        cmp     #MGTK::EventKind::button_down
-        jeq     HandleDown
+      IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      END_IF
 
-        cmp     #MGTK::EventKind::key_down
-        beq     HandleKey
-
-        bne     InputLoop       ; always
+    FOREVER
 .endproc ; InputLoop
 
 .proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
+
         ldx     listbox_rec::selected_index
     IF NC
         copy8   control_block+ControlBlock::dev_list,x, control_block+ControlBlock::unit_num
@@ -243,7 +248,7 @@ port:           .addr   grafport_win
         copy8   event_params::key, lb_params::key
         copy8   event_params::modifiers, lb_params::modifiers
         LBTK_CALL LBTK::Key, lb_params
-        jmp     InputLoop
+        rts
     END_IF
 
         ldx     event_params::modifiers
@@ -257,7 +262,7 @@ port:           .addr   grafport_win
         jmp     Exit
       END_IF
 
-        jmp     InputLoop
+        rts
     END_IF
 
         ;; Not modified
@@ -269,20 +274,18 @@ port:           .addr   grafport_win
 
     IF A = #CHAR_RETURN
         BTK_CALL BTK::Flash, ok_button
-        jmi     InputLoop
-        jmp     Exit
+        jpl     Exit
+        rts
     END_IF
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleKey
 
 ;;; ============================================================
 
 .proc HandleDown
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::which_area
-        cmp     #MGTK::Area::content
-        bne     done
+        IF u8 findwindow_params::which_area <> #MGTK::Area::content GOTO done
 
         lda     findwindow_params::window_id
     IF A = #kPickerWindowId
@@ -295,33 +298,32 @@ port:           .addr   grafport_win
         jmp     Exit
        END_IF
       END_IF
-        jmp     InputLoop
+        rts
     END_IF
 
-        cmp     #kDAWindowId
-        bne     done
-
+    IF A = #kDAWindowId
         ;; Click in DA content area
         copy8   #kDAWindowId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
 
         MGTK_CALL MGTK::InRect, ok_button::rect
-    IF NOT_ZERO
+      IF NOT_ZERO
         BTK_CALL BTK::Track, ok_button
         bmi     done
         jmp     Exit
-    END_IF
+      END_IF
 
         MGTK_CALL MGTK::InRect, cancel_button::rect
-    IF NOT_ZERO
+      IF NOT_ZERO
         BTK_CALL BTK::Track, cancel_button
         bmi     done
         copy8   #$FF, listbox_rec::selected_index
         jmp     Exit
+      END_IF
     END_IF
 
-done:   jmp     InputLoop
+done:   rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -383,7 +385,7 @@ str_template:
 
 .proc OnSelChange
         lda     listbox_rec::selected_index
-        ASSERT_EQUALS BTK::kButtonStateChecked, %10000000
+        ASSERT_EQUALS BTK::kButtonStateChecked, ::N_FLAG_MASK
         and     #BTK::kButtonStateChecked
         sta     ok_button::state
         BTK_CALL BTK::Hilite, ok_button
@@ -528,16 +530,17 @@ remainder:      .word   0                 ; (out)
 .endproc ; Init
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         jsr     GetNextEvent
 
-        cmp     #MGTK::EventKind::button_down
-        jeq     HandleDown
+      IF A = #MGTK::EventKind::button_down
+        jsr     HandleDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKey
+      END_IF
 
-        cmp     #MGTK::EventKind::key_down
-        beq     HandleKey
-
-        bne     InputLoop       ; always
+    FOREVER
 .endproc ; InputLoop
 
 .proc ExitOK
@@ -546,6 +549,13 @@ remainder:      .word   0                 ; (out)
 .endproc ; ExitOK
 
 .proc Exit
+        tax                     ; A = error code (0 = success)
+
+        ;; Don't return to `InputLoop`
+        pla
+        pla
+
+        txa
         pha                     ; A = error code (0 = success)
         MGTK_CALL MGTK::CloseWindow, winfo_catalog_listbox
         MGTK_CALL MGTK::CloseWindow, winfo_catalog
@@ -562,7 +572,7 @@ remainder:      .word   0                 ; (out)
         copy8   event_params::key, lb_params::key
         copy8   event_params::modifiers, lb_params::modifiers
         LBTK_CALL LBTK::Key, lb_params
-        jmp     InputLoop
+        rts
     END_IF
 
         ldx     event_params::modifiers
@@ -576,7 +586,7 @@ remainder:      .word   0                 ; (out)
         jmp     ExitOK
       END_IF
 
-        jmp     InputLoop
+        rts
     END_IF
 
         ;; Not modified
@@ -587,20 +597,18 @@ remainder:      .word   0                 ; (out)
 
     IF A = #CHAR_RETURN
         BTK_CALL BTK::Flash, import_button
-        jmi     InputLoop
+        RTS_IF NS
         jmp     Import
     END_IF
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleKey
 
 ;;; ============================================================
 
 .proc HandleDown
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::which_area
-        cmp     #MGTK::Area::content
-        bne     done
+        IF u8 findwindow_params::which_area <> #MGTK::Area::content GOTO done
 
         lda     findwindow_params::window_id
     IF A = #kCatalogWindowId
@@ -613,32 +621,31 @@ remainder:      .word   0                 ; (out)
         jmp     Import
        END_IF
       END_IF
-        jmp     InputLoop
+        rts
     END_IF
 
-        cmp     #kDAWindowId
-        bne     done
-
+    IF A = #kDAWindowId
         ;; Click in DA content area
         copy8   #kDAWindowId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
 
         MGTK_CALL MGTK::InRect, import_button::rect
-    IF NOT_ZERO
+      IF NOT_ZERO
         BTK_CALL BTK::Track, import_button
         bmi     done
         jmp     Import
-    END_IF
+      END_IF
 
         MGTK_CALL MGTK::InRect, close_button::rect
-    IF NOT_ZERO
+      IF NOT_ZERO
         BTK_CALL BTK::Track, close_button
         bmi     done
         jmp     ExitOK
+      END_IF
     END_IF
 
-done:   jmp     InputLoop
+done:   rts
 .endproc ; HandleDown
 
 ;;; ============================================================
@@ -652,7 +659,7 @@ done:   jmp     InputLoop
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
         pla                     ; A = error code (0 = success
         jne     Exit
-        jmp     InputLoop
+        rts
 .endproc ; Import
 
 ;;; ============================================================
@@ -742,7 +749,7 @@ done:   jmp     InputLoop
         ;; Name
         copy16  #kNameX, pt::xcoord
         MGTK_CALL MGTK::MoveTo, pt
-        add16_8 ptr, #CatalogEntry::Name, @addr
+        add16   ptr, #CatalogEntry::Name, @addr
         MGTK_CALL MGTK::DrawString, SELF_MODIFIED, @addr
         rts
 .endproc ; DrawListEntryProc
@@ -768,7 +775,7 @@ type_table:
 
 .proc OnSelChange
         lda     listbox_rec::selected_index
-        ASSERT_EQUALS BTK::kButtonStateChecked, %10000000
+        ASSERT_EQUALS BTK::kButtonStateChecked, ::N_FLAG_MASK
         and     #BTK::kButtonStateChecked
         sta     import_button::state
         BTK_CALL BTK::Hilite, import_button
@@ -947,12 +954,8 @@ index:  .byte   0
         ;; Read VTOC
         CALL    do_read, A=#dos33::VTOCTrack, X=#dos33::VTOCSector
         jcs     exit_error
-        lda     RWTS_SECTOR_BUF + dos33::VTOC::NumTracks
-        cmp     #35
-        jne     exit_error
-        lda     RWTS_SECTOR_BUF + dos33::VTOC::NumSectors
-        cmp     #16
-        jne     exit_error
+        IF u8 RWTS_SECTOR_BUF + dos33::VTOC::NumTracks <> #35 JUMP exit_error
+        IF u8 RWTS_SECTOR_BUF + dos33::VTOC::NumSectors <> #16 JUMP exit_error
 
         copy8   RWTS_SECTOR_BUF + dos33::VTOC::VolumeNumber, control_block+ControlBlock::volume_number
 
@@ -998,8 +1001,7 @@ index:  .byte   0
 
        DO
         dex
-        lda     entry_buf+aux::CatalogEntry::Name+1,x
-       WHILE A = #' '
+       WHILE u8 entry_buf+aux::CatalogEntry::Name+1,x = #' '
         inx
        IF ZERO
         inx
@@ -1422,11 +1424,9 @@ start:
         sta     read_block_params::unit_num
         JUMP_TABLE_MLI_CALL READ_BLOCK, read_block_params
     IF ZERO
-        lda     RWTS_BLOCK_BUF+1
-        cmp     #$A5
+        ucmp8   RWTS_BLOCK_BUF+1, #$A5
       IF EQ
-        lda     RWTS_BLOCK_BUF+2
-        cmp     #$27
+        ucmp8   RWTS_BLOCK_BUF+2, #$27
       END_IF
     END_IF
         rts

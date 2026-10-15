@@ -31,7 +31,7 @@
 
         kFontHeight = 11
 
-delta:  .word   AS_WORD(-3)
+delta:  .word   AS_WORD{-3}
         DEFINE_POINT text_pos, kScreenWidth, (kScreenHeight + kFontHeight)/2
 
 placeholder_flag:
@@ -87,25 +87,32 @@ grafport:       .tag MGTK::GrafPort
 ;;; Main Input Loop
 
 .proc InputLoop
+    REPEAT
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params + MGTK::Event::kind
-        cmp     #MGTK::EventKind::key_down  ; any key?
-        beq     HandleKeyDown
-        cmp     #MGTK::EventKind::button_down ; was clicked?
-        beq     exit
+      IF A = #MGTK::EventKind::key_down
+        jsr     HandleKeyDown
+      ELSE_IF A = #MGTK::EventKind::button_down
+        jsr     Exit
+      END_IF
 
         jsr     Animate
-        jmp     InputLoop
+    FOREVER
+.endproc ; InputLoop
 
-exit:
+.proc Exit
+        ;; Don't return to `InputLoop`
+        pla
+        pla
+
         MGTK_CALL MGTK::RedrawDeskTop
 
         MGTK_CALL MGTK::DrawMenuBar
         JSR_TO_MAIN JUMP_TABLE_HILITE_MENU
 
         MGTK_CALL MGTK::ShowCursor
-        rts                     ; exits input loop
-.endproc ; InputLoop
+        rts
+.endproc ; Exit
 
 ;;; ============================================================
 ;;; Handle Key
@@ -120,20 +127,20 @@ exit:
         ;; --------------------------------------------------
         ;; Non-printable
 
-        cmp     #CHAR_ESCAPE
-        beq     InputLoop::exit
+        IF A = #CHAR_ESCAPE GOTO Exit
+
 
     IF A = #CHAR_LEFT
         dec16   delta
-        jmp     InputLoop
+        rts
     END_IF
 
     IF A = #CHAR_RIGHT
         inc16   delta
-        jmp     InputLoop
+        rts
     END_IF
 
-        jmp     InputLoop
+        rts
 
         ;; --------------------------------------------------
         ;; Printable (append char, preserving trailing space)
@@ -149,7 +156,7 @@ printable:
         inc     text_params::length
     END_IF
 
-        jmp     InputLoop
+        rts
 
         ;; --------------------------------------------------
         ;; Backspace (truncate, preserving trailing space)
@@ -157,14 +164,13 @@ printable:
 backspace:
         jsr     maybe_init
 
-        lda     text_params::length
-    IF A >= #3
+    IF u8 text_params::length >= #3
         dec     text_params::length
         ldx     text_params::length
         copy8   #kPadChar, buf-1,x
     END_IF
 
-        jmp     InputLoop
+        rts
 
         ;; --------------------------------------------------
         ;; Initialize on first input
@@ -191,8 +197,7 @@ maybe_init:
 
         MGTK_CALL MGTK::MoveTo, text_pos
 
-        lda     text_params::length
-    IF ZERO
+    IF u8 text_params::length = #0
         copy16  #0, rect::x1
         copy16  #kScreenWidth-1, rect::x2
         MGTK_CALL MGTK::PaintRect, rect
@@ -204,14 +209,14 @@ maybe_init:
         copy16  #0, rect::x1
         sub16   text_pos::xcoord, #1, rect::x2
 
-      IF scmp16 rect::x1, rect::x2 : NEG
+      IF s16 rect::x1 < rect::x2
         MGTK_CALL MGTK::PaintRect, rect
       END_IF
 
         add16   text_pos::xcoord, text_params::width, rect::x1
         copy16  #kScreenWidth-1, rect::x2
 
-      IF scmp16 rect::x1, rect::x2 : NEG
+      IF s16 rect::x1 < rect::x2
         MGTK_CALL MGTK::PaintRect, rect
       END_IF
 
@@ -229,7 +234,7 @@ maybe_init:
         copy16  #kScreenWidth-1, text_pos::xcoord
       END_IF
 
-    ELSE_IF scmp16 text_pos::xcoord, #kScreenWidth : POS
+    ELSE_IF s16 text_pos::xcoord >= #kScreenWidth
         ;; Moving right... and entirely offscreen to right, so wrap to left
         sub16   #0, text_params::width, text_pos::xcoord
     END_IF

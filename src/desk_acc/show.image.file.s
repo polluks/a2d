@@ -168,10 +168,8 @@ event_params:   .tag MGTK::Event
         jsr     CopyEventAuxToMain
 
         lda     event_params + MGTK::Event::kind
-        cmp     #MGTK::EventKind::button_down ; was clicked?
-        jeq     Exit
-        cmp     #MGTK::EventKind::key_down  ; any key?
-        beq     on_key
+        IF A = #MGTK::EventKind::button_down JUMP Exit ; was clicked?
+        IF A = #MGTK::EventKind::key_down GOTO on_key ; any key?
 
         bit     slideshow_flag
         bpl     InputLoop
@@ -198,23 +196,16 @@ on_key:
 
         ldx     event_params + MGTK::Event::modifiers
     IF NOT_ZERO
-        cmp     #kShortcutCloseWindow
-        beq     Exit
-        cmp     #CHAR_LEFT
-        jeq     FirstFile
-        cmp     #CHAR_RIGHT
-        jeq     LastFile
+        IF A = #kShortcutCloseWindow GOTO Exit
+        IF A = #CHAR_LEFT JUMP FirstFile
+        IF A = #CHAR_RIGHT JUMP LastFile
         bne     InputLoop       ; always
     END_IF
 
-        cmp     #CHAR_ESCAPE
-        beq     Exit
-        cmp     #CHAR_RETURN
-        beq     Exit
-        cmp     #CHAR_LEFT
-        jeq     PreviousFile
-        cmp     #CHAR_RIGHT
-        jeq     NextFile
+        IF A = #CHAR_ESCAPE GOTO Exit
+        IF A = #CHAR_RETURN GOTO Exit
+        IF A = #CHAR_LEFT JUMP PreviousFile
+        IF A = #CHAR_RIGHT JUMP NextFile
 
     IF A = #'S'
         tya               ; Y = previous `slideshow_flag` state
@@ -261,7 +252,7 @@ restore_buffer_overlay_flag:
         jsr     MaybeCallExitHook
 
     IF bit restore_buffer_overlay_flag : NS
-        CALL    JUMP_TABLE_RESTORE_OVL, A=#kDynamicRoutineRestoreBuffer
+        CALL    JUMP_TABLE_RESTORE_OVL
     END_IF
 
         jsr     JUMP_TABLE_RGB_MODE
@@ -305,11 +296,8 @@ exit_hook := MaybeCallExitHook::hook
 
         RTS_IF A = #FT_DIRECTORY ; C=1 signals failure
 
-        cmp     #FT_PNT
-        jeq     ShowPackedSHR
-
-        cmp     #FT_PIC
-        jeq     ShowUnpackedSHR
+        IF A = #FT_PNT JUMP ShowPackedSHR
+        IF A = #FT_PIC JUMP ShowUnpackedSHR
 
     IF A = #FT_GRAPHICS
         ;; FOT files
@@ -320,14 +308,9 @@ exit_hook := MaybeCallExitHook::hook
       END_IF
 
         ;; auxtype $4000 / $4001 are packed hires/double-hires
-        cpy     #$40
-        jne     ShowFOTFile
-
-        cpx     #$00
-        jeq     ShowPackedHRFile
-
-        cpx     #$01
-        bne     ShowFOTFile
+        IF Y <> #$40 JUMP ShowFOTFile
+        IF X = #$00 JUMP ShowPackedHRFile
+        IF X <> #$01 GOTO ShowFOTFile
         jmp     ShowPackedDHRFile
     END_IF
 
@@ -339,24 +322,24 @@ exit_hook := MaybeCallExitHook::hook
         JUMP_TABLE_MLI_CALL GET_EOF, get_eof_params
 
         ;; Maybe LR/DLR?
-    IF ecmp16 get_file_info_params::aux_type, #$400 : EQ
-      IF ecmp24 get_eof_params::eof, #$400 : EQ
+    IF u16 get_file_info_params::aux_type = #$400
+      IF u24 get_eof_params::eof = #$400
         TAIL_CALL ShowLRFile
       END_IF
 
-      IF ecmp24 get_eof_params::eof, #$800 : EQ
+      IF u24 get_eof_params::eof = #$800
         TAIL_CALL ShowDLRFile
       END_IF
     END_IF
 
         ;; If bigger than $2000, assume DHR
 
-    IF ucmp24 get_eof_params::eof, #(kHiresSize+1) : GE
+    IF u24 get_eof_params::eof >= #(kHiresSize+1)
         TAIL_CALL ShowDHRFile
     END_IF
 
         ;; If bigger than 576, assume HR
-    IF cmp16 get_eof_params::eof, #kMinipixSrcSize+1 : GE
+    IF u16 get_eof_params::eof >= #kMinipixSrcSize+1
         TAIL_CALL ShowHRFile
     END_IF
 
@@ -911,7 +894,7 @@ dorow:  ldx     #8
         clc
         jsr     PutBit1
         dex
-    WHILE X <> #AS_BYTE(-7)     ; do 7 times == 7 bits
+    WHILE X <> #AS_BYTE{-7}     ; do 7 times == 7 bits
 
         dec     row
         bne     dorow
@@ -1145,8 +1128,7 @@ UnpackRead := UnpackReadImpl::start
         pha
 
         inc     ptr+1
-        lda     ptr+1
-        cmp     #$40            ; did we hit page 2?
+        ucmp8   ptr+1, #$40     ; did we hit page 2?
         bne     exit
         copy8   #$20, ptr+1     ; yes, back to page 1
 
@@ -1499,25 +1481,17 @@ END_PARAM_BLOCK
       IF bit flags : NS         ; bit 7 = compare aux
         iny                     ; ASSERT: Y = FTORecord::aux_suf
         ASSERT_EQUALS ICTRecord::aux_suf, ICTRecord::flags+1
-        lda     aux_type
-        cmp     (ptr),y
-        bne     next
+        IF u8 aux_type <> (ptr),y GOTO next
         iny
-        lda     aux_type+1
-        cmp     (ptr),y
-        bne     next
+        IF u8 aux_type+1 <> (ptr),y GOTO next
       END_IF
 
         ;; Does Block Count matter, and if so does it match?
       IF bit flags : VS         ; bit 6 = compare blocks
         ldy     #ICTRecord::blocks
-        lda     blocks_used
-        cmp     (ptr),y
-        bne     next
+        IF u8 blocks_used <> (ptr),y GOTO next
         iny
-        lda     blocks_used+1
-        cmp     (ptr),y
-        bne     next
+        IF u8 blocks_used+1 <> (ptr),y GOTO next
       END_IF
 
         ;; Filename suffix?
@@ -1631,7 +1605,7 @@ kEntriesPerBlock = $0D
 
         ;; Open directory
         JUMP_TABLE_MLI_CALL OPEN, open_params
-        jcs     exit
+        bcs     exit
 
         lda     open_params::ref_num
         sta     read_params::ref_num
@@ -1640,15 +1614,13 @@ kEntriesPerBlock = $0D
 next_block:
         JUMP_TABLE_MLI_CALL READ, read_params
         bcs     close
-        copy8   #AS_BYTE(-1), entry_in_block
+        copy8   #AS_BYTE{-1}, entry_in_block
         entry_ptr := $08
         copy16  #(block_buf+4 - .sizeof(FileEntry)), entry_ptr
 
 next_entry:
         ;; Advance to next entry
-        lda     entry_in_block
-        cmp     #kEntriesPerBlock
-        beq     next_block
+        IF u8 entry_in_block = #kEntriesPerBlock GOTO next_block
 
         inc     entry_in_block
         add16_8 entry_ptr, #.sizeof(FileEntry)
@@ -1724,8 +1696,7 @@ saw_header_flag:                ; bit7
         inx
     DO
         dex
-        lda     dir_path,x
-    WHILE A <> #'/'
+    WHILE u8 dir_path,x <> #'/'
         dex
         stx     dir_path
 
@@ -1753,13 +1724,13 @@ saw_header_flag:                ; bit7
         ldax    #first_filename
       END_IF
     ELSE_IF NS
-      IF lda next_filename : NOT_ZERO
+      IF u8 next_filename <> #0
         ldax    #next_filename
       ELSE
         ldax    #first_filename
       END_IF
     ELSE
-      IF lda prev_filename : NOT_ZERO
+      IF u8 prev_filename <> #0
         ldax    #prev_filename
       ELSE
         ldax    #last_filename
@@ -1821,9 +1792,7 @@ fail:   jmp     Init
         cpx     last_filename
         bne     not_cur
     DO
-        lda     cur_filename,x
-        cmp     last_filename,x
-        bne     not_cur
+        IF u8 cur_filename,x <> last_filename,x GOTO not_cur
     WHILE dex : NOT_ZERO
 
         SET_BIT7_FLAG seen_flag

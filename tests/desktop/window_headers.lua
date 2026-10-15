@@ -5,8 +5,6 @@ DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv "
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(1)
-
 --[[
   Open a folder with no items. Verify window header says "0 Items"
 
@@ -23,19 +21,19 @@ a2d.ConfigureRepaintTime(1)
 test.Step(
   "Item counts",
   function()
-    a2d.OpenPath("/TESTS/WINDOWS/HEADERS/EMPTY")
+    desktop.OpenWindow("/TESTS/WINDOWS/HEADERS/EMPTY")
     test.ExpectMatch(a2dtest.OCRScreen(), "0 Items", "header should say '0 Items'")
-    a2d.OpenPath("/TESTS/WINDOWS/HEADERS/ONE.ITEM")
+    desktop.OpenWindow("/TESTS/WINDOWS/HEADERS/ONE.ITEM")
     test.ExpectMatch(a2dtest.OCRScreen(), "1 Item", "header should say '1 Item'")
-    a2d.OpenPath("/TESTS/WINDOWS/HEADERS/TWO.ITEMS")
+    desktop.OpenWindow("/TESTS/WINDOWS/HEADERS/TWO.ITEMS")
     test.ExpectMatch(a2dtest.OCRScreen(), "2 Items", "header should say '2 Items'")
 
-    a2d.OpenPath("/TESTS/WINDOWS/HEADERS/EMPTY")
-    a2d.CreateFolder("NEW")
+    desktop.OpenWindow("/TESTS/WINDOWS/HEADERS/EMPTY")
+    desktop.CreateFolder("NEW")
     test.ExpectMatch(a2dtest.OCRScreen(), "1 Item", "header should say '1 Item'")
 
-    a2d.OpenPath("/TESTS/WINDOWS/HEADERS/ONE.ITEM")
-    a2d.CreateFolder("NEW")
+    desktop.OpenWindow("/TESTS/WINDOWS/HEADERS/ONE.ITEM")
+    desktop.CreateFolder("NEW")
     test.ExpectMatch(a2dtest.OCRScreen(), "2 Items", "header should say '2 Items'")
 end)
 
@@ -62,7 +60,7 @@ test.Step(
         "used/free ready", function()
           ocr = a2dtest.OCRFrontWindowContent()
           return ocr:match("Item.*available")
-      end)
+        end, {wait=1})
 
       local _, _, used, free = ocr:find(
         "Items? +(%d+[,.]?%d*)K in disk + (%d+[,.]?%d*)K available")
@@ -71,35 +69,35 @@ test.Step(
       return tonumber(used), tonumber(free)
     end
 
-    a2d.OpenPath("/RAM1")
-    a2d.GrowWindowBy(100, 0)
+    desktop.OpenWindow("/RAM1")
+    desktop.GrowWindowBy(100, 0)
     local used, free = GetUsedFree()
 
-    a2d.CreateFolder("NEW")
+    desktop.CreateFolder("NEW")
     local new_used, new_free = GetUsedFree()
     test.ExpectEquals(new_used - used, 0.5, "'K in disk' should increase by 0.5")
     test.ExpectLessThanOrEqual(free - new_free, 1, "'K available' should decrease by 0 or 1")
     used, free = new_used, new_free
 
-    a2d.CreateFolder("NEW2")
+    desktop.CreateFolder("NEW2")
     local new_used, new_free = GetUsedFree()
     test.ExpectEquals(new_used - used, 0.5, "'K in disk' should increase by 0.5")
     test.ExpectLessThanOrEqual(free - new_free, 1, "'K available' should decrease by 0 or 1")
 
-    a2d.CloseAllWindows()
-    a2d.SelectAll()
+    desktop.CloseAllWindows()
+    desktop.SelectAll()
     a2d.OAShortcut("O") -- File > Open
-    a2d.CycleWindows()
-    emu.wait(1)
+    desktop.CycleWindows()
+    a2dtest.WaitForSystemTask()
     local used, free = GetUsedFree()
 
-    a2d.CreateFolder("NEW3")
+    desktop.CreateFolder("NEW3")
     local new_used, new_free = GetUsedFree()
     test.ExpectLessThanOrEqual(new_used - used, 1, "'K in disk' should increase by 0, 0.5, or 1")
     test.ExpectLessThanOrEqual(free - new_free, 1, "'K available' should decrease by 0, 0.5 or 1")
     used, free = new_used, new_free
 
-    a2d.CreateFolder("NEW4")
+    desktop.CreateFolder("NEW4")
     local new_used, new_free = GetUsedFree()
     test.ExpectLessThanOrEqual(new_used - used, 1, "'K in disk' should increase by 0, 0.5, or 1")
     test.ExpectLessThanOrEqual(free - new_free, 1, "'K available' should decrease by 0, 0.5 or 1")
@@ -117,31 +115,31 @@ end)
 test.Step(
   "Header clipping",
   function()
-    a2d.OpenPath("/TESTS")
-    a2d.MoveWindowBy(-150, 0)
+    desktop.OpenWindow("/TESTS")
+    desktop.MoveWindowBy(-150, 0)
 
     local ocr = a2dtest.OCRScreen()
     test.ExpectNotMatch(ocr, "Items", "left edge of header text should be cut off")
     test.ExpectMatch(ocr, "available", "right edge of header text should be visible")
 
-    a2d.MoveWindowBy(400, 0)
+    desktop.MoveWindowBy(400, 0)
 
     local ocr = a2dtest.OCRScreen()
     test.ExpectMatch(ocr, "Items", "left edge of header text should be visible")
     test.ExpectNotMatch(ocr, "available", "right edge of header text should be cut off")
 
-    a2d.MoveWindowBy(-250, 0)
+    desktop.MoveWindowBy(-250, 0)
 
     -- Get both scrollbars showing
-    a2d.GrowWindowBy(-100,-50)
+    desktop.GrowWindowBy(-100,-50)
 
-    a2d.MoveWindowBy(-150, 0)
+    desktop.MoveWindowBy(-150, 0)
 
     local ocr = a2dtest.OCRScreen()
     test.ExpectNotMatch(ocr, "Items", "left edge of header text should be cut off")
     test.ExpectMatch(ocr, "available", "right edge of header text should be visible")
 
-    a2d.MoveWindowBy(450, 0)
+    desktop.MoveWindowBy(450, 0)
 
     local ocr = a2dtest.OCRScreen()
     test.ExpectMatch(ocr, "Items", "left edge of header text should be visible")

@@ -4,8 +4,6 @@ DISKARGS="-hard1 $HARDIMG -flop1 prodos_floppy1.dsk"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(5)
-
 --[[
   Launch DeskTop. Run the command. Select a slot/drive containing an
   existing volume. Enter a new name and click OK. Verify that the
@@ -17,11 +15,12 @@ test.Variants(
     "Format ProDOS disk",
     "Erase ProDOS disk",
   }, function(idx)
-    a2d.ClearSelection()
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK-2+idx-1)
+    desktop.ClearSelection()
+    a2d.InvokeMenuItem(desktop.SPECIAL_MENU, desktop.SPECIAL_FORMAT_DISK-2+idx-1)
+    a2dtest.WaitForSystemTask()
 
     -- Select drive (S6D1)
-    a2d.FormatEraseSelectSlotDrive(6, 1)
+    desktop.FormatEraseSelectSlotDrive(6, 1)
 
     -- Enter new name
     a2d.ClearTextField()

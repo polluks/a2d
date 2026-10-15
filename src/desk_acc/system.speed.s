@@ -211,18 +211,20 @@ frame_counter:
 ;;; Input loop
 
 .proc InputLoop
+    REPEAT
         jsr     AnimFrame
 
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
+
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params::kind
+      IF A = #MGTK::EventKind::button_down
+        jsr     OnClick
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     OnKey
+      END_IF
 
-        cmp     #MGTK::EventKind::button_down
-        jeq     OnClick
-
-        cmp     #MGTK::EventKind::key_down
-        bne     InputLoop
-        FALL_THROUGH_TO OnKey
+    FOREVER
 .endproc ; InputLoop
 
 .proc OnKey
@@ -231,24 +233,16 @@ frame_counter:
 
         ldx     event_params::modifiers
     IF NOT_ZERO
-        cmp     #kShortcutCloseWindow
-        beq     OnKeyOK
-        jmp     InputLoop
+        IF A = #kShortcutCloseWindow GOTO OnKeyOK
+        rts
     END_IF
 
-        cmp     #CHAR_RETURN
-        beq     OnKeyOK
+        IF A = #CHAR_RETURN GOTO OnKeyOK
+        IF A = #CHAR_ESCAPE GOTO OnKeyOK
+        IF A = #kShortcutNorm GOTO OnKeyNorm
+        IF A = #kShortcutFast GOTO OnKeyFast
 
-        cmp     #CHAR_ESCAPE
-        beq     OnKeyOK
-
-        cmp     #kShortcutNorm
-        beq     OnKeyNorm
-
-        cmp     #kShortcutFast
-        beq     OnKeyFast
-
-        jmp     InputLoop
+        rts
 .endproc ; OnKey
 
 .proc OnKeyOK
@@ -259,52 +253,46 @@ frame_counter:
 .proc OnKeyNorm
         BTK_CALL BTK::Flash, norm_button
         JSR_TO_MAIN DoNorm
-        jmp     InputLoop
+        rts
 .endproc ; OnKeyNorm
 
 .proc OnKeyFast
         BTK_CALL BTK::Flash, fast_button
         JSR_TO_MAIN DoFast
-        jmp     InputLoop
+        rts
 .endproc ; OnKeyFast
 
 ;;; ============================================================
 
 .proc OnClick
         MGTK_CALL MGTK::FindWindow, findwindow_params
+    IF u8 findwindow_params::window_id <> #kDAWindowId \
+      OR u8 findwindow_params::which_area <> #MGTK::Area::content
+        rts
+    END_IF
 
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        bne     miss
-
-        lda     findwindow_params::which_area
-        cmp     #MGTK::Area::content
-        beq     hit
-
-miss:   jmp     InputLoop
-
-hit:    copy8   winfo::window_id, screentowindow_params::window_id
+        copy8   winfo::window_id, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
         MGTK_CALL MGTK::MoveTo, screentowindow_params::window
 
         MGTK_CALL MGTK::InRect, ok_button::rect
-        jne     OnClickOK
+        bne     OnClickOK
 
         MGTK_CALL MGTK::InRect, norm_button::rect
-        jne     OnClickNorm
+        bne     OnClickNorm
 
         MGTK_CALL MGTK::InRect, fast_button::rect
-        jne     OnClickFast
+        bne     OnClickFast
 
-        jmp     InputLoop
+        rts
 .endproc ; OnClick
 
 ;;; ============================================================
 
 .proc OnClickOK
         BTK_CALL BTK::Track, ok_button
-        jeq     CloseWindow
-        jmp     InputLoop
+        beq     CloseWindow
+        rts
 .endproc ; OnClickOK
 
 ;;; ============================================================
@@ -314,7 +302,7 @@ hit:    copy8   winfo::window_id, screentowindow_params::window_id
     IF ZERO
         JSR_TO_MAIN DoNorm
     END_IF
-        jmp     InputLoop
+        rts
 .endproc ; OnClickNorm
 
 ;;; ============================================================
@@ -324,12 +312,15 @@ hit:    copy8   winfo::window_id, screentowindow_params::window_id
     IF ZERO
         JSR_TO_MAIN DoFast
     END_IF
-        jmp     InputLoop
+        rts
 .endproc ; OnClickFast
 
 ;;; ============================================================
 
 .proc CloseWindow
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         MGTK_CALL MGTK::CloseWindow, closewindow_params
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
         rts

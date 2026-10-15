@@ -7,8 +7,6 @@ RESOLUTION="704x462"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
   Use the Options control panel (in DeskTop) to show Shortcuts on
   startup. Launch Shortcuts. File > Run a Program.... Select
@@ -18,9 +16,9 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "Selector and IIgs",
   function()
-    a2d.AddShortcut("/A2.DESKTOP/READ.ME")
-    a2d.ToggleOptionShowShortcutsOnStartup()
-    a2d.Reboot()
+    desktop.AddShortcut("/A2.DESKTOP/READ.ME")
+    desktop.ToggleOptionShowShortcutsOnStartup()
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 
     a2d.OAShortcut("R") -- Run a Program...
@@ -38,8 +36,8 @@ test.Step(
 
     apple2.Type("D")
     a2d.WaitForDesktopReady()
-    a2d.DeletePath("/A2.DESKTOP/LOCAL")
-    a2d.Reboot()
+    desktop.DeletePath("/A2.DESKTOP/LOCAL")
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
     ]]
 end)

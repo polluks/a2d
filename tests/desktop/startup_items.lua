@@ -1,37 +1,35 @@
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
   Create a Startup.Items folder, verify items execute sequentially.
 ]]
 test.Step(
   "Startup.Items execute sequentially",
   function()
-    a2d.CopyPath("/A2.DESKTOP/SAMPLE.MEDIA/LOREM.IPSUM", "/A2.DESKTOP/STARTUP.ITEMS")
-    a2d.CopyPath("/A2.DESKTOP/SAMPLE.MEDIA/SHAKESPEARE", "/A2.DESKTOP/STARTUP.ITEMS")
+    desktop.CopyPath("/A2.DESKTOP/SAMPLE.MEDIA/LOREM.IPSUM", "/A2.DESKTOP/STARTUP.ITEMS")
+    desktop.CopyPath("/A2.DESKTOP/SAMPLE.MEDIA/SHAKESPEARE", "/A2.DESKTOP/STARTUP.ITEMS")
 
-    a2d.CloseAllWindows()
-    a2d.Reboot()
+    desktop.CloseAllWindows()
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 
     util.WaitFor(
       "expected Lorem Ipsum text showing", function()
         return a2dtest.HasOpenWindow() and a2dtest.OCRFrontWindowContent():match("Lorem ipsum dolor sit amet")
-    end)
-    emu.wait(2)
-    a2d.CloseWindow()
+      end, {wait=1})
+    a2dtest.WaitForSystemTask()
+    desktop.CloseWindow()
 
     util.WaitFor(
       "expected Hamlet text showing", function()
         return a2dtest.HasOpenWindow() and a2dtest.OCRFrontWindowContent():match("To be, or not to be, that is the question")
-    end)
-    emu.wait(2)
-    a2d.CloseWindow()
+      end, {wait=1})
+    a2dtest.WaitForSystemTask()
+    desktop.CloseWindow()
 
     -- cleanup
-    a2d.OpenPath("/A2.DESKTOP/STARTUP.ITEMS")
-    a2d.SelectAll()
-    a2d.DeleteSelection()
-    a2d.CloseAllWindows()
+    desktop.OpenWindow("/A2.DESKTOP/STARTUP.ITEMS")
+    desktop.SelectAll()
+    desktop.DeleteSelection()
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -40,18 +38,18 @@ end)
 test.Step(
   "Startup.Items must be a folder",
   function()
-    a2d.DeletePath("/A2.DESKTOP/STARTUP.ITEMS")
-    a2d.DuplicatePath("/A2.DESKTOP/SAMPLE.MEDIA/LOREM.IPSUM", "STARTUP.ITEMS")
-    a2d.CopyPath("/A2.DESKTOP/SAMPLE.MEDIA/STARTUP.ITEMS", "/A2.DESKTOP")
+    desktop.DeletePath("/A2.DESKTOP/STARTUP.ITEMS")
+    desktop.DuplicatePath("/A2.DESKTOP/SAMPLE.MEDIA/LOREM.IPSUM", "STARTUP.ITEMS")
+    desktop.CopyPath("/A2.DESKTOP/SAMPLE.MEDIA/STARTUP.ITEMS", "/A2.DESKTOP")
 
-    a2d.CloseAllWindows()
-    a2d.Reboot()
+    desktop.CloseAllWindows()
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 
     -- cleanup
-    a2d.DeletePath("/A2.DESKTOP/STARTUP.ITEMS")
-    a2d.CreateFolder("/A2.DESKTOP/STARTUP.ITEMS")
-    a2d.CloseAllWindows()
+    desktop.DeletePath("/A2.DESKTOP/STARTUP.ITEMS")
+    desktop.CreateFolder("/A2.DESKTOP/STARTUP.ITEMS")
+    desktop.CloseAllWindows()
 end)
 
 --[[
@@ -60,10 +58,10 @@ end)
 test.Step(
   "Holding OA+SA skips Startup.Items",
   function()
-    a2d.CopyPath("/A2.DESKTOP/SAMPLE.MEDIA/LOREM.IPSUM", "/A2.DESKTOP/STARTUP.ITEMS")
+    desktop.CopyPath("/A2.DESKTOP/SAMPLE.MEDIA/LOREM.IPSUM", "/A2.DESKTOP/STARTUP.ITEMS")
 
-    a2d.CloseAllWindows()
-    a2d.Reboot({no_wait=true})
+    desktop.CloseAllWindows()
+    desktop.Reboot({no_wait=true})
     apple2.PressOA()
     apple2.PressSA()
     a2d.WaitForDesktopReady()
@@ -73,8 +71,8 @@ test.Step(
     test.ExpectNotMatch(a2dtest.OCRScreen(), "Lorem ipsum dolor sit amet", "Text preview should not be showing")
 
     -- cleanup
-    a2d.OpenPath("/A2.DESKTOP/STARTUP.ITEMS")
-    a2d.SelectAll()
-    a2d.DeleteSelection()
-    a2d.CloseAllWindows()
+    desktop.OpenWindow("/A2.DESKTOP/STARTUP.ITEMS")
+    desktop.SelectAll()
+    desktop.DeleteSelection()
+    desktop.CloseAllWindows()
 end)

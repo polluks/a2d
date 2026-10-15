@@ -17,9 +17,8 @@ MODELARGS="\
 
 -- Config produces 9 devices + Trash, so 117 file icons should be supported
 
-a2d.ConfigureRepaintTime(0.25)
-a2d.AddShortcut("/TESTS/HUNDRED.FILES")
-a2d.CloseAllWindows()
+desktop.AddShortcut("/TESTS/HUNDRED.FILES")
+desktop.CloseAllWindows()
 
 --[[
   Load DeskTop. Ensure that every ProDOS device is online and
@@ -32,12 +31,13 @@ test.Step(
   "icon limit can be hit before window limit",
   function()
     a2d.OAShortcut("1") -- Open HUNDRED.FILES
-    emu.wait(5)
-    a2d.OpenPath("/TESTS", {keep_windows=true, no_validate=true})
+    a2dtest.WaitForSystemTask()
+    desktop.OpenWindow("/TESTS", {keep_windows=true, no_validate=true})
     a2dtest.WaitForAlert({match="window must be closed"})
     test.ExpectNotMatch(a2dtest.OCRScreen(), "Cancel", "alert should have no Cancel button")
     a2d.DialogOK()
-    a2d.CloseAllWindows()
+    a2dtest.WaitForSystemTask()
+    desktop.CloseAllWindows()
 end)
 
 
@@ -46,22 +46,22 @@ function MaxIconsTest(name, func)
     name,
     function()
       local count = 0
-      a2d.CloseAllWindows()
-      a2d.SelectAll()
-      count = count + #a2d.GetSelectedIcons()
+      desktop.CloseAllWindows()
+      desktop.SelectAll()
+      count = count + #desktop.GetSelectedIcons()
       test.ExpectEquals(count, 10, "should have 9 volumes + Trash")
 
       a2d.OAShortcut("1") -- Open HUNDRED.FILES
-      emu.wait(5)
-      a2d.GrowWindowBy(0, -50)
-      a2d.SelectAll()
-      emu.wait(5)
-      count = count + #a2d.GetSelectedIcons()
+      a2dtest.WaitForSystemTask()
+      desktop.GrowWindowBy(0, -50)
+      desktop.SelectAll()
+      a2dtest.WaitForSystemTask()
+      count = count + #desktop.GetSelectedIcons()
       test.ExpectEquals(count, 110, "should have 9 volumes + Trash + 100 files")
 
-      a2d.OpenPath("/RAM1", {keep_windows=true})
-      a2d.MoveWindowBy(0, 100)
-      a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.RUN_BASIC_HERE)
+      desktop.OpenWindow("/RAM1", {keep_windows=true})
+      desktop.MoveWindowBy(0, 100)
+      a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.RUN_BASIC_HERE)
       apple2.WaitForBasicSystem()
       apple2.TypeLine("10 FOR I = 1 TO "..(127-count))
       apple2.TypeLine("20 PRINT CHR$(4)\"CREATE FF\"I")
@@ -71,17 +71,18 @@ function MaxIconsTest(name, func)
       a2d.WaitForDesktopReady()
       --[[
       for i = 1, 127 - count do
-        a2d.CreateFolder("F" .. i)
+        desktop.CreateFolder("F" .. i)
       end
       ]]
 
-      a2d.SelectAll()
-      count = count + #a2d.GetSelectedIcons()
+      desktop.SelectAll()
+      a2dtest.WaitForSystemTask()
+      count = count + #desktop.GetSelectedIcons()
       test.ExpectEquals(count, 127, "127 icons should be supported")
 
       func()
 
-      a2d.EraseVolume("RAM1")
+      desktop.EraseVolume("RAM1")
   end)
 end
 
@@ -108,7 +109,7 @@ MaxIconsTest(
     a2d.OAShortcut("N") -- File > CreateFolder
     a2dtest.WaitForAlert({match="window must be closed"})
     a2d.DialogOK()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify repaint is correct")
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "window should have closed")
 end)
@@ -125,13 +126,14 @@ MaxIconsTest(
   "error on File > Copy To",
   function()
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "RAM1", "window should be active")
-    a2d.CycleWindows()
+    desktop.CycleWindows()
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "HUNDRED.FILES", "window should be active")
     apple2.DownArrowKey() -- select first
-    a2d.WaitForRepaint()
-    a2d.CopySelectionTo("/RAM1", nil, {no_wait=true})
+    a2dtest.WaitForSystemTask()
+    desktop.CopySelectionTo("/RAM1", nil, {no_wait=true})
     a2dtest.WaitForAlert({match="window must be closed"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
     test.Snap("verify repaint is correct")
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "window should have closed")
 end)
@@ -151,15 +153,17 @@ MaxIconsTest(
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
     local dst_x, dst_y = x + 10, y + 5
 
-    a2d.CycleWindows()
+    desktop.CycleWindows()
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2dtest.GetFrontWindowTitle(), "HUNDRED.FILES", "window should be active")
     apple2.DownArrowKey() -- select first
-    emu.wait(10)
+    a2dtest.WaitForSystemTask()
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
     a2d.Drag(src_x, src_y, dst_x, dst_y)
+
     a2dtest.WaitForAlert({match="window must be closed"})
     a2d.DialogOK()
-    emu.wait(10)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify repaint is correct")
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "window should have closed")
 end)
@@ -178,12 +182,12 @@ MaxIconsTest(
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
     local dst_x, dst_y = x + 10, y + 5
 
-    a2d.SelectPath("/D", {keep_windows=true})
+    desktop.SelectPath("/D", {keep_windows=true})
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
     a2d.Drag(src_x, src_y, dst_x, dst_y)
     a2dtest.WaitForAlert({match="window must be closed"})
     a2d.DialogOK()
-    emu.wait(10)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify repaint is correct")
     test.ExpectEquals(a2dtest.GetWindowCount(), 1, "window should have closed")
 end)
@@ -191,12 +195,12 @@ end)
 test.Step(
   "File menu doesn't remain highlighted after failed open",
   function()
-    a2d.OpenPath("/TESTS")
-    a2d.Select("HUNDRED.FILES")
+    desktop.OpenWindow("/TESTS")
+    desktop.Select("HUNDRED.FILES")
     a2d.OAShortcut("O") -- File > Open
     a2dtest.WaitForAlert({match="window must be closed"})
     test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "File", "file menu should be highlighted")
     a2d.DialogOK()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectNotMatch(a2dtest.OCRScreen({invert=true}), "File", "file menu should not be highlighted")
 end)

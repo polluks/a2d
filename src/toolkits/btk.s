@@ -136,7 +136,7 @@ checkerboard_pattern:
 
 .params shrink_rect
         .addr   rect
-        .word   AS_WORD(-1), AS_WORD(-1)
+        .word   AS_WORD{-1}, AS_WORD{-1}
 .endparams
 
 .params grow_rect
@@ -241,15 +241,15 @@ skip_port:
         pos := $0B
 
         ;; Y-offset from bottom for shorter-than-normal buttons, e.g. arrow glyphs
-        sub16_8 rect+MGTK::Rect::y2, #(kButtonHeight - kButtonTextVOffset), pos+MGTK::Point::ycoord
+        sub16   rect+MGTK::Rect::y2, #(kButtonHeight - kButtonTextVOffset), pos+MGTK::Point::ycoord
 
         jsr     _GetShowShortcutsSetting
     IF NOT_ZERO
         ;; Draw the string (left aligned)
 .if kBuildIsRTL
-        sub16_8 rect+MGTK::Rect::x2, #kButtonTextHOffset, pos+MGTK::Point::xcoord
+        sub16    rect+MGTK::Rect::x2, #kButtonTextHOffset, pos+MGTK::Point::xcoord
 .else
-        add16_8 rect+MGTK::Rect::x1, #kButtonTextHOffset, pos+MGTK::Point::xcoord
+        add16    rect+MGTK::Rect::x1, #kButtonTextHOffset, pos+MGTK::Point::xcoord
 .endif
         MGTK_CALL MGTK::MoveTo, pos
         jsr     _DrawLabel
@@ -259,9 +259,9 @@ skip_port:
         ora     a_shortcut+1
       IF NOT_ZERO
 .if kBuildIsRTL
-        add16_8 rect+MGTK::Rect::x1, #kButtonTextHOffset-2, pos+MGTK::Point::xcoord
+        add16   rect+MGTK::Rect::x1, #kButtonTextHOffset-2, pos+MGTK::Point::xcoord
 .else
-        sub16_8 rect+MGTK::Rect::x2, #kButtonTextHOffset-2, pos+MGTK::Point::xcoord
+        sub16   rect+MGTK::Rect::x2, #kButtonTextHOffset-2, pos+MGTK::Point::xcoord
 .endif
         MGTK_CALL MGTK::MoveTo, pos
         copy16  a_shortcut, @addr
@@ -313,20 +313,7 @@ skip_port:
         rts
 .endproc ; _DrawString
 
-;;; Inputs: A,X points at string
-;;; Output: A,X = width
-.proc _MeasureString
-PARAM_BLOCK sw_params, btk::zp_scratch
-str     .addr
-width   .word
-END_PARAM_BLOCK
-        stax    sw_params::str
-        MGTK_CALL MGTK::StringWidth, sw_params
-        RETURN  AX=sw_params::width
-.endproc ; _MeasureString
-
 ;;; ============================================================
-
 
 .proc TrackImpl
 
@@ -364,8 +351,7 @@ loop_i: jsr     _Invert
 
         ;; Event loop
 loop:   MGTK_CALL MGTK::GetEvent, event_params
-        lda     event_params::kind
-        cmp     #MGTK::EventKind::button_up
+        ucmp8   event_params::kind, #MGTK::EventKind::button_up
         beq     exit
         lda     window_id
     IF ZERO
@@ -457,11 +443,11 @@ unchecked_rb_bitmap:
 
         ;; Initial size is just the button
 .if kBuildIsRTL
-        sub16_8 rect+MGTK::Rect::x2, #BTK::kRadioButtonWidth, rect+MGTK::Rect::x1
+        sub16   rect+MGTK::Rect::x2, #BTK::kRadioButtonWidth, rect+MGTK::Rect::x1
 .else
-        add16_8 rect+MGTK::Rect::x1, #BTK::kRadioButtonWidth, rect+MGTK::Rect::x2
+        add16   rect+MGTK::Rect::x1, #BTK::kRadioButtonWidth, rect+MGTK::Rect::x2
 .endif
-        add16_8 rect+MGTK::Rect::y1, #BTK::kRadioButtonHeight, rect+MGTK::Rect::y2
+        add16   rect+MGTK::Rect::y1, #BTK::kRadioButtonHeight, rect+MGTK::Rect::y2
 
         CALL    _MeasureAndWriteRectBackToButtonRecord, A=#kSystemFontHeight - BTK::kRadioButtonHeight
 
@@ -539,11 +525,11 @@ unchecked_cb_bitmap:
 
         ;; Initial size is just the button
 .if kBuildIsRTL
-        sub16_8 rect+MGTK::Rect::x2, #BTK::kCheckboxWidth, rect+MGTK::Rect::x1
+        sub16   rect+MGTK::Rect::x2, #BTK::kCheckboxWidth, rect+MGTK::Rect::x1
 .else
-        add16_8 rect+MGTK::Rect::x1, #BTK::kCheckboxWidth, rect+MGTK::Rect::x2
+        add16   rect+MGTK::Rect::x1, #BTK::kCheckboxWidth, rect+MGTK::Rect::x2
 .endif
-        add16_8 rect+MGTK::Rect::y1, #BTK::kCheckboxHeight, rect+MGTK::Rect::y2
+        add16   rect+MGTK::Rect::y1, #BTK::kCheckboxHeight, rect+MGTK::Rect::y2
 
         CALL    _MeasureAndWriteRectBackToButtonRecord, A=#kSystemFontHeight - BTK::kCheckboxHeight
 
@@ -674,7 +660,19 @@ unchecked_cb_bitmap:
         copy8   rect,x, (params_addr),y
     WHILE dey : dex : POS
         rts
-.endproc ; _WriteRectBackToButtonRecord
+.endproc ; _MeasureAndWriteRectBackToButtonRecord
+
+;;; Inputs: A,X points at string
+;;; Output: A,X = width
+.proc _MeasureString
+PARAM_BLOCK sw_params, btk::zp_scratch
+str     .addr
+width   .word
+END_PARAM_BLOCK
+        stax    sw_params::str
+        MGTK_CALL MGTK::StringWidth, sw_params
+        RETURN  AX=sw_params::width
+.endproc ; _MeasureString
 
 ;;; ============================================================
 .endif ; BTK_SHORT

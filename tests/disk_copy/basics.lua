@@ -1,5 +1,3 @@
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
   Launch DeskTop. Special > Copy Disk.... File > Quit. Special > Copy
   Disk.... Ensure drive list is correct.
@@ -7,12 +5,15 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "drive list not corrupted on re-launch",
   function()
-    a2d.CopyDisk()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
 
     a2d.OAShortcut("Q") -- File > Quit
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
 
-    a2d.CopyDisk()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
     test.ExpectMatch(a2dtest.OCRScreen(),
                      "7  1  A2%.DeskTop.*\n" ..
                      "6  1  Unknown.*\n" ..
@@ -21,6 +22,7 @@ test.Step(
 
     -- cleanup
     a2d.OAShortcut("Q") -- File > Quit
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
 end)
 
@@ -31,16 +33,18 @@ end)
 test.Step(
   "escape key works to control menu",
   function()
-    a2d.CopyDisk()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
 
     apple2.EscapeKey()
-    a2d.WaitForRepaint()
+    a2d.WaitForRepaint() -- menu selection
     test.ExpectMatch(a2dtest.OCRScreen(), "Apple II DeskTop.*\n.*Copyright",
                      "menu should be showing")
 
     -- cleanup
     apple2.EscapeKey()
     a2d.OAShortcut("Q") -- File > Quit
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
 end)
 
@@ -51,9 +55,11 @@ end)
 test.Step(
   "OA+Q returns to DeskTop",
   function()
-    a2d.CopyDisk()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
 
     a2d.OAShortcut("Q")
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
     a2dtest.ExpectNotHanging()
 end)
@@ -65,9 +71,11 @@ end)
 test.Step(
   "SA+Q returns to DeskTop",
   function()
-    a2d.CopyDisk()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
 
     a2d.SAShortcut("Q")
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
     a2dtest.ExpectNotHanging()
 end)
@@ -79,7 +87,8 @@ end)
 test.Step(
   "Invoke with no selection",
   function()
-    a2d.CopyDisk()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
 
     test.ExpectNotMatch(a2dtest.OCRScreen({invert=true}), "A2.DeskTop",
                         "drive should not be selected")
@@ -88,6 +97,7 @@ test.Step(
 
     -- cleanup
     a2d.OAShortcut("Q")
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
 end)
 
@@ -99,7 +109,8 @@ end)
 test.Step(
   "Invoke with selection",
   function()
-    a2d.CopyDisk("/A2.DESKTOP")
+    desktop.CopyDisk("/A2.DESKTOP")
+    a2dtest.ConfigureForDiskCopy()
 
     test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "A2.DeskTop",
                 "drive should be selected")
@@ -109,11 +120,12 @@ test.Step(
       0.1, 1.0,
       function()
         apple2.ReturnKey()
-        emu.wait(5)
+        a2dtest.WaitForSystemTask()
       end, "dialog should update")
 
     -- cleanup
     a2d.OAShortcut("Q")
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
 end)
 
@@ -126,22 +138,24 @@ end)
 test.Step(
   "Using menu with keyboard doesn't commit selection",
   function()
-    a2d.CopyDisk()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
 
     -- make selection
     apple2.DownArrowKey()
 
     -- interact with menu
     apple2.EscapeKey()
-    emu.wait(1)
+    emu.wait(1) -- menu selection
     apple2.EscapeKey()
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
     test.ExpectMatch(a2dtest.OCRScreen(), "Select source disk",
                 "should still be selecting source")
 
     -- cleanup
     a2d.OAShortcut("Q")
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
 end)
 
@@ -154,7 +168,8 @@ end)
 test.Step(
   "Double-clicking selected item commits",
   function()
-    a2d.CopyDisk()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
 
     -- select first item
     apple2.DownArrowKey()
@@ -165,13 +180,14 @@ test.Step(
         m.MoveToApproximately(x + w / 2, y + 5)
         m.DoubleClick()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     test.ExpectMatch(a2dtest.OCRScreen(), "Select destination disk",
                 "should now be selecting selecting destination (S7D1)")
 
     -- cleanup
     a2d.OAShortcut("Q")
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
 end)
 
@@ -184,7 +200,8 @@ end)
 test.Step(
   "Double-clicking other item commits",
   function()
-    a2d.CopyDisk()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
 
     -- select second first item
     apple2.DownArrowKey()
@@ -196,13 +213,14 @@ test.Step(
         m.MoveToApproximately(x + w / 2, y + 5)
         m.DoubleClick()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
 
     test.ExpectMatch(a2dtest.OCRScreen(), "Select destination disk",
                 "should now be selecting selecting destination (S7D1)")
 
     -- cleanup
     a2d.OAShortcut("Q")
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
 end)
 
@@ -214,12 +232,12 @@ end)
 test.Step(
   "Graceful failure if module not present",
   function()
-    a2d.RenamePath("/A2.DESKTOP/MODULES/DISK.COPY", "TEMP")
-    a2d.ClearSelection()
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_COPY_DISK-2)
+    desktop.RenamePath("/A2.DESKTOP/MODULES/DISK.COPY", "TEMP")
+    desktop.ClearSelection()
+    a2d.InvokeMenuItem(desktop.SPECIAL_MENU, desktop.SPECIAL_COPY_DISK-2)
     a2dtest.WaitForAlert({match="insert the system disk"})
     a2d.DialogCancel()
-    a2d.RenamePath("/A2.DESKTOP/MODULES/TEMP", "DISK.COPY")
+    desktop.RenamePath("/A2.DESKTOP/MODULES/TEMP", "DISK.COPY")
 end)
 
 --[[
@@ -229,16 +247,18 @@ end)
 test.Step(
   "window restoration",
   function()
-    a2d.Reboot() -- Ensure LOCAL/DESKTOP.FILE is written out
+    desktop.Reboot() -- Ensure LOCAL/DESKTOP.FILE is written out
     a2d.WaitForDesktopReady()
 
-    a2d.OpenPath("/A2.DESKTOP")
-    a2d.ClearSelection()
+    desktop.OpenWindow("/A2.DESKTOP")
+    desktop.ClearSelection()
     a2dtest.ExpectNothingChanged(function()
-        a2d.CopyDisk()
+        desktop.CopyDisk()
+        a2dtest.ConfigureForDiskCopy()
         a2d.OAShortcut("Q")
+        a2dtest.ConfigureForDeskTop()
         a2d.WaitForDesktopReady()
-        a2d.ClearSelection()
+        desktop.ClearSelection()
     end)
 end)
 
@@ -249,13 +269,15 @@ end)
 test.Step(
   "scrollbar disabled with 8 or fewer drives",
   function()
-    a2d.CopyDisk()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
 
     local hscroll, vscroll = a2dtest.GetFrontWindowScrollOptions()
     test.ExpectEquals(hscroll & mgtk.scroll.option_active, 0, "h scrollbar should be inactive")
 
     -- cleanup
     a2d.OAShortcut("Q") -- File > Quit
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
 end)
 
@@ -271,7 +293,8 @@ end)
 test.Step(
   "OK button disabled when selection cleared",
   function()
-    a2d.CopyDisk()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
 
     test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
     a2dtest.ExpectNothingChanged(apple2.ReturnKey)
@@ -282,7 +305,7 @@ test.Step(
 
     -- select using keyboard
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
 
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
@@ -292,7 +315,7 @@ test.Step(
         m.MoveToApproximately(x + w / 2, y + h - 5)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
     a2dtest.ExpectNothingChanged(apple2.ReturnKey)
 
@@ -301,10 +324,11 @@ test.Step(
         m.MoveToApproximately(x + w / 2, y + 5)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
 
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     ----------------------------------------
     -- Destination
@@ -312,7 +336,7 @@ test.Step(
 
     -- select using keyboard
     apple2.DownArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
 
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
@@ -322,7 +346,7 @@ test.Step(
         m.MoveToApproximately(x + w / 2, y + h - 5)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
     a2dtest.ExpectNothingChanged(apple2.ReturnKey)
 
@@ -331,11 +355,12 @@ test.Step(
         m.MoveToApproximately(x + w / 2, y + 5)
         m.Click()
     end)
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
 
     -- cleanup
     a2d.OAShortcut("Q") -- File > Quit
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
 end)
 
@@ -349,41 +374,44 @@ end)
 test.Step(
   "Read Drives resets OK button state",
   function()
-    a2d.CopyDisk()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
 
     a2dtest.ExpectNothingChanged(apple2.ReturnKey)
 
     -- select source
     apple2.UpArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
 
     -- Read Drives
     apple2.Type("R")
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
     a2dtest.ExpectNothingChanged(apple2.ReturnKey)
 
     -- select source and click OK
     apple2.UpArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
     test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
     a2dtest.ExpectNothingChanged(apple2.ReturnKey)
 
     -- select destination
     apple2.UpArrowKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should be enabled")
 
     -- Read Drives
     apple2.Type("R")
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be disabled")
     a2dtest.ExpectNothingChanged(apple2.ReturnKey)
 
     -- cleanup
     apple2.EscapeKey()
     a2d.OAShortcut("Q") -- File > Quit
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
 end)

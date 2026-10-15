@@ -443,8 +443,6 @@ textlen:        .byte   15
 text_buffer2:
         .res    kTextBufferSize+2, 0
 
-spaces_string:
-        PASCAL_STRING "          "
 error_string:
         PASCAL_STRING res_string_error_string
 
@@ -586,20 +584,18 @@ init:
 ;;; Input Loop
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         MGTK_CALL MGTK::GetEvent, event_params
 
         lda     event_params::kind
-    IF A = #MGTK::EventKind::button_down
+      IF A = #MGTK::EventKind::button_down
         jsr     OnClick
-        jmp     InputLoop
-    END_IF
-
-        cmp     #MGTK::EventKind::key_down
-        bne     InputLoop
-
+      ELSE_IF A = #MGTK::EventKind::key_down
         jsr     OnKeyPress
-        jmp     InputLoop
+      END_IF
+
+    FOREVER
 .endproc ; InputLoop
 
 ;;; ============================================================
@@ -607,12 +603,8 @@ init:
 
 .proc OnClick
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::which_area
-        cmp     #MGTK::Area::content
-        bcc     ret
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId      ; This window?
-        bne     ret
+        IF u8 findwindow_params::which_area < #MGTK::Area::content GOTO ret
+        IF u8 findwindow_params::window_id <> #kDAWindowId GOTO ret     ; This window?
 
         lda     findwindow_params::which_area
     IF A = #MGTK::Area::content ; Content area?
@@ -666,10 +658,8 @@ ret:    rts
     END_IF
 
     IF A = #CHAR_ESCAPE
-        lda     calc_p
-      IF ZERO                   ; empty state?
-        lda     calc_l
-       IF ZERO
+      IF u8 calc_p = #0         ; empty state?
+       IF u8 calc_l = #0
         pla                     ; pop OnKeyPress
         pla
         jmp     ExitDA
@@ -749,7 +739,7 @@ ret:    rts
       IF NOT ZERO
         ;; Button's "port" is the inner inversion rect; test against
         ;; 1px beyond that, to match BTK. Make a copy and inflate it.
-        add16_8 ptr, #(btn_c::port - btn_c), rect_ptr
+        add16   ptr, #(btn_c::port - btn_c), rect_ptr
         ldy     #.sizeof(MGTK::Rect)-1
        DO
         copy8   (rect_ptr),y, inrect_rect,y
@@ -851,10 +841,8 @@ next:   add16_8 ptr, #.sizeof(btn_c)
     END_IF
 
     IF A = #Function::op_subtract
-        lda     calc_e          ; negate vs. subtract
-      IF NOT_ZERO
-        lda     calc_n
-       IF ZERO
+      IF u8 calc_e <> #0        ; negate vs. subtract
+       IF u8 calc_n = #0
         SET_BIT7_FLAG calc_n
         pla
         pha
@@ -869,8 +857,7 @@ next:   add16_8 ptr, #.sizeof(btn_c)
         lda     calc_d          ; already a decimal?
         ora     calc_e          ; or exponent?
       IF ZERO
-        lda     calc_l
-       IF ZERO
+       IF u8 calc_l = #0
         inc     calc_l
        END_IF
         copy8   intl_deci_sep, calc_d
@@ -879,10 +866,7 @@ next:   add16_8 ptr, #.sizeof(btn_c)
         rts
     END_IF
 
-        cmp     #Function::digit0
-        bcc     DoOp
-        cmp     #Function::digit9+1
-        bcs     DoOp
+        IF A < #Function::digit0 OR A >= #Function::digit9+1 GOTO DoOp
         FALL_THROUGH_TO _Insert
 
         .assert Function::digit0 = '0', error, "Enum values"
@@ -933,8 +917,7 @@ ret:   rts
 .proc DoOp
         ;; Pending input we need to parse?
         pha
-        lda     calc_g
-    IF NOT_ZERO
+    IF u8 calc_g <> #0
         CLEAR_BIT7_FLAG calc_r
         CLEAR_BIT7_FLAG calc_o
 
@@ -1084,8 +1067,7 @@ ret:   rts
 
         ldy     #0              ; count the size
     DO
-        lda     FBUFFR,y
-        BREAK_IF ZERO
+        BREAK_IF u8 FBUFFR,y = #0
     WHILE iny : NOT_ZERO        ; always
 
         ldx     #kTextBufferSize ; copy to text buffers
@@ -1149,8 +1131,7 @@ ret:   rts
 .endproc ; ResetBuffer1AndState
 
 .proc MaybeAddLeadingZero
-        lda     text_buffer1+1,x
-    IF A = intl_deci_sep
+    IF u8 text_buffer1+1,x = intl_deci_sep
         lda     #'0'
         sta     text_buffer1,x
         sta     text_buffer2,x
@@ -1323,9 +1304,9 @@ invert: jsr     invert_rect
 
 check_button:
         MGTK_CALL MGTK::GetEvent, event_params
-        lda     event_params::kind
-        cmp     #MGTK::EventKind::drag ; Button down?
-        bne     done            ; Nope, done immediately
+
+        ;; Button down? If not, done immediately
+        IF u8 event_params::kind <> #MGTK::EventKind::drag GOTO done
 
         copy8   #kDAWindowId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
@@ -1424,9 +1405,7 @@ invert_rect:
 
 .proc PreDisplayBuffer
         MGTK_CALL MGTK::ShieldCursor, clear_display_params
-
-        MGTK_CALL MGTK::MoveTo, text_pos_params ; clear with spaces
-        MGTK_CALL MGTK::DrawStringRight, spaces_string
+        MGTK_CALL MGTK::PaintRect, clear_display_params
         MGTK_CALL MGTK::MoveTo, text_pos_params ; set up for display
         rts
 .endproc ; PreDisplayBuffer
@@ -1461,10 +1440,10 @@ loop:
         jmp     break
     END_IF
 
-        add16_8 ptr, #(btn_c::viewloc - btn_c), bitmap_addr
-        add16_8 ptr, #(btn_c::pos - btn_c), pos
-        add16_8 ptr, #(btn_c::label - btn_c), label
-        add16_8 ptr, #(btn_c::port - btn_c), rect_addr
+        add16   ptr, #(btn_c::viewloc - btn_c), bitmap_addr
+        add16   ptr, #(btn_c::pos - btn_c), pos
+        add16   ptr, #(btn_c::label - btn_c), label
+        add16   ptr, #(btn_c::port - btn_c), rect_addr
 
         MGTK_CALL MGTK::SetPenMode, notpenBIC
         MGTK_CALL MGTK::PaintBits, 0, bitmap_addr ; draw drop shadow

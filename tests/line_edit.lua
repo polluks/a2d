@@ -1,5 +1,3 @@
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
 This covers:
  * DeskTop's modal name dialog, used in:
@@ -481,7 +479,7 @@ function LineEditTest(name, limits, activation_func, rect_func, cleanup_func)
               m.MoveToApproximately(x, y)
               a2dtest.MultiSnap(60, message)
               m.Click()
-              emu.wait(1)
+              a2dtest.WaitForSystemTask()
               a2dtest.MultiSnap(60, "verify cursor not obscured")
           end)
         end
@@ -527,8 +525,9 @@ LineEditTest(
     chars = filename_chars,
   },
   function()
-    a2d.SelectPath("/A2.DESKTOP")
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_ERASE_DISK)
+    desktop.SelectPath("/A2.DESKTOP")
+    a2d.InvokeMenuItem(desktop.SPECIAL_MENU, desktop.SPECIAL_ERASE_DISK)
+    a2dtest.WaitForSystemTask()
     a2d.ClearTextField()
   end,
   function()
@@ -537,7 +536,7 @@ LineEditTest(
   end,
   function()
     a2d.DialogCancel()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 end)
 
 LineEditTest(
@@ -547,8 +546,9 @@ LineEditTest(
     chars = filename_chars,
   },
   function()
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_RENAME)
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_RENAME)
+    a2dtest.WaitForSystemTask()
   end,
   function()
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
@@ -556,7 +556,7 @@ LineEditTest(
   end,
   function()
     a2d.DialogCancel()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 end)
 
 LineEditTest(
@@ -566,9 +566,9 @@ LineEditTest(
     chars = printable_chars,
   },
   function()
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
-    emu.wait(5)
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_ADD_A_SHORTCUT)
+    a2dtest.WaitForSystemTask()
   end,
   function()
     local id = a2dtest.GetNextWindowID(mgtk.FrontWindow())
@@ -577,7 +577,7 @@ LineEditTest(
   end,
   function()
     a2d.DialogCancel()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 end)
 
 LineEditTest(
@@ -587,8 +587,8 @@ LineEditTest(
     chars = filename_chars .. "?*",
   },
   function()
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.FIND_FILES)
-    emu.wait(5)
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.FIND_FILES)
+    a2dtest.WaitForSystemTask()
   end,
   function()
     local id = a2dtest.GetNextWindowID(mgtk.FrontWindow())
@@ -597,17 +597,17 @@ LineEditTest(
   end,
   function()
     a2d.DialogCancel()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 end)
 
 LineEditTest(
   "Map DA - on screen",
   {
-    max = 15,
+    max = 16,
     chars = printable_chars,
   },
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP", {no_validate=true})
+    desktop.InvokePath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP")
   end,
   function()
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
@@ -615,18 +615,18 @@ LineEditTest(
   end,
   function()
     a2d.DialogCancel()
-    emu.wait(5)
-    a2d.CloseAllWindows()
+    a2dtest.WaitForSystemTask()
+    desktop.CloseAllWindows()
 end)
 
 LineEditTest(
   "Map DA - line edit partially obscured",
   {
-    max = 15,
+    max = 16,
     chars = printable_chars,
   },
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP", {no_validate=true})
+    desktop.InvokePath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP")
     local x, y = a2dtest.GetFrontWindowDragCoords()
     a2d.Drag(x, y, x, apple2.SCREEN_HEIGHT - 80)
   end,
@@ -636,18 +636,18 @@ LineEditTest(
   end,
   function()
     a2d.DialogCancel()
-    emu.wait(5)
-    a2d.CloseAllWindows()
+    a2dtest.WaitForSystemTask()
+    desktop.CloseAllWindows()
 end)
 
 LineEditTest(
   "Map DA - line edit fully obscured",
   {
-    max = 15,
+    max = 16,
     chars = printable_chars,
   },
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP", {no_validate=true})
+    desktop.InvokePath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP")
     local x, y = a2dtest.GetFrontWindowDragCoords()
     a2d.Drag(x, y, x, apple2.SCREEN_HEIGHT - 50)
   end,
@@ -657,18 +657,18 @@ LineEditTest(
   end,
   function()
     a2d.DialogCancel()
-    emu.wait(5)
-    a2d.CloseAllWindows()
+    a2dtest.WaitForSystemTask()
+    desktop.CloseAllWindows()
 end)
 
 LineEditTest(
   "Map DA - window obscured",
   {
-    max = 15,
+    max = 16,
     chars = printable_chars,
   },
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP", {no_validate=true})
+    desktop.InvokePath("/A2.DESKTOP/APPLE.MENU/CONTROL.PANELS/MAP")
     local x, y = a2dtest.GetFrontWindowDragCoords()
     a2d.Drag(x, y, x, apple2.SCREEN_HEIGHT)
   end,
@@ -677,6 +677,6 @@ LineEditTest(
   end,
   function()
     a2d.DialogCancel()
-    emu.wait(5)
-    a2d.CloseAllWindows()
+    a2dtest.WaitForSystemTask()
+    desktop.CloseAllWindows()
 end)

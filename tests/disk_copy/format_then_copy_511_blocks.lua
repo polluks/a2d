@@ -5,8 +5,6 @@ DISKARGS="-hard3 $HARDIMG -hard1 sizes/image_511_blocks_random.hdv -hard2 sizes/
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
   Format then Disk Copy Disk Copy with 511 blocks.
 ]]
@@ -18,13 +16,15 @@ test.Variants(
   function(idx, name, what)
     if a2dtest.IsAlertShowing() then  -- duplicate volume
       a2d.DialogOK()
+      a2dtest.WaitForSystemTask()
     end
 
-    a2d.CloseAllWindows()
-    a2d.ClearSelection()
-    a2d.InvokeMenuItem(a2d.SPECIAL_MENU, a2d.SPECIAL_FORMAT_DISK-2)
+    desktop.CloseAllWindows()
+    desktop.ClearSelection()
+    a2d.InvokeMenuItem(desktop.SPECIAL_MENU, desktop.SPECIAL_FORMAT_DISK-2)
+    a2dtest.WaitForSystemTask()
 
-    a2d.FormatEraseSelectSlotDrive(6, 1)
+    desktop.FormatEraseSelectSlotDrive(6, 1)
     a2d.ClearTextField()
     apple2.Type("NEW.NAME" .. idx)
     a2d.DialogOK()
@@ -36,22 +36,25 @@ test.Variants(
       formatted as 512 blocks
     ]]
 
-    emu.wait(10)
+    a2dtest.WaitForSystemTask()
 
-    a2d.ClearSelection()
-    a2d.CopyDisk()
+    desktop.ClearSelection()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
 
     a2d.InvokeMenuItem(3, idx) -- Options > Smart Block Copy or Full Disk Copy
+    a2dtest.WaitForSystemTask()
 
     -- select source
     apple2.UpArrowKey() -- S6D2
     apple2.UpArrowKey() -- S6D1
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     -- select destination
     apple2.UpArrowKey() -- S6D2
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     a2d.DialogOK()
 
     -- insert source
@@ -79,10 +82,13 @@ test.Variants(
       test.Snap("verify total block counts are 511")
     end
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     -- cleanup
     a2d.OAShortcut("Q") -- File > Quit
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
     a2dtest.WaitForAlert({match="2 volumes with the same name"})
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 end)

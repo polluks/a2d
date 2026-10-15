@@ -39,10 +39,10 @@ xpos_table:
         .word   kScreenWidth+kToasterWidth+450
 
 ypos_table:
-        .word   AS_WORD(-kToasterHeight)
-        .word   AS_WORD(-kToasterHeight)+160
-        .word   AS_WORD(-kToasterHeight)+40
-        .word   AS_WORD(-kToasterHeight)+99
+        .word   AS_WORD{-kToasterHeight}
+        .word   AS_WORD{-kToasterHeight+160}
+        .word   AS_WORD{-kToasterHeight+40}
+        .word   AS_WORD{-kToasterHeight+99}
 
 frame_table:
         .byte   0,1,2,3
@@ -86,17 +86,15 @@ grafport:       .tag MGTK::GrafPort
 ;;; Main Input Loop
 
 .proc InputLoop
+    REPEAT
         MGTK_CALL MGTK::GetEvent, event_params
         lda     event_params + MGTK::Event::kind
-        cmp     #MGTK::EventKind::button_down ; was clicked?
-        beq     exit
-        cmp     #MGTK::EventKind::key_down  ; any key?
-        beq     exit
+        BREAK_IF A = #MGTK::EventKind::button_down ; was clicked?
+        BREAK_IF A = #MGTK::EventKind::key_down ; any key?
 
         jsr     Animate
-        jmp     InputLoop
+    FOREVER
 
-exit:
         MGTK_CALL MGTK::RedrawDeskTop
 
         MGTK_CALL MGTK::DrawMenuBar
@@ -133,18 +131,18 @@ exit:
         sub16   xpos, #4, xpos
 
         ;; Wrap Y
-      IF scmp16 ypos, #kScreenHeight : POS
-        copy16  #AS_WORD(-kToasterHeight), ypos
+      IF s16 ypos >= #kScreenHeight
+        copy16  #AS_WORD{-kToasterHeight}, ypos
       END_IF
 
         ;; Wrap X
-      IF scmp16 xpos, #AS_WORD{-kToasterWidth} : NS
+      IF s16 xpos < #AS_WORD{-kToasterWidth}
         copy16  #kScreenWidth+kToasterWidth, xpos
       END_IF
 
         ;; Next frame
         inc     frame
-      IF lda frame : A = #4     ; num frames
+      IF u8 frame = #4          ; num frames
         copy8   #0, frame
       END_IF
 

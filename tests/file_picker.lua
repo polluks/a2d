@@ -5,8 +5,6 @@ DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv -flop1 disk_b.2mg -flop2 disk_a.2mg"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 local s6d1 = manager.machine.images[":sl6:superdrive:fdc:0:35hd"]
 local s6d2 = manager.machine.images[":sl6:superdrive:fdc:1:35hd"]
 
@@ -21,7 +19,7 @@ This covers:
 
 ]]
 
-a2d.AddShortcut("/A2.DESKTOP/READ.ME")
+desktop.AddShortcut("/A2.DESKTOP/READ.ME")
 
 function FilePickerTest(
     name,
@@ -130,7 +128,7 @@ function FilePickerTest(
       activation_func()
 
       a2d.NavigateFilePickerTo("/RAM4")
-      emu.wait(5)
+      a2dtest.WaitForSystemTask()
       apple2.LeftArrowKey() -- force caret visible
       a2dtest.ExpectNothingChanged(function()
           apple2.PressOA()
@@ -247,14 +245,14 @@ function FilePickerTest(
     test.Step(
       name .. " - invisible files",
       function()
-        a2d.ToggleOptionShowInvisible() -- enable
+        desktop.ToggleOptionShowInvisible() -- enable
 
         activation_func()
         a2d.NavigateFilePickerTo("/TESTS/PROPERTIES/VISIBLE.HIDDEN")
         test.ExpectIMatch(a2dtest.OCRScreen(), "INVISIBLE", "INVISIBLE should be in list")
         cleanup_func()
 
-        a2d.ToggleOptionShowInvisible() -- disable
+        desktop.ToggleOptionShowInvisible() -- disable
 
         activation_func()
         a2d.NavigateFilePickerTo("/TESTS/PROPERTIES/VISIBLE.HIDDEN")
@@ -281,7 +279,7 @@ function FilePickerTest(
       activation_func()
 
       apple2.ControlKey("D") -- Drives
-      emu.wait(2)
+      a2dtest.WaitForSystemTask()
       test.ExpectEquals(a2d.GetFilePickerCurrentPath(), "/", "should be at root")
       test.Snap("verify drives are in alphabetical order")
 
@@ -289,14 +287,19 @@ function FilePickerTest(
       s6d2:unload()
 
       apple2.ControlKey("D") -- Drives
-      emu.wait(2)
+
+      -- TODO: Remove this workaround for "Shortcuts - Run a Program - disks"
+      -- Other instances of this test case are fine
+      emu.wait(1) -- Hangs *without* this
+      --a2dtest.WaitForSystemTask() -- Hangs *with* this
+
       test.ExpectEquals(a2d.GetFilePickerCurrentPath(), "/", "should be at root")
       test.Snap("verify A is no longer present")
 
       s6d2:load(image)
 
       apple2.ControlKey("D") -- Drives
-      emu.wait(2)
+      a2dtest.WaitForSystemTask()
       test.ExpectEquals(a2d.GetFilePickerCurrentPath(), "/", "should be at root")
       test.Snap("verify A is back")
 
@@ -364,7 +367,7 @@ function FilePickerTest(
       apple2.PressOA()
       apple2.Type("EXTRAS")
       apple2.ReleaseOA()
-      a2d.WaitForRepaint()
+      a2dtest.WaitForSystemTask()
       test.ExpectMatch(a2dtest.OCRScreen(), "Open", "Open button should not be dimmed")
 
       if not options.dirs_only then
@@ -372,7 +375,7 @@ function FilePickerTest(
         apple2.Type("@") -- reset
         apple2.Type("READ.ME")
         apple2.ReleaseOA()
-        a2d.WaitForRepaint()
+        a2dtest.WaitForSystemTask()
         test.ExpectNotMatch(a2dtest.OCRScreen(), "Open", "Open button should be dimmed")
       end
 
@@ -383,25 +386,25 @@ function FilePickerTest(
       test.ExpectMatch(a2dtest.OCRScreen(), "Close", "Close button should not be dimmed")
       test.ExpectNotMatch(a2dtest.OCRScreen(), "Open", "Open button should be dimmed")
       apple2.ControlKey("O") -- Open
-      emu.wait(2)
+      a2dtest.WaitForSystemTask()
       test.ExpectEqualsIgnoreCase(a2d.GetFilePickerCurrentPath(), "/A2.DESKTOP/EXTRAS", "nothing should have changed")
       test.Snap("verify no selection")
 
       apple2.ControlKey("D") -- Drives
-      emu.wait(2)
+      a2dtest.WaitForSystemTask()
       test.ExpectEquals(a2d.GetFilePickerCurrentPath(), "/", "should be at root")
       test.ExpectNotMatch(a2dtest.OCRScreen(), "Close", "Close button should be dimmed")
       apple2.ControlKey("C") -- Close
-      emu.wait(2)
+      a2dtest.WaitForSystemTask()
       test.ExpectEquals(a2d.GetFilePickerCurrentPath(), "/", "nothing should have changed")
       test.ExpectNotMatch(a2dtest.OCRScreen(), "OK", "OK button should be dimmed")
       local window_id = mgtk.FrontWindow()
       apple2.ReturnKey() -- OK
-      emu.wait(2)
+      a2dtest.WaitForSystemTask()
       test.ExpectEquals(mgtk.FrontWindow(), window_id, "nothing should have changed")
 
       apple2.DownArrowKey()
-      a2d.WaitForRepaint()
+      a2dtest.WaitForSystemTask()
       if options.vol_ok then
         test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should not be dimmed")
       else
@@ -417,7 +420,7 @@ function FilePickerTest(
       apple2.PressOA()
       apple2.Type("EXTRAS")
       apple2.ReleaseOA()
-      a2d.WaitForRepaint()
+      a2dtest.WaitForSystemTask()
       if options.folder_ok then
         test.ExpectMatch(a2dtest.OCRScreen(), "OK", "OK button should not be dimmed")
       else
@@ -464,7 +467,7 @@ function FilePickerTest(
           m.MoveByApproximately(20, 0)
           m.DoubleClick()
       end)
-      emu.wait(5)
+      a2dtest.WaitForSystemTask()
       test.Snap("verify in F1")
 
       a2d.NavigateFilePickerTo("/TESTS/PROPERTIES/SEVEN")
@@ -473,7 +476,7 @@ function FilePickerTest(
           m.MoveToApproximately(x + w / 2, y + 5)
           m.DoubleClick()
       end)
-      emu.wait(5)
+      a2dtest.WaitForSystemTask()
       test.Snap("verify in F1")
 
       cleanup_func()
@@ -499,7 +502,7 @@ function FilePickerTest(
         for i = 1, 32 do
           apple2.DownArrowKey()
         end
-        a2d.WaitForRepaint()
+        a2dtest.WaitForSystemTask()
         test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "F127", "F127 should be selected")
 
         cleanup_func()
@@ -522,7 +525,7 @@ function FilePickerTest(
         for i = 1, 32 do
           apple2.DownArrowKey()
         end
-        a2d.WaitForRepaint()
+        a2dtest.WaitForSystemTask()
         test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "F127", "F127 should be selected")
 
         cleanup_func()
@@ -538,8 +541,9 @@ FilePickerTest(
     folder_ok = true,
   },
   function()
-    a2d.ClearSelection()
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_ADD_A_SHORTCUT)
+    desktop.ClearSelection()
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_ADD_A_SHORTCUT)
+    a2dtest.WaitForSystemTask()
   end,
   function()
     a2d.DialogCancel()
@@ -555,8 +559,9 @@ FilePickerTest(
     no_sel_ok = true,
   },
   function()
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_COPY_TO)
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_COPY_TO)
+    a2dtest.WaitForSystemTask()
   end,
   function()
     a2d.DialogCancel()
@@ -568,8 +573,8 @@ FilePickerTest(
   {
   },
   function()
-    a2d.ToggleOptionShowShortcutsOnStartup()
-    a2d.Reboot()
+    desktop.ToggleOptionShowShortcutsOnStartup()
+    desktop.Reboot()
     a2dtest.ConfigureForSelector()
     a2d.WaitForDesktopReady()
 
@@ -581,7 +586,7 @@ FilePickerTest(
     apple2.Type("D")
     a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
-    a2d.ToggleOptionShowShortcutsOnStartup()
+    desktop.ToggleOptionShowShortcutsOnStartup()
   end
 )
 
@@ -593,24 +598,26 @@ FilePickerTest(
   selected.
 ]]
 test.Step(
-  "Edit a Shortcut - navigates to shorcut target",
+  "Edit a Shortcut - navigates to shortcut target",
   function()
-    a2d.AddShortcut("/TESTS/FILE.TYPES/ROOM.A2FC")
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_EDIT_A_SHORTCUT)
+    desktop.AddShortcut("/TESTS/FILE.TYPES/ROOM.A2FC")
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_EDIT_A_SHORTCUT)
+    a2dtest.WaitForSystemTask()
     apple2.DownArrowKey()
     apple2.DownArrowKey()
     a2d.DialogOK()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify volume is TESTS")
     test.Snap("verify folder is FILE.TYPES")
     test.Snap("verify selection is ROOM.A2FC")
     a2d.DialogCancel()
-    emu.wait(5)
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_DELETE_A_SHORTCUT)
+    a2dtest.WaitForSystemTask()
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_DELETE_A_SHORTCUT)
+    a2dtest.WaitForSystemTask()
     apple2.DownArrowKey()
     apple2.DownArrowKey()
     a2d.DialogOK()
-    emu.wait(30)
+    a2dtest.WaitForSystemTask()
 end)
 
 --[[
@@ -623,24 +630,26 @@ end)
 test.Step(
   "Edit a Shortcut - ejected volume",
   function()
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/A")
-    a2d.AddShortcut("/A/READ.ME")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/A")
+    desktop.AddShortcut("/A/READ.ME")
 
     local image = s6d2.filename
     s6d2:unload()
 
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_EDIT_A_SHORTCUT)
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_EDIT_A_SHORTCUT)
+    a2dtest.WaitForSystemTask()
     apple2.DownArrowKey()
     apple2.DownArrowKey()
     a2d.DialogOK()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify dialog shows drives list")
     a2d.DialogCancel()
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_DELETE_A_SHORTCUT)
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_DELETE_A_SHORTCUT)
+    a2dtest.WaitForSystemTask()
     apple2.DownArrowKey()
     apple2.DownArrowKey()
     a2d.DialogOK()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
     s6d2:load(image)
 end)
@@ -653,30 +662,32 @@ test.Step(
   "Dir and Disk names when path is empty",
   function()
     -- Navigated to empty path
-    a2d.AddShortcut("/RAM1")
+    desktop.AddShortcut("/RAM1")
 
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_EDIT_A_SHORTCUT)
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_EDIT_A_SHORTCUT)
+    a2dtest.WaitForSystemTask()
     apple2.UpArrowKey()
     a2d.DialogOK()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.Snap("verify showing drives list and dir/disk names empty")
     apple2.PressOA()
     apple2.Type("A2.DESKTOP")
     apple2.ReleaseOA()
     apple2.ControlKey("O") -- Open
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.ExpectEqualsIgnoreCase(a2d.GetFilePickerCurrentPath(), "/A2.DESKTOP", "should be in disk")
     apple2.ControlKey("D") -- Drives
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
     test.ExpectEquals(a2d.GetFilePickerCurrentPath(), "/", "should be at root")
     test.Snap("verify showing drives list and dir/disk names empty")
 
     -- cleanup
     a2d.DialogCancel()
-    a2d.InvokeMenuItem(a2d.SHORTCUTS_MENU, a2d.SHORTCUTS_DELETE_A_SHORTCUT)
+    a2d.InvokeMenuItem(desktop.SHORTCUTS_MENU, desktop.SHORTCUTS_DELETE_A_SHORTCUT)
+    a2dtest.WaitForSystemTask()
     apple2.UpArrowKey()
     a2d.DialogOK()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 end)
 
 --[[
@@ -686,18 +697,18 @@ end)
 test.Step(
   "Verify non-modified keys work as type-down selection",
   function()
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_COPY_TO)
-    emu.wait(2)
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_COPY_TO)
+    a2dtest.WaitForSystemTask()
     apple2.ControlKey("D") -- Drives
-    emu.wait(2)
+    a2dtest.WaitForSystemTask()
     local path = "/TESTS/SORTING"
     local opt_file = "A"
 
     for segment in path:gmatch("([^/]+)") do
       apple2.Type(segment)
       apple2.ControlKey("O") -- Open
-      a2d.WaitForRepaint()
+      a2dtest.WaitForSystemTask()
     end
     local current_path = a2d.GetFilePickerCurrentPath()
     if current_path:lower() ~= path:lower() then

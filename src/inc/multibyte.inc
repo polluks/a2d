@@ -7,10 +7,10 @@
 
 ;;; ============================================================
 
-.define _is_immediate(arg)       .xmatch (.mid (0, 1, {arg}), #)
-.define _is_register(arg)        .xmatch ({arg}, x) .or .xmatch ({arg}, y)
-.define _is_y_register(arg)      .xmatch ({arg}, y)
-.define _immediate_value(arg)    .right (.tcount ({arg}) - 1, {arg})
+.define _is_immediate(arg)       .xmatch({.mid (0, 1, {arg})}, #)
+.define _is_register(arg)        .xmatch({arg}, x) || .xmatch({arg}, y)
+.define _is_y_register(arg)      .xmatch({arg}, y)
+.define _immediate_value(arg)    .right(.tcount({arg}) - 1, {arg})
 
 ;;; Helpers for multi-byte operations
 
@@ -152,6 +152,145 @@
         sta     arg2
     .endif
 .endmacro
+
+;;; Unsigned compare 8-bit values - C and Z valid
+;;;    ucmp8 #$11, #$22    ; immediate, immediate (silly, but supported)
+;;;    ucmp8 #$11, $22     ; immediate, absolute
+;;;    ucmp8 $11, #$22     ; absolute, immediate
+;;;    ucmp8 $11, $22      ; absolute, absolute
+;;;    ucmp8 $11,x, $22    ; indexed, absolute
+;;;    ucmp8 $11, $22,x    ; absolute, indexed
+;;;    ucmp8 $11,x, #$22   ; indexed, immediate
+;;;    ucmp8 #$11, $22,x   ; immediate, indexed
+;;;    ucmp8 $11,x, $22,x  ; indexed, indexed
+.macro ucmp8 arg1, arg2, arg3, arg4
+    .if (_is_register {arg2}) && (_is_register {arg4})
+        ;; indexed, indexed
+        lda     arg1,arg2
+        cmp     arg3,arg4
+    .elseif _is_register {arg2}
+        ;; indexed, absolute/immediate
+        lda     arg1,arg2
+        cmp     arg3
+    .elseif _is_register {arg3}
+        ;; absolute/immediate, indexed
+        lda     arg1
+        cmp     arg2,arg3
+    .else
+        ;; absolute/immediate, absolute/immediate
+        lda     arg1
+        cmp     arg2
+    .endif
+.endmacro
+
+;;; Core for add8/sub8
+.macro _addsub8 op, carryOp, arg1, arg2, arg3, arg4, arg5, arg6
+    .if (_is_register {arg2}) && (_is_register {arg4}) && (_is_register {arg6})
+        ;; xxx8 $11,x, $22,x, $33,x
+        lda     arg1,arg2
+        carryOp
+        op      arg3,arg4
+        sta     arg5,arg6
+    .elseif (_is_register {arg2}) && (_is_register {arg4})
+        ;; xxx8 $11,x, $22,x, $33
+        lda     arg1,arg2
+        carryOp
+        op      arg3,arg4
+        sta     arg5
+    .elseif (_is_register {arg2}) && (_is_register {arg5})
+        ;; xxx8 $11,x, $22, $33,x
+        ;; xxx8 $11,x, #$22, $33,x
+        lda     arg1,arg2
+        carryOp
+        _op_lo  op, {arg3}
+        sta     arg4,arg5
+        lda     arg1+1,arg2
+        _op_hi  op, {arg3}
+        sta     arg4+1,arg5
+    .elseif (_is_register {arg3}) && (_is_register {arg5})
+        ;; xxx8 $11, $22,x, $33,x
+        ;; xxx8 #$11, $22,x, $33,x
+        _op_lo  lda, {arg1}
+        carryOp
+        op      arg2,arg3
+        sta     arg4,arg5
+        _op_hi  lda, {arg1}
+        op      arg2+1,arg3
+        sta     arg4+1,arg5
+    .elseif _is_register {arg2}
+        ;; xxx8 $11,x, $22, $33
+        ;; xxx8 $11,x, #$22, $33
+        lda     arg1,arg2
+        carryOp
+        _op_lo  op, {arg3}
+        sta     arg4
+        lda     arg1+1,arg2
+        _op_hi  op, {arg3}
+        sta     arg4+1
+    .elseif _is_register {arg3}
+        ;; xxx8 $11, $22,x $33
+        ;; xxx8 #$11, $22,x $33
+        _op_lo  lda, {arg1}
+        carryOp
+        op      arg2,arg3
+        sta     arg4
+        _op_hi  lda, {arg1}
+        op      arg2+1,arg3
+        sta     arg4+1
+    .elseif _is_register {arg4}
+        ;; xxx8 $11, $22, $33,x
+        ;; xxx8 #$11, $22, $33,x
+        ;; xxx8 $11, #$22, $33,x
+        ;; xxx8 #$11, #$22, $33,x
+        _op_lo  lda, {arg1}
+        carryOp
+        _op_lo  op, {arg2}
+        sta     arg3,arg4
+        _op_hi  lda, {arg1}
+        _op_hi  op, {arg2}
+        sta     arg3+1,arg4
+    .else
+        ;; xxx8 $11, $22, $33
+        ;; xxx8 #$11, $22, $33
+        ;; xxx8 $11, #$22, $33
+        ;; xxx8 #$11, #$22, $33
+        _op_lo lda, {arg1}
+        carryOp
+        _op_lo op, {arg2}
+        sta     arg3
+        _op_hi lda, {arg1}
+        _op_hi op, {arg2}
+        sta     arg3+1
+    .endif
+.endmacro
+
+;;; Add arg1 to arg2, store to arg3
+;;;    add8 $11, $22, $33        ; absolute, absolute, absolute
+;;;    add8 $11, #$22, $33       ; absolute, immediate, absolute
+;;;    add8 $11,x, $22, $33      ; indexed, absolute, absolute
+;;;    add8 $11, $22,x, $33      ; absolute, indexed, absolute
+;;;    add8 $11, $22, $33,x      ; absolute, absolute, indexed
+;;;    add8 $11,x, $22, $33,x    ; indexed, absolute, indexed
+;;;    add8 $11, $22,x, $33,x    ; absolute, indexed, indexed
+;;;    add8 $11,x, $22,x, $33,x  ; indexed, indexed, indexed
+.macro add8 arg1, arg2, arg3, arg4, arg5, arg6
+    _addsub8 adc, clc, arg1, arg2, arg3, arg4, arg5, arg6
+.endmacro
+;;; Subtract arg2 from arg1, store to arg3
+;;;    sub8 #$11, #$22, $33      ; immediate, immediate, absolute
+;;;    sub8 #$11, $22, $33       ; immediate, absolute, absolute
+;;;    sub8 $11, #$22, $33       ; absolute, immediate, absolute
+;;;    sub8 $11, $22, $33        ; absolute, absolute, absolute
+;;;    sub8 $11, $22,x, $33      ; absolute, indexed, absolute
+;;;    sub8 $11, $22, $33,x      ; absolute, absolute, indexed
+;;;    sub8 $11,x, $22,x, $33    ; indexed, indexed, absolute
+;;;    sub8 $11,x, $22, $33,x    ; indexed, absolute, indexed
+;;;    sub8 $11, $22,x, $33,x    ; absolute, indexed, indexed
+;;;    sub8 $11,x, $22,x $33,x   ; indexed, indexed, indexed
+.macro sub8 arg1, arg2, arg3, arg4, arg5, arg6
+    _addsub8 sbc, sec, arg1, arg2, arg3, arg4, arg5, arg6
+.endmacro
+
 
 ;;; ============================================================
 ;;; 16-bit pseudo-ops
@@ -449,6 +588,10 @@
         _op_hi  inc, {arg1}
 @skip:
     .else
+      .if _is_immediate {arg2}
+          .warning "Unnecessary use of add16_8 macro with immediate arg"
+      .endif
+
         _op_lo  lda, {arg1}
         clc
         adc     arg2
@@ -597,8 +740,8 @@
 ;;;    sub16_8 $1111, #$22, $3333       ; absolute, immediate, absolute
 ;;;    sub16_8 $1111, $22, $3333        ; absolute, absolute, absolute
 ;;; Subtract arg2 (absolute) from arg1 (8-bit absolute/immediate), store to arg1
-;;;    add16_8 $1111, #$22              ; absolute, immediate
-;;;    add16_8 $1111, $22               ; absolute, absolute
+;;;    sub16_8 $1111, #$22              ; absolute, immediate
+;;;    sub16_8 $1111, $22               ; absolute, absolute
 .macro sub16_8 arg1, arg2, arg3
     .ifblank arg3
         .local @skip
@@ -610,6 +753,10 @@
         _op_hi  dec, {arg1}
 @skip:
     .else
+      .if _is_immediate {arg2}
+          .warning "Unnecessary use of add16_8 macro with immediate arg"
+      .endif
+
         _op_lo  lda, {arg1}
         sec
         sbc     arg2
@@ -720,16 +867,16 @@
 
 ;;; Unsigned compare 16-bit values - test C (BCC/BCS) for ordering
 ;;; WARNING: Z (for equality) is NOT set per CMP; use ecmp16 if needed.
-;;;    cmp16 #$1111, #$2222    ; immediate, immediate (silly, but supported)
-;;;    cmp16 #$1111, $2222     ; immediate, absolute
-;;;    cmp16 $1111, #$2222     ; absolute, immediate
-;;;    cmp16 $1111, $2222      ; absolute, absolute
-;;;    cmp16 $1111,x, $2222    ; indexed, absolute
-;;;    cmp16 $1111, $2222,x    ; absolute, indexed
-;;;    cmp16 $1111,x, #$2222   ; indexed, immediate
-;;;    cmp16 #$1111, $2222,x   ; immediate, indexed
-;;;    cmp16 $1111,x, $2222,x  ; indexed, indexed
-.macro cmp16 arg1, arg2, arg3, arg4
+;;;    ucmp16 #$1111, #$2222    ; immediate, immediate (silly, but supported)
+;;;    ucmp16 #$1111, $2222     ; immediate, absolute
+;;;    ucmp16 $1111, #$2222     ; absolute, immediate
+;;;    ucmp16 $1111, $2222      ; absolute, absolute
+;;;    ucmp16 $1111,x, $2222    ; indexed, absolute
+;;;    ucmp16 $1111, $2222,x    ; absolute, indexed
+;;;    ucmp16 $1111,x, #$2222   ; indexed, immediate
+;;;    ucmp16 #$1111, $2222,x   ; immediate, indexed
+;;;    ucmp16 $1111,x, $2222,x  ; indexed, indexed
+.macro ucmp16 arg1, arg2, arg3, arg4
     .if (_is_register {arg2}) && (_is_register {arg4})
         ;; indexed, indexed
         lda     arg1,arg2
@@ -770,14 +917,14 @@
 ;;; NOTE: Some callers rely on A's bit7 implicitly matching result in N.
 .macro scmp16 arg1, arg2, arg3, arg4
         .local @skip
-        cmp16 arg1,arg2,arg3,arg4
+        ucmp16 arg1,arg2,arg3,arg4
         bvc     @skip
         eor     #$80
 @skip:
 .endmacro
 
 ;;; Equality compare 16-bit values - test Z (BEQ/BNE) for equality, or C (BCC/BCS) for ordering.
-;;; NOTE: Use cmp16 (smaller code) if Z is not needed.
+;;; NOTE: Use ucmp16 (smaller code) if Z is not needed.
 ;;;    ecmp16 #$1111, #$2222   ; immediate, immediate (silly, but supported)
 ;;;    ecmp16 #$1111, $2222    ; immediate, absolute
 ;;;    ecmp16 $1111, #$2222    ; absolute, immediate

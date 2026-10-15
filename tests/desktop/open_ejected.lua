@@ -8,8 +8,6 @@ DISKARGS="-flop3 $HARDIMG"
 
 local s5d1 = manager.machine.images[":fdc:2:35dd"]
 
-a2d.ConfigureRepaintTime(5)
-
 --[[
   Launch DeskTop. Manually (not via DeskTop) eject the startup disk.
   Select the startup disk icon. File > Open. Verify that the alert
@@ -21,8 +19,8 @@ test.Step(
     local drive = s5d1
     drive:unload()
 
-    a2d.SelectPath("/A2.DESKTOP")
-    a2d.InvokeMenuItem(a2d.FILE_MENU, a2d.FILE_OPEN-1)
+    desktop.SelectPath("/A2.DESKTOP")
+    a2d.InvokeMenuItem(desktop.FILE_MENU, desktop.FILE_OPEN-1)
     a2dtest.WaitForAlert({match="volume cannot be found"})
 end)
 

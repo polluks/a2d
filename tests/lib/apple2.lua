@@ -41,7 +41,7 @@ local keyboard = {
 
   -- Other
   ["Reset"]       = { port = ":keyb_special", field = "RESET"     },
-  ["Caps Lock"]   = { port = ":keyb_special", field = "Caps Lock", bits = 0x01 },
+  ["Caps Lock"]   = { port = ":keyb_special", field = "Caps Lock", bits = 0x01, value = 0x01 },
 }
 
 local function get_device(pattern)
@@ -55,6 +55,34 @@ end
 local system_class = tostring(manager.machine.system.parent)
 if system_class == "0" then
   system_class = manager.machine.system.name
+end
+
+local function stringify(v)
+  if type(v) == "table" then
+    s = "{"
+    for k,v in pairs(v) do
+      s = s .. string.format("%q = %q, ", k, v)
+    end
+    return s .. "}"
+  end
+  return v
+end
+
+local function find_port_and_field(names)
+  if type(names) ~= "table" then
+    names = {names}
+  end
+
+  for i, name in ipairs(names) do
+    for port_name, port in pairs(manager.machine.ioport.ports) do
+      for field_name, field in pairs(port.fields) do
+        if field_name == name then
+          return {port = port_name, field = field_name}
+        end
+      end
+    end
+  end
+  error("Unable to find port and field for " .. stringify(names))
 end
 
 local scan_for_mouse = false
@@ -89,40 +117,62 @@ elseif machine.system.name:match("^las.*128") then
 
   keyboard["Open Apple"].field = "Open Triangle"
   keyboard["Solid Apple"].field = "Solid Triangle"
+  keyboard["Control"].field = { "Control", "Ctrl" } -- Updated in MAME 0.290
+  keyboard["Reset"].field = { "RESET", "Reset" } -- Updated in MAME 0.290
+  keyboard["Escape"] = find_port_and_field({"Escape", "Esc"}) -- Updated in MAME 0.290
+  keyboard["Delete"] = find_port_and_field({"Delete"}) -- Updated in MAME 0.290
+  keyboard["Tab"] = find_port_and_field({"Tab"}) -- Updated in MAME 0.290
+
+  keyboard["Up Arrow"]    = find_port_and_field("↑")
+  keyboard["Left Arrow"]  = find_port_and_field("←")
+  keyboard["Right Arrow"] = find_port_and_field("→")
+  keyboard["Down Arrow"]  = find_port_and_field("↓")
+  keyboard["Return"]      = find_port_and_field("Return")
+
+  -- MAME 0.290
+  if manager.machine.devices[":kbdmcu"] ~= nil then
+    keyboard["Caps Lock"].test = function()
+      return manager.machine.devices[":kbdmcu"].state.P2.value < 128
+    end
+  end
 
 elseif machine.system.name:match("^apple2gs") then
   -- Apple IIgs
   -- * built-in mouse port (ADB)
   -- * aux memory is just exposed as RAM > 0xFFFF
   mouse = {
-    x = { port = ":macadb:MOUSE1", field = "Mouse X" },
-    y = { port = ":macadb:MOUSE2", field = "Mouse Y" },
-    b = { port = ":macadb:MOUSE0", field = "Mouse Button 0" },
+    x = { port = {":macadb:MOUSE1", ":adb:1:apple_mouse:mousex"}, field = "Mouse X" },
+    y = { port = {":macadb:MOUSE2", ":adb:1:apple_mouse:mousey"}, field = "Mouse Y" },
+    b = { port = {":macadb:MOUSE0", ":adb:1:apple_mouse:button"}, field = "Mouse Button 0" },
   }
 
   keyboard = {
-    ["Return"]      = { port = ":macadb:KEY2", field = "Return" },
-    ["Delete"]      = { port = ":macadb:KEY3", field = "Backspace" },
-    ["Escape"]      = { port = ":macadb:KEY3", field = "Esc" },
-    ["Tab"]         = { port = ":macadb:KEY3", field = "Tab" },
+    ["Return"]      = { port = {":macadb:KEY2", ":adb:0:iigs_kbd:ROW6"}, field = "Return" },
+    ["Delete"]      = { port = {":macadb:KEY3", ":adb:0:iigs_kbd:ROW7"}, field = "Backspace" },
+    ["Escape"]      = { port = {":macadb:KEY3", ":adb:0:iigs_kbd:ROW4"}, field = {"Escape", "Esc"} },
+    ["Tab"]         = { port = {":macadb:KEY3", ":adb:0:iigs_kbd:ROW8"}, field = "Tab" },
 
-    ["Up Arrow"]    = { port = ":macadb:KEY3", field = "Up Arrow"    },
-    ["Left Arrow"]  = { port = ":macadb:KEY3", field = "Left Arrow"  },
-    ["Right Arrow"] = { port = ":macadb:KEY3", field = "Right Arrow" },
-    ["Down Arrow"]  = { port = ":macadb:KEY3", field = "Down Arrow"  },
+    ["Up Arrow"]    = { port = {":macadb:KEY3", ":adb:0:iigs_kbd:ROW7"}, field = {"Up Arrow",    "Cursor Up"} },
+    ["Left Arrow"]  = { port = {":macadb:KEY3", ":adb:0:iigs_kbd:ROW2"}, field = {"Left Arrow",  "Cursor Left"} },
+    ["Right Arrow"] = { port = {":macadb:KEY3", ":adb:0:iigs_kbd:ROW2"}, field = {"Right Arrow", "Cursor Right"} },
+    ["Down Arrow"]  = { port = {":macadb:KEY3", ":adb:0:iigs_kbd:ROW2"}, field = {"Down Arrow",  "Cursor Down"} },
 
     -- modifiers
-    ["Control"]     = { port = ":macadb:KEY3", field = "Control"    },
-    ["Shift"]       = { port = ":macadb:KEY3", field = "Shift"      },
+    ["Control"]     = { port = {":macadb:KEY3", ":adb:0:iigs_kbd:P2"}, field = "Control"    },
+    ["Shift"]       = { port = {":macadb:KEY3", ":adb:0:iigs_kbd:P2"}, field = "Shift"      },
     -- Ample MAME builds modify port names for OA/SA, so support both forms
     -- https://github.com/ksherlock/mame/blob/9069cdfc14f0abc9634540bf3d2ebc1d21951a50/src/mame/apple/macadb.cpp#L157-L169
-    ["Open Apple"]  = { port = ":macadb:KEY3", field = { "Command / Open Apple" , "Command" } },
-    ["Solid Apple"] = { port = ":macadb:KEY3", field = { "Option / Solid Apple" , "Option" }    },
+    ["Open Apple"]  = { port = {":macadb:KEY3", ":adb:0:iigs_kbd:P2"}, field = { "Command / Open Apple" , "Command" } },
+    ["Solid Apple"] = { port = {":macadb:KEY3", ":adb:0:iigs_kbd:P2"}, field = { "Option / Solid Apple" , "Option" }    },
 
     -- Other
-    ["Reset"]     = { port = ":macadb:KEY5", field = "Reset / Power" },
-    ["Caps Lock"] = { port = ":macadb:KEY3", field = "Caps Lock", bits = 0x0200 },
+    ["Reset"]     = { port = {":macadb:KEY5", ":adb:0:iigs_kbd:P2"}, field = "Reset / Power" },
   }
+  if manager.machine.ioport.ports[":adb:0:iigs_kbd:CAPSLOCK"] == nil then
+    keyboard["Caps Lock"] = { port = ":macadb:KEY3", field = "Caps Lock", bits = 0x200, value = 0x200 }
+  else
+    keyboard["Caps Lock"] = { port = ":adb:0:iigs_kbd:CAPSLOCK", field = "Caps Lock", bits = 0x1, value = 0x00 }
+  end
 elseif machine.system.name:match("^ace500") then
   -- Franklin ACE 500
   -- * has built-in mouse port
@@ -179,8 +229,8 @@ elseif machine.system.name:match("^prav8c") then
 
     -- Other
     ["Reset"]       = { port = ":kbd:KEY9", field = "Reset"     },
-    ["Caps Lock"]   = { port = ":kbd:KEY6", field = "Caps Lock", bits = 0x01 }, -- TODO: bits?
   }
+  -- TODO: Sort out Caps Lock; field ":kbd:KEY6" / "Caps Lock" but port bits don't toggle
 
 elseif machine.system.name:match("^apple2p") or machine.system.name:match("^apple2$") then
   -- minimal support for launcher testing
@@ -235,34 +285,45 @@ end
 --------------------------------------------------
 
 local function get_port(port_name)
-  local port = machine.ioport.ports[port_name]
-  if port == nil then
-    error("No such port: " .. port_name)
+  if type(port_name) ~= "table" then
+    port_name = {port_name}
   end
-  return port
+  for i, v in ipairs(port_name) do
+    local port = machine.ioport.ports[v]
+    if port ~= nil then
+      return port
+    end
+  end
+
+  error("No such port: " .. stringify(port_name))
 end
 
 --[[
-  `field_name` can be an array, in which case each name is tried
-  in turn. This can be used to work around field name changes in MAME, etc.
+  `port_name` and `field_name` can be arrays array, in which case each
+  case name is tried in turn. This can be used to work around field
+  name changes in MAME, etc.
 ]]
 local function get_field(port_name, field_name)
-  local port = get_port(port_name)
-  local field
-  if type(field_name) == "table" then
-    for i, v in ipairs(field_name) do
-      field = port.fields[v]
-      if field ~= nil then
-        break
+  if type(port_name) ~= "table" then
+    port_name = {port_name}
+  end
+  if type(field_name) ~= "table" then
+    field_name = {field_name}
+  end
+
+  for pi,pv in ipairs(port_name) do
+    for pi,fv in ipairs(field_name) do
+      local port = manager.machine.ioport.ports[pv]
+      if port ~= nil then
+        local field = port.fields[fv]
+        if field ~= nil then
+          return field
+        end
       end
     end
-  else
-    field = port.fields[field_name]
   end
-  if field == nil then
-    error("No field \"" .. field_name .. "\" for port: " .. port_name)
-  end
-  return field
+
+  error("No field \"" .. stringify(field_name) .. "\" for port: " .. stringify(port_name))
 end
 
 function apple2.SetSystemConfig(port_name, field_name, mask, value)
@@ -272,9 +333,11 @@ function apple2.SetSystemConfig(port_name, field_name, mask, value)
   while (port:read() & mask) ~= value do
     -- each field toggle advances to the next setting (or wraps)
     field:clear_value()
-    emu.wait(2/60)
+    emu.wait_next_frame()
+    emu.wait_next_frame() -- second call required on apple2c0, etc.
     field:set_value(1) -- anything
-    emu.wait(2/60)
+    emu.wait_next_frame()
+    emu.wait_next_frame() -- second call required on apple2c0, etc.
 
     if port:read() == initial then
       error("Cycled field \"" .. field_name .. "\" on port \"" .. port_name .. "\" without hitting target value")
@@ -325,7 +388,7 @@ end
 
 local function SetVideoConfig(field_name, value, mask, shift)
   apple2.SetSystemConfig(":a2video:a2_video_config", field_name, mask << shift, value << shift)
-  emu.wait(2/60)
+  emu.wait_next_frame()
 end
 
 
@@ -379,8 +442,19 @@ local kbd = machine.natkeyboard
 
 local function wait_for_kbd_strobe_clear()
   while apple2.ReadSSW("KBD") > 127 do
-    emu.wait(1/60)
+    emu.wait_next_frame()
   end
+end
+
+local function wait_key_input()
+  local scale = 1
+
+  -- TODO: Determine why we need extra time. Maybe ADB is slow?
+  if machine.system.name:match("^apple2gs") then
+    scale = 2
+  end
+
+  emu.wait(scale * 2/60)
 end
 
 -- https://docs.mamedev.org/luascript/ref-input.html#natural-keyboard-manager
@@ -388,10 +462,11 @@ function apple2.Type(sequence)
   for i=1,sequence:len() do
     kbd:post(sequence:sub(i,i))
     while kbd.is_posting do
-      emu.wait(1/60)
+      emu.wait_next_frame()
     end
     wait_for_kbd_strobe_clear()
   end
+  wait_key_input()
 end
 
 function apple2.TypeLine(sequence)
@@ -413,9 +488,9 @@ local function release(k)
 end
 local function press_and_release(k)
   press(k)
-  emu.wait(2/60)
+  wait_key_input()
   release(k)
-  emu.wait(2/60)
+  wait_key_input()
 end
 
 function apple2.IsCapsLockOn()
@@ -423,8 +498,14 @@ function apple2.IsCapsLockOn()
   if key == nil then
     return false -- Apple ][+ compat
   end
+
+  -- Allow models to provide a custom hook for testing Caps Lock
+  if key.test then
+    return key.test()
+  end
+
   local bits = get_port(key.port):read()
-  return (bits & key.bits) ~= 0
+  return (bits & key.bits) == key.value
 end
 
 function apple2.ToggleCapsLock()
@@ -446,10 +527,10 @@ end
 function apple2.ControlReset()
   apple2.PressControl()
   press("Reset")
-  emu.wait(2/60)
+  wait_key_input()
   release("Reset")
   apple2.ReleaseControl()
-  emu.wait(1/60)
+  wait_key_input()
 end
 
 function apple2.ControlOAReset()
@@ -510,55 +591,53 @@ end
 
 function apple2.PressOA()
   press("Open Apple")
-  emu.wait(1/60)
+  wait_key_input()
 end
 
 function apple2.ReleaseOA()
   release("Open Apple")
-  emu.wait(1/60)
+  wait_key_input()
 end
 
 function apple2.PressSA()
   press("Solid Apple")
-  emu.wait(1/60)
+  wait_key_input()
 end
 
 function apple2.ReleaseSA()
   release("Solid Apple")
-  emu.wait(1/60)
+  wait_key_input()
 end
 
 function apple2.PressControl()
   press("Control")
-  emu.wait(1/60)
+  wait_key_input()
 end
 
 function apple2.ReleaseControl()
   release("Control")
-  emu.wait(1/60)
+  wait_key_input()
 end
 
 function apple2.PressShift()
   press("Shift")
-  emu.wait(1/60)
+  wait_key_input()
 end
 
 function apple2.ReleaseShift()
   release("Shift")
-  emu.wait(1/60)
+  wait_key_input()
 end
 
 function apple2.OAKey(key)
   apple2.PressOA()
   apple2.Type(key)
-  emu.wait(1/60)
   apple2.ReleaseOA()
 end
 
 function apple2.SAKey(key)
   apple2.PressSA()
   apple2.Type(key)
-  emu.wait(1/60)
   apple2.ReleaseSA()
 end
 
@@ -566,7 +645,6 @@ function apple2.OASAKey(key)
   apple2.PressOA()
   apple2.PressSA()
   apple2.Type(key)
-  emu.wait(1/60)
   apple2.ReleaseSA()
   apple2.ReleaseOA()
 end
@@ -583,7 +661,7 @@ function apple2.PressJoyButton1()
     error("No joystick ports present")
   end
   buttons.fields["P1 Button 1"]:set_value(1)
-emu.wait(1/10)
+  emu.wait(1/10)
 end
 
 function apple2.ReleaseJoyButton1()
@@ -922,7 +1000,7 @@ local ssw_definitions = {
   { "IOUDISOFF"      , "..C.",  0xC07F },        -- (W) Enable IOU access           (IIc)
   { "RDDHIRES"       , "..C.",  0xC07F },        -- (R7) Read DHIRES switch (0=on)  (IIc)
 
-  { "ROMIN2"         , "OECG",  0xC082 },        -- (W) Read ROM; no write
+  { "ROMIN2"         , "OECG",  0xC082 },        -- (R/W) Read ROM; no write
 }
 
 local ssw = {}
@@ -936,18 +1014,139 @@ for _, entry in ipairs(ssw_definitions) do
   end
 end
 
-function apple2.ReadSSW(symbol)
+function apple2.GetSSW(symbol)
   if ssw[symbol] == nil then
     error(string.format("No softswitch %q on system %q", symbol, machine.system.name))
   end
-  return apple2.ReadMemory(ssw[symbol])
+  return ssw[symbol]
+end
+function apple2.ReadSSW(symbol)
+  return apple2.ReadMemory(apple2.GetSSW(symbol))
 end
 function apple2.WriteSSW(symbol, value)
-  if ssw[symbol] == nil then
-    error(string.format("No softswitch %q on system %q", symbol, machine.system.name))
-  end
-  apple2.WriteMemory(ssw[symbol], value)
+  apple2.WriteMemory(apple2.GetSSW(symbol), value)
 end
+
+  -- TODO: Support 80STORE/PAGE2 banking
+function apple2.WaitForMemoryRead(addr, bank_options)
+
+  --------------------------------------------------
+  -- Initially: don't care about banking
+
+  local want_RAMRD = nil
+  local want_ALTZP = nil
+  local want_LCRAM = nil
+  local want_BANK2 = nil
+
+  --------------------------------------------------
+  -- Init banking based on 24-bit address
+
+  -- zero page
+  if 0x000000 <= addr and addr <= 0x0001FF then want_ALTZP=false end
+  if 0x010000 <= addr and addr <= 0x0101FF then want_ALTZP=true end
+
+  -- main memory
+  if 0x000200 <= addr and addr <= 0x00BFFF then want_RAMRD=false end
+  if 0x010200 <= addr and addr <= 0x01BFFF then want_RAMRD=true end
+
+  -- language card bank(s)
+  if 0x00D000 <= addr and addr <= 0x00FFFF then want_ALTZP=false want_LCRAM=true want_BANK2=false end
+  if 0x01D000 <= addr and addr <= 0x01FFFF then want_ALTZP=true want_LCRAM=true want_BANK2=false end
+
+  addr = addr & 0xFFFF
+
+  if 0x400 <= addr and addr <= 0x7FF
+    or 0x2000 <= addr and addr <= 0x3FFF then
+    error("80STORE / PAGE2 not supported")
+  end
+
+  --------------------------------------------------
+  -- If explicitly passed, use that
+
+  if bank_options ~= nil then
+    want_RAMRD = bank_options["aux"]
+    want_ALTZP = bank_options["altzp"]
+    want_LCRAM = bank_options["lcram"]
+    want_BANK2 = bank_options["bank2"]
+  end
+
+  --------------------------------------------------
+  -- Model the MMU
+
+  -- Snapshot initial state
+  local RAMRD = apple2.ReadSSW("RDRAMRD") > 127
+  local ALTZP = apple2.ReadSSW("RDALTZP") > 127
+  local LCRAM = apple2.ReadSSW("RDLCRAM") > 127
+  local BANK2 = apple2.ReadSSW("RDLCBNK2") > 127
+
+  -- Watch for changes
+  local function access_tap(offset)
+    if offset & 0xF0 == 0x80 then
+      local A0 = (offset & 0x01) ~= 0
+      local A1 = (offset & 0x02) ~= 0
+      local A3 = (offset & 0x08) ~= 0
+      LCRAM = (A0 == A1)
+      BANK2 = not A3
+    end
+  end
+  local mmu_wtap = mem:install_write_tap(
+    0xC000, 0xC08F, "mmu_write_tap",
+    function(offset, value, mask)
+      if offset == apple2.GetSSW("RAMRDOFF") then RAMRD = false end
+      if offset == apple2.GetSSW("RAMRDON") then RAMRD = true end
+      if offset == apple2.GetSSW("ALTZPOFF") then ALTZP = false end
+      if offset == apple2.GetSSW("ALTZPON") then ALTZP = true end
+      access_tap(offset)
+  end)
+  local mmu_rtap = mem:install_read_tap(
+    0xC000, 0xC08F, "mmu_read_tap",
+    function(offset, value, mask)
+      access_tap(offset)
+  end)
+
+  --------------------------------------------------
+  -- Watch for requested access
+
+  local saw = false
+  local err = false
+
+  local range_lo, range_hi = addr, addr
+
+  --[[
+    Workaround for https://github.com/mamedev/mame/issues/16167
+    TODO: Remove range_lo/range_hi usage when fixed.
+  ]]
+  if machine.system.name:match("^apple2gs") then
+    range_lo = addr - 0x1000
+    range_hi = addr + 0x1000
+    if range_lo < 0x000 then range_lo = 0x0000 end
+    if range_hi > 0xFFFF then range_lo = 0xFFFF end
+  end
+
+  local tap = mem:install_read_tap(
+    range_lo, range_hi, "tap",
+    function(offset, read, mask)
+      -- TODO: Remove if apple2gs issue noted above is solved.
+      if offset ~= addr then return end
+
+      if saw then return end
+
+      if want_RAMRD ~= nil and RAMRD ~= want_RAMRD then return end
+      if want_ALTZP ~= nil and ALTZP ~= want_ALTZP then return end
+      if want_LCRAM ~= nil and LCRAM ~= want_LCRAM then return end
+      if want_BANK2 ~= nil and BANK2 ~= want_BANK2 then return end
+
+      saw = true
+      tap:remove()
+      mmu_rtap:remove()
+      mmu_wtap:remove()
+  end)
+
+  while not saw and not err do
+    emu.wait_next_frame()
+  end
+end
+
 
 --------------------------------------------------
 -- Misc Utilities
@@ -1169,6 +1368,11 @@ end
 --------------------------------------------------
 
 function apple2.WaitForBasicSystem(options)
+  options = util.default_options(options)
+
+  if options.wait == nil then
+    options.wait = 0.5
+  end
   util.WaitFor(
     "Basic System",
     function()

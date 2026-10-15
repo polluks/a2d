@@ -5,8 +5,7 @@ DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-a2d.AddShortcut("/TESTS/HUNDRED.FILES")
+desktop.AddShortcut("/TESTS/HUNDRED.FILES")
 
 --[[
   Launch DeskTop. Open a window containing folders and files. Scroll
@@ -18,33 +17,33 @@ a2d.AddShortcut("/TESTS/HUNDRED.FILES")
 test.Step(
   "dragging over obscured part of folder doesn't highlight",
   function()
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
-    a2d.OpenPath("/RAM1")
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
+    desktop.OpenWindow("/RAM1")
 
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
 
-    a2d.Select("FOLDER")
+    desktop.Select("FOLDER")
     local x1, y1 = a2dtest.GetSelectedIconCoords()
     a2d.Drag(x1, y1+5, x1, y1-5)
 
-    a2d.Select("READ.ME")
+    desktop.Select("READ.ME")
     local x2, y2 = a2dtest.GetSelectedIconCoords()
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x2, y2)
         m.ButtonDown()
         m.MoveToApproximately(x2, y+5) -- Y only first
         m.MoveToApproximately(x1, y+5)
-        emu.wait(5)
+        emu.wait(5) -- during drag operation
         test.Snap("verify folder not highlighted")
         m.ButtonUp()
     end)
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    a2d.Select("READ.ME") -- verify not moved
+    desktop.Select("READ.ME") -- verify not moved
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -58,35 +57,35 @@ end)
 test.Step(
   "dragging over visible part of folder highlights, but highlights if needed",
   function()
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
-    a2d.OpenPath("/RAM1")
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.CopyPath("/A2.DESKTOP/READ.ME", "/RAM1")
+    desktop.OpenWindow("/RAM1")
 
     local x, y, w, h = a2dtest.GetFrontWindowContentRect()
 
-    a2d.Select("FOLDER")
+    desktop.Select("FOLDER")
     local x1, y1 = a2dtest.GetSelectedIconCoords()
     a2d.Drag(x1, y1+5, x1, y1-5)
 
-    a2d.Select("READ.ME")
+    desktop.Select("READ.ME")
     local x2, y2 = a2dtest.GetSelectedIconCoords()
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x2, y2)
         m.ButtonDown()
         m.MoveToApproximately(x1, y+15)
-        emu.wait(5)
+        emu.wait(5) -- during drag operation
         test.Snap("verify folder highlighted")
         m.MoveToApproximately(x1, y+5)
-        emu.wait(5)
+        emu.wait(5) -- during drag operation
         test.Snap("verify folder not highlighted")
         m.ButtonUp()
     end)
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
 
-    a2d.Select("READ.ME") -- verify not moved
+    desktop.Select("READ.ME") -- verify not moved
 
     -- cleanup
-    a2d.EraseVolume("/RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -98,27 +97,28 @@ end)
 test.Step(
   "drop targets correct folder",
   function()
-    a2d.CreateFolder("/RAM1/FOLDER")
-    a2d.SelectPath("/RAM1/FOLDER")
-    a2d.MoveWindowBy(0, 100)
+    desktop.CreateFolder("/RAM1/FOLDER")
+    desktop.SelectPath("/RAM1/FOLDER")
+    desktop.MoveWindowBy(0, 100)
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.SelectPath("/A2.DESKTOP/READ.ME", {keep_windows=true})
+    desktop.SelectPath("/A2.DESKTOP/READ.ME", {keep_windows=true})
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(src_x, src_y)
         m.ButtonDown()
         m.MoveToApproximately(dst_x, dst_y)
+        emu.wait(1) -- during drag operation
         test.Snap("verify folder highlighted")
         m.ButtonUp()
     end)
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
 
-    a2d.SelectPath("/RAM1/FOLDER/READ.ME")
+    desktop.SelectPath("/RAM1/FOLDER/READ.ME")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -131,44 +131,46 @@ end)
 test.Step(
   "obscured folder doesn't highlight",
   function()
-    a2d.OpenPath("/RAM1")
+    desktop.OpenWindow("/RAM1")
     -- Create two rows of icons
     for i = 1, 6 do
-      a2d.CreateFolder("F" .. i)
+      desktop.CreateFolder("F" .. i)
     end
     -- Determine deltas
-    a2d.OpenPath("/RAM1")
+    desktop.OpenWindow("/RAM1")
     apple2.DownArrowKey() -- F1
+    a2dtest.WaitForSystemTask()
     local f1_x, f1_y = a2dtest.GetSelectedIconCoords()
     apple2.DownArrowKey() -- F6
+    a2dtest.WaitForSystemTask()
     local f6_x, f6_y = a2dtest.GetSelectedIconCoords()
     local delta_x, delta_y = f1_x - f6_x, f1_y - f6_y
 
     -- Obscure first row
-    a2d.OpenPath("/RAM1")
-    a2d.GrowWindowBy(0, -100)
+    desktop.OpenWindow("/RAM1")
+    desktop.GrowWindowBy(0, -100)
     apple2.DownArrowKey() -- F1
     apple2.DownArrowKey() -- F6
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
     local f6_x, f6_y = a2dtest.GetSelectedIconCoords()
     local dst_x, dst_y = f6_x + delta_x, f6_y + delta_y
 
-    a2d.SelectPath("/A2.DESKTOP/READ.ME", {keep_windows=true})
-    a2d.MoveWindowBy(0, 80)
+    desktop.SelectPath("/A2.DESKTOP/READ.ME", {keep_windows=true})
+    desktop.MoveWindowBy(0, 80)
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(src_x, src_y)
         m.ButtonDown()
         m.MoveToApproximately(dst_x, dst_y)
-        emu.wait(1)
+        emu.wait(1) -- during drag operation
         test.Snap("verify obscured folder does not highlight")
         m.MoveToApproximately(src_x, src_y)
         m.ButtonUp()
     end)
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -183,47 +185,51 @@ end)
 test.Step(
   "partially obscured folder highlights only visible part",
   function()
-    a2d.OpenPath("/RAM1")
+    desktop.OpenWindow("/RAM1")
     -- Create two rows of icons
     for i = 1, 6 do
-      a2d.CreateFolder("F" .. i)
+      desktop.CreateFolder("F" .. i)
     end
     -- Determine deltas
-    a2d.OpenPath("/RAM1")
+    desktop.OpenWindow("/RAM1")
     apple2.DownArrowKey() -- F1
+    a2dtest.WaitForSystemTask()
     local f1_x, f1_y = a2dtest.GetSelectedIconCoords()
     apple2.DownArrowKey() -- F6
+    a2dtest.WaitForSystemTask()
     local f6_x, f6_y = a2dtest.GetSelectedIconCoords()
     local delta_x, delta_y = f1_x - f6_x, f1_y - f6_y
 
     -- Partially obscure first row
-    a2d.OpenPath("/RAM1")
-    a2d.GrowWindowBy(0, -10)
+    desktop.OpenWindow("/RAM1")
+    desktop.GrowWindowBy(0, -10)
     apple2.DownArrowKey() -- F1
+    a2dtest.WaitForSystemTask()
     apple2.DownArrowKey() -- F6
-    emu.wait(1)
+    a2dtest.WaitForSystemTask()
     local f6_x, f6_y = a2dtest.GetSelectedIconCoords()
     local dst_x, dst_y = f6_x + delta_x, f6_y + delta_y
 
-    a2d.SelectPath("/A2.DESKTOP/READ.ME", {keep_windows=true})
-    a2d.MoveWindowBy(0, 80)
+    desktop.SelectPath("/A2.DESKTOP/READ.ME", {keep_windows=true})
+    desktop.MoveWindowBy(0, 80)
+    a2dtest.WaitForSystemTask()
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(src_x, src_y)
         m.ButtonDown()
         m.MoveToApproximately(dst_x, dst_y+5)
-        emu.wait(1)
+        emu.wait(1) -- during drag operation
         test.Snap("verify partially obscured folder highlights correctly")
         m.MoveToApproximately(dst_x, dst_y-5)
-        emu.wait(1)
+        emu.wait(1) -- during drag operation
         test.Snap("verify partially obscured folder does not highlight if cursor outside bounds")
         m.MoveToApproximately(src_x, src_y)
         m.ButtonUp()
     end)
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 
 --[[
@@ -236,9 +242,9 @@ end)
 test.Step(
   "Volume icons offscreen",
   function()
-    a2d.CloseAllWindows()
-    emu.wait(1)
-    a2d.SelectAll()
+    desktop.CloseAllWindows()
+    a2dtest.WaitForSystemTask()
+    desktop.SelectAll()
     test.ExpectEquals(a2dtest.GetSelectedIconName(), "Trash", "trash should be first")
     local x, y = a2dtest.GetSelectedIconCoords()
     a2d.InMouseKeysMode(function(m)
@@ -246,14 +252,14 @@ test.Step(
         m.ButtonDown()
         m.MoveToApproximately(x, 20)
         m.ButtonUp()
-        emu.wait(1)
+        a2dtest.WaitForSystemTask()
         test.Snap("verify icons mostly offscreen")
         m.ButtonDown()
         m.MoveToApproximately(x, y)
-        emu.wait(1)
+        emu.wait(1) -- during drag operation
         test.Snap("verify icons have drag outlines")
         m.ButtonUp()
-        emu.wait(1)
+        a2dtest.WaitForSystemTask()
         test.Snap("verify icons reposition correctly")
     end)
 end)
@@ -268,9 +274,9 @@ end)
 test.Step(
   "Dragging windowed icons offscreen",
   function()
-    a2d.OpenPath("/TESTS")
-    a2d.SelectAll()
-    local icons = a2d.GetSelectedIcons()
+    desktop.OpenWindow("/TESTS")
+    desktop.SelectAll()
+    local icons = desktop.GetSelectedIcons()
     local icon1 = icons[1] -- top row
     local icon11 = icons[11] -- bottom row
     a2d.InMouseKeysMode(function(m)
@@ -282,12 +288,12 @@ test.Step(
             m.ButtonDown()
             m.MoveByApproximately(dx, -dy)
             m.ButtonUp()
-            emu.wait(5)
+            a2dtest.WaitForSystemTask()
 
             m.ButtonDown()
             m.MoveByApproximately(dx, dy)
             m.ButtonUp()
-            emu.wait(5)
+            a2dtest.WaitForSystemTask()
         end)
     end)
 end)
@@ -301,11 +307,11 @@ end)
 test.Step(
   "drag outlines don't become clipped",
   function()
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     local dst_x, dst_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/TOYS")
-    a2d.SelectAll()
+    desktop.OpenWindow("/A2.DESKTOP/APPLE.MENU/TOYS")
+    desktop.SelectAll()
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.InMouseKeysMode(function(m)
@@ -328,9 +334,9 @@ end)
 test.Step(
   "Drag outlines shown for obscured icons",
   function()
-    a2d.OpenPath("/TESTS")
-    a2d.GrowWindowBy(-200, -200)
-    a2d.SelectAll()
+    desktop.OpenWindow("/TESTS")
+    desktop.GrowWindowBy(-200, -200)
+    desktop.SelectAll()
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     a2d.InMouseKeysMode(function(m)
@@ -350,11 +356,11 @@ end)
 test.Step(
   "Can drag unlimited icons",
   function()
-    a2d.CloseAllWindows()
+    desktop.CloseAllWindows()
     a2d.OAShortcut("1") -- Open /TESTS/HUNDRED.FILES
-    emu.wait(5)
-    a2d.SelectAll()
-    emu.wait(5)
+    a2dtest.WaitForSystemTask()
+    desktop.SelectAll()
+    a2dtest.WaitForSystemTask()
     local x, y = a2dtest.GetSelectedIconCoords()
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x, y)
@@ -374,7 +380,7 @@ end)
 test.Step(
   "Move volume icon",
   function()
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     local x, y = a2dtest.GetSelectedIconCoords()
 
     a2d.InMouseKeysMode(function(m)
@@ -390,7 +396,7 @@ test.Step(
     test.ExpectNotEquals(y, new_y, "icon should have moved")
 
     -- cleanup
-    a2d.Reboot()
+    desktop.Reboot()
     a2d.WaitForDesktopReady()
 end)
 
@@ -417,7 +423,7 @@ test.Variants(
     },
   },
   function(idx, name, press, release)
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     local x, y = a2dtest.GetSelectedIconCoords()
 
     a2d.InMouseKeysMode(function(m)
@@ -467,9 +473,9 @@ end)
 test.Step(
   "can OA+SA drag a volume icon",
   function()
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     local x, y = a2dtest.GetSelectedIconCoords()
-    a2d.ClearSelection()
+    desktop.ClearSelection()
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x, y)
         apple2.PressOA()
@@ -493,14 +499,14 @@ end)
 test.Step(
   "Multiple drop target highlighting during drags",
   function()
-    a2d.SelectPath("/RAM1")
+    desktop.SelectPath("/RAM1")
     local volume_x, volume_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.OpenPath("/TESTS/FOLDER")
-    a2d.Select("SUBFOLDER")
+    desktop.OpenWindow("/TESTS/FOLDER")
+    desktop.Select("SUBFOLDER")
     local folder_x, folder_y = a2dtest.GetSelectedIconCoords()
 
-    a2d.Select("FILE")
+    desktop.Select("FILE")
     local x, y = a2dtest.GetSelectedIconCoords()
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(x, y)
@@ -558,7 +564,7 @@ test.Variants(
       end
     end
 
-    a2d.SelectPath("/A2.DESKTOP/READ.ME")
+    desktop.SelectPath("/A2.DESKTOP/READ.ME")
     local src_x, src_y = a2dtest.GetSelectedIconCoords()
 
     -- Same window
@@ -577,15 +583,15 @@ test.Variants(
     end)
 
     -- Other window
-    a2d.OpenPath("/RAM1", {keep_windows=true})
-    a2d.MoveWindowBy(0, 80)
+    desktop.OpenWindow("/RAM1", {keep_windows=true})
+    desktop.MoveWindowBy(0, 80)
     dst_x, dst_y = GetDropCoords()
     a2d.Drag(src_x, src_y, dst_x, dst_y)
-    emu.wait(5)
-    a2d.SelectAll()
-    test.ExpectEquals(#a2d.GetSelectedIcons(), 1, "file should have copied")
+    a2dtest.WaitForSystemTask()
+    desktop.SelectAll()
+    test.ExpectEquals(#desktop.GetSelectedIcons(), 1, "file should have copied")
 
     -- cleanup
-    a2d.EraseVolume("RAM1")
+    desktop.EraseVolume("RAM1")
 end)
 

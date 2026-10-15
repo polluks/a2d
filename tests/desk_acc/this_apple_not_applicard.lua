@@ -6,8 +6,6 @@ DISKARGS="-hard1 $HARDIMG"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(0.25)
-
 --[[
   Configure a system with a Wico Trackball card. Launch DeskTop. Apple Menu >
   About This Apple II. Verify that the Appli-Card is not mis-detected.
@@ -15,8 +13,8 @@ a2d.ConfigureRepaintTime(0.25)
 test.Step(
   "No false-positive Appli-Card detection",
   function()
-    a2d.InvokeMenuItem(a2d.APPLE_MENU, a2d.ABOUT_THIS_APPLE_II)
-    emu.wait(5)
+    a2d.InvokeMenuItem(desktop.APPLE_MENU, desktop.ABOUT_THIS_APPLE_II)
+    a2dtest.WaitForSystemTask()
     local ocr = a2dtest.OCRFrontWindowContent()
     test.ExpectNotMatch(ocr, "Appli%-Card", "an Appli-Card should not be detected")
 end)

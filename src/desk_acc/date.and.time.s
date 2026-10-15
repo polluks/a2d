@@ -1,9 +1,10 @@
 ;;; ============================================================
 ;;; DATE.AND.TIME - Desk Accessory
 ;;;
-;;; Shows the current ProDOS date/time, and allows editing if there
-;;; is no clock driver installed. Also exposes the 12/24-hour clock
-;;; setting, and will update the settings file.
+;;; Shows the current ProDOS date/time, and allows editing if there is
+;;; no clock driver installed or we know how to write to it. Also
+;;; exposes the 12/24-hour clock setting, and will update the settings
+;;; file.
 ;;; ============================================================
 
         .include "../config.inc"
@@ -48,8 +49,17 @@
 
 ;;; ============================================================
 
+;;; Input: Y = read only flag (zero or non-zero)
 .proc RunDA
-        sty     clock_flag
+        sty     flags
+
+        .assert kFlagsSetTime = V_FLAG_MASK, error, "bad constant"
+    IF bit flags : VS
+        ;; If the caller wants us to set the time, start off with the
+        ;; dirty flag set.
+        copy8   #kResultDateChanged, dialog_result
+    END_IF
+
         jsr     init_window
         RETURN  A=dialog_result
 .endproc ; RunDA
@@ -138,7 +148,12 @@ backcolor:   .byte   $FF        ; white
 selected_field:
         .byte   Field::none
 
-clock_flag:
+;;; DA is read-only if there is a system clock but we don't know
+;;; how to update it.
+
+kFlagsReadOnly = N_FLAG_MASK    ; bit7 = read-only
+kFlagsSetTime  = V_FLAG_MASK    ; bit6 = always set ProDOS time
+flags:
         .byte   0
 
 ;;; Originally Feb 26, 1985 (the author date?); now updated by build.
@@ -366,17 +381,17 @@ init_window:
 ;;; Input loop
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         MGTK_CALL MGTK::GetEvent, event_params
-        lda     event_params::kind
-    IF A = #MGTK::EventKind::button_down
-        jsr     OnClick
-        jmp     InputLoop
-    END_IF
 
-        cmp     #MGTK::EventKind::key_down
-        bne     InputLoop
-        FALL_THROUGH_TO OnKey
+        lda     event_params::kind
+      IF A = #MGTK::EventKind::button_down
+        jsr     OnClick
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     OnKey
+      END_IF
+    FOREVER
 .endproc ; InputLoop
 
 .proc OnKey
@@ -388,58 +403,47 @@ init_window:
         ldx     event_params::modifiers
     IF NOT_ZERO
         jsr     ToUpperCase
-        cmp     #kShortcutCloseWindow
-        jeq     OnKeyOK
+        IF A = #kShortcutCloseWindow JUMP OnKeyOK
 
       IF A = #'1'
-        CALL    HandleOptionClick, A=#0
-        jmp     InputLoop
+        TAIL_CALL HandleOptionClick, A=#0
       END_IF
 
       IF A = #'2'
-        CALL    HandleOptionClick, A=#$80
-        jmp     InputLoop
+        TAIL_CALL HandleOptionClick, A=#$80
       END_IF
 
-        jmp     InputLoop
+        rts
     END_IF
 
-        cmp     #CHAR_RETURN
-        jeq     OnKeyOK
-        cmp     #CHAR_ESCAPE
-        jeq     OnKeyOK
+        IF A = #CHAR_RETURN JUMP OnKeyOK
+        IF A = #CHAR_ESCAPE JUMP OnKeyOK
 
-        ;; If there is a system clock, fields are read-only
-        ldx     clock_flag
-        bne     InputLoop
+        .assert kFlagsReadOnly = N_FLAG_MASK, error, "bad constant"
+        bit     flags
+        RTS_IF NS
 
         ;; All controls are active
-        cmp     #CHAR_LEFT
-        beq     OnKeyLeft
-        cmp     #CHAR_RIGHT
-        beq     OnKeyRight
-        cmp     #CHAR_TAB
-        beq     OnKeyRight
-        cmp     #CHAR_DOWN
-        beq     OnKeyDown
-        cmp     #CHAR_UP
-        bne     InputLoop
-        FALL_THROUGH_TO OnKeyUp
+        IF A = #CHAR_LEFT  GOTO OnKeyLeft
+        IF A = #CHAR_RIGHT GOTO OnKeyRight
+        IF A = #CHAR_TAB   GOTO OnKeyRight
+        IF A = #CHAR_DOWN  GOTO OnKeyDown
+        IF A = #CHAR_UP    GOTO OnKeyUp
+        rts
 
 .proc OnKeyUp
         jsr     InvertUp
         copy8   #kUpRectIndex, hit_rect_index
         jsr     DoIncOrDec
-        jsr     InvertUp
-        jmp     InputLoop
+        TAIL_CALL InvertUp
+
 .endproc ; OnKeyUp
 
 .proc OnKeyDown
         jsr     InvertDown
         copy8   #kDownRectIndex, hit_rect_index
         jsr     DoIncOrDec
-        jsr     InvertDown
-        jmp     InputLoop
+        TAIL_CALL InvertDown
 .endproc ; OnKeyDown
 
 .proc OnKeyLeft
@@ -471,8 +475,7 @@ init_window:
 .endproc ; OnKeyRight
 
 .proc UpdateSelection
-        jsr     SelectField
-        jmp     InputLoop
+        TAIL_CALL SelectField
 .endproc ; UpdateSelection
 .endproc ; OnKey
 
@@ -480,14 +483,11 @@ init_window:
 
 .proc OnClick
         MGTK_CALL MGTK::FindWindow, event_params::xcoord
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        bne     miss
-        lda     findwindow_params::which_area
-        cmp     #MGTK::Area::content
-        beq     hit
+    IF u8 findwindow_params::window_id <> #kDAWindowId \
+      OR u8 findwindow_params::which_area <> #MGTK::Area::content
 miss:   rts
-hit:
+    END_IF
+
         ;; ----------------------------------------
 
         MGTK_CALL MGTK::SetPort, winfo::port
@@ -500,7 +500,7 @@ hit:
         ;; ----------------------------------------
 
         MGTK_CALL MGTK::InRect, ok_button::rect
-        jne     OnClickOK
+        bne     OnClickOK
 
         MGTK_CALL MGTK::InRect, clock_12hour_button::rect
     IF NOT_ZERO
@@ -514,9 +514,9 @@ hit:
 
         ;; ----------------------------------------
 
-        ;; If there is a system clock, fields are read-only
-        ldx     clock_flag
-        bne     miss
+        .assert kFlagsReadOnly = N_FLAG_MASK, error, "bad constant"
+        bit     flags
+        bmi     miss
 
         jsr     FindHitTarget
         cpx     #0
@@ -539,11 +539,7 @@ hit_target_jump_table:
 
 .proc OnClickOK
         BTK_CALL BTK::Track, ok_button
-    IF ZERO
-        pla                     ; pop OnClick
-        pla
-        jmp     OnOK
-    END_IF
+        IF NC GOTO OnOK
         rts
 .endproc ; OnClickOK
 
@@ -553,8 +549,12 @@ hit_target_jump_table:
 .endproc ; OnKeyOK
 
 .proc OnOK
-        lda     clock_flag
-    IF ZERO
+        ;; Don't return to `InputLoop`
+        pla
+        pla
+
+        .assert kResultDateChanged = N_FLAG_MASK, error, "bad constant"
+    IF bit dialog_result : NS
         jsr     UpdateProDOS
     END_IF
         jmp     Destroy
@@ -596,15 +596,12 @@ hit_target_jump_table:
         stx     hit_rect_index
 loop:   MGTK_CALL MGTK::GetEvent, event_params ; Repeat while mouse is down
 
-        lda     event_params::kind
-    IF A <> #MGTK::EventKind::button_up
+    IF u8 event_params::kind <> #MGTK::EventKind::button_up
         jsr     DoIncOrDec
         jmp     loop
     END_IF
 
-        lda     hit_rect_index
-        cmp     #kUpRectIndex
-        jeq     InvertUp
+        IF u8 hit_rect_index = #kUpRectIndex JUMP InvertUp
         jmp     InvertDown
 .endproc ; OnUpOrDown
 
@@ -619,7 +616,7 @@ loop:   MGTK_CALL MGTK::GetEvent, event_params ; Repeat while mouse is down
         ;; Hour requires special handling for 12-hour clock; patch the
         ;; min/max table depending on clock setting and period.
     IF bit clock_24hours : NC
-      IF lda hour : A < #12
+      IF u8 hour < #12
         copy8   #kHourMin, min_table + Field::hour - 1
         copy8   #11, max_table + Field::hour - 1
       ELSE
@@ -649,28 +646,22 @@ loop:   MGTK_CALL MGTK::GetEvent, event_params ; Repeat while mouse is down
         lda     (ptr),y
         tax                     ; X = value
 
-        lda     hit_rect_index
-        cmp     #kUpRectIndex
-        beq     incr
-
+    IF u8 hit_rect_index <> #kUpRectIndex
         ;; Decrement
-    IF X = min
+      IF X = min
         ldx     max
         inx
-    END_IF
+      END_IF
         dex
-        jmp     finish
-
+    ELSE
         ;; Increment
-incr:
-    IF X = max
+      IF X = max
         ldx     min
         dex
-    END_IF
+      END_IF
         inx
-        FALL_THROUGH_TO finish
+    END_IF
 
-finish:
         txa                     ; store new value
         sta     (ptr),y
         prepare_proc := *+1
@@ -686,6 +677,12 @@ finish:
         jsr     PrepareDayString
         CALL    DrawField, A=#Field::day
     END_IF
+
+        ;; Set dirty bit
+        lda     dialog_result
+        ora     #kResultDateChanged ; date changed
+        sta     dialog_result
+
         rts
 
 min:    .byte   0
@@ -834,8 +831,8 @@ str_pm: PASCAL_STRING "PM"
 ;;; Tear down the window and exit
 
 ;;; Used in Aux to store result during tear-down
-;;; bit7 = time changed
-;;; bit6 = options changed
+kResultDateChanged    = N_FLAG_MASK ; bit7 = date/time changed
+kResultOptionsChanged = V_FLAG_MASK ; bit6 = options changed
 dialog_result:  .byte   0
 
 .proc Destroy
@@ -843,8 +840,7 @@ dialog_result:  .byte   0
 
         ;; Dates in DeskTop list views may be invalidated, so if date
         ;; or settings changed, force a full redraw to avoid artifacts.
-        lda     dialog_result
-    IF NOT_ZERO
+    IF u8 dialog_result <> #0
         MGTK_CALL MGTK::RedrawDeskTop
     END_IF
 
@@ -916,9 +912,9 @@ label_downarrow:
 
         MGTK_CALL MGTK::SetPenMode, penXOR
 
-        ;; If there is a system clock, only draw the OK button.
-        ldx     clock_flag
-    IF ZERO
+
+        .assert kFlagsReadOnly = N_FLAG_MASK, error, "bad constant"
+    IF bit flags : NC
         MGTK_CALL MGTK::MoveTo, label_uparrow_pos
         MGTK_CALL MGTK::DrawString, label_uparrow
         MGTK_CALL MGTK::FrameRect, up_arrow_rect
@@ -941,9 +937,8 @@ label_downarrow:
         CALL    DrawField, A=#Field::minute
         CALL    DrawField, A=#Field::period
 
-        ;; If there is a system clock, don't draw the highlight.
-        ldx     clock_flag
-    IF ZERO
+        .assert kFlagsReadOnly = N_FLAG_MASK, error, "bad constant"
+    IF bit flags : NC
         CALL    SelectField, A=#Field::day
     END_IF
 
@@ -989,18 +984,12 @@ label_downarrow:
     END_IF
 
         pla
-        cmp     #Field::day
-        beq     DrawDay
-        cmp     #Field::month
-        beq     DrawMonth
-        cmp     #Field::year
-        beq     DrawYear
-        cmp     #Field::hour
-        beq     DrawHour
-        cmp     #Field::minute
-        beq     DrawMinute
-        cmp     #Field::period
-        beq     DrawPeriod
+        IF A = #Field::day GOTO DrawDay
+        IF A = #Field::month GOTO DrawMonth
+        IF A = #Field::year GOTO DrawYear
+        IF A = #Field::hour GOTO DrawHour
+        IF A = #Field::minute GOTO DrawMinute
+        IF A = #Field::period GOTO DrawPeriod
         rts
 
 .proc DrawDay
@@ -1040,7 +1029,7 @@ label_downarrow:
 
     IF bit clock_24hours : NS
         MGTK_CALL MGTK::DrawString, spaces_string
-    ELSE_IF lda hour : A < #12
+    ELSE_IF u8 hour < #12
       MGTK_CALL MGTK::DrawString, str_am
     ELSE
       MGTK_CALL MGTK::DrawString, str_pm
@@ -1059,8 +1048,8 @@ label_downarrow:
 
 .params shrink
         .addr   up_arrow_rect
-        .word   AS_WORD(-1)
-        .word   AS_WORD(-1)
+        .word   AS_WORD{-1}
+        .word   AS_WORD{-1}
 .endparams
 .params grow
         .addr   up_arrow_rect
@@ -1076,7 +1065,7 @@ label_downarrow:
         rts
 .params shrink
         .addr   down_arrow_rect
-        .word   AS_WORD(-1), AS_WORD(-1)
+        .word   AS_WORD{-1}, AS_WORD{-1}
 .endparams
 .params grow
         .addr   down_arrow_rect
@@ -1098,18 +1087,12 @@ label_downarrow:
         sta     selected_field
         FALL_THROUGH_TO invert
 
-invert: cmp     #Field::day
-        beq     fill_day
-        cmp     #Field::month
-        beq     fill_month
-        cmp     #Field::year
-        beq     fill_year
-        cmp     #Field::hour
-        beq     fill_hour
-        cmp     #Field::minute
-        beq     fill_minute
-        cmp     #Field::period
-        beq     fill_period
+invert: IF A = #Field::day GOTO fill_day
+        IF A = #Field::month GOTO fill_month
+        IF A = #Field::year GOTO fill_year
+        IF A = #Field::hour GOTO fill_hour
+        IF A = #Field::minute GOTO fill_minute
+        IF A = #Field::period GOTO fill_period
         rts
 
 fill_day:
@@ -1142,16 +1125,16 @@ fill_period:
 ;;; Delay
 
 .proc Delay
-        lda     #255
-        sec
+
+        ldx     #5
     DO
+        txa
         pha
-      DO
-        sbc     #1
-      WHILE NOT_ZERO
+        MGTK_CALL MGTK::WaitVBL
         pla
-        sbc     #1
-    WHILE NOT_ZERO
+        tax
+    WHILE dex : POS
+
         rts
 .endproc ; Delay
 
@@ -1202,10 +1185,10 @@ loop:
 
         ;; Set dirty bit
         lda     dialog_result
-        ora     #$40            ; settings changed
+        ora     #kResultOptionsChanged ; settings changed
         sta     dialog_result
 
-    IF lda selected_field : A = #Field::period
+    IF u8 selected_field = #Field::period
         CALL    SelectField, A=#Field::minute
     END_IF
 
@@ -1247,35 +1230,13 @@ loop:
         copy8   minute, auxdt::TIMELO
         copy8   hour, auxdt::TIMEHI
 
-        ;; Get the current ProDOS date/time
-        copy16  #DATELO, STARTLO
-        copy16  #DATELO+.sizeof(DateTime)-1, ENDLO
-        copy16  #current, DESTINATIONLO
-        CALL    AUXMOVE, C=1    ; main>aux
-
-        ;; Is it different?
-        ecmp16  current+DateTime::datelo, auxdt::DATELO
-        bne     update
-        ecmp16  current+DateTime::timelo, auxdt::TIMELO
-        beq     done
-
-update:
         ;; Update the ProDOS date/time
         copy16  #auxdt, STARTLO
         copy16  #auxdt+.sizeof(DateTime)-1, ENDLO
         copy16  #DATELO, DESTINATIONLO
         CALL    AUXMOVE, C=0    ; aux>main
 
-        ;; Set dirty bit
-        lda     dialog_result
-        ora     #$80            ; date changed
-        sta     dialog_result
-
-done:   rts
-
-current:
-        .tag    DateTime
-
+        rts
 .endproc ; UpdateProDOS
 
 ;;; ============================================================
@@ -1293,11 +1254,28 @@ current:
 ;;; ============================================================
 
 .scope main
+        ;; Ensure we've got the latest time.
+        JUMP_TABLE_MLI_CALL GET_TIME
+
         lda     MACHID
         and     #kMachIDHasClock
-        tay                     ; A,X are trashed by macro
-        JSR_TO_AUX aux::RunDA
+    IF ZERO
+        ;; no system clock - DA is read/write, and we want to
+        ;; set the ProDOS time when the DA is done
+        ldy     #aux::kFlagsSetTime
+    ELSE
+        jsr     CanSetClock     ; returns C=0 if clock can be set
+        lda     #0
+        ror                     ; sets `aux::kFlagsReadOnly`
+        tay
+    END_IF
+
+        JSR_TO_AUX aux::RunDA   ; Y = read-only flag
         sta     result
+
+    IF bit result : NS
+        jsr     MaybeSetClock
+    END_IF
 
     IF bit result : VS
         jsr     SaveSettings
@@ -1312,7 +1290,6 @@ current:
     IF bit result : NS
         jsr     SaveDate
     END_IF
-
 
 ret:
         rts
@@ -1374,6 +1351,7 @@ retry:
         JUMP_TABLE_MLI_CALL SET_PREFIX, current_prefix_params
         ;; Assert: Succeeded (otherwise RAMCard was deleted out from under us)
     END_IF
+        clc
 
 done:   rts
 .endproc ; SaveSettings
@@ -1435,8 +1413,1056 @@ retry_flag:        .byte   0 ; bit7
 SaveDate := save_date::SaveSettings
 
 ;;; ============================================================
+;;; Setting the System Real-Time Clock
+;;; ============================================================
+;;; ProDOS only defines driver support for reading system clocks.
+;;; Setting the date/time on the clock needs code specific to the
+;;; clock hardware.
+;;;
+;;; This is handled here by pairs of routines that (1) probe for
+;;; specific clock hardware, and (2) write the updated date/time to
+;;; the clock hardware. The first routine often self-modifies the
+;;; second with the results of probing, e.g. the specific slot I/O
+;;; locations. The logic is split into two routines because we need to
+;;; determine if we can update the clock before the UI is shown; if
+;;; there is a system clock but we can't update it, then the UI is
+;;; read-only.
 
+;;; Output: C=0 if can set clock, C=1 otherwise
+.proc CanSetClock
+        jsr     IsIIgs          ; C=0 if IIgs
+        bcc     ret
+
+        jsr     DetectThunderClock ; C=0 if detected
+        bcc     ret
+
+        jsr     DetectNoSlotClockInSlotROM ; C=0 if detected
+        bcc     ret
+
+        jsr     DetectNoSlotClockInInternalROM ; C=0 if detected
+        bcc     ret
+
+        jsr     DetectROMXClock ; C=0 if detected
+        bcc     ret
+
+        jsr     DetectTheCricketClock ; C=0 if detected
+        bcc     ret
+
+        ;; Otherwise
+        sec
+
+ret:    rts
+.endproc ; CanSetClock
+
+;;; NOTE: This structure matches the No-Slot Clock since it is a
+;;; superset of other clocks. Most clocks want BCD, so the conversion
+;;; is done here.
+
+.params DateToWrite
+year:   .byte   0               ; BCD year (last two digits)
+month:  .byte   0               ; BCD month (jan=1, dec=12)
+day:    .byte   0               ; BCD day (1..31)
+dow:    .byte   0               ; day of week (1=monday, 7=sunday)
+hours:  .byte   0               ; BCD hours (0...23)
+minutes:.byte   0               ; BCD minutes (0..59)
+seconds:.byte   0               ; BCD seconds (0..59)
+frac:   .byte   0               ; BCD fraction (0..99)
+.endparams
+
+;;; Input: ProDOS's `DATELO`...`TIMEHI` set to new time.
+.proc MaybeSetClock
+        ;; --------------------------------------------------
+        ;; Compute date/time to write
+
+        ;;       DATEHI           DATELO
+        ;;  7 6 5 4 3 2 1 0   7 6 5 4 3 2 1 0
+        ;; +-+-+-+-+-+-+-+-+ +-+-+-+-+-+-+-+-+
+        ;; |    Year     |  Month  |   Day   |
+        ;; +-+-+-+-+-+-+-+-+ +-+-+-+-+-+-+-+-+
+        ;;
+        ;;       TIMEHI           TIMELO
+        ;;  7 6 5 4 3 2 1 0   7 6 5 4 3 2 1 0
+        ;; +-+-+-+-+-+-+-+-+ +-+-+-+-+-+-+-+-+
+        ;; |0 0 0|  Hour   | |0 0|  Minute   |
+        ;; +-+-+-+-+-+-+-+-+ +-+-+-+-+-+-+-+-+
+
+
+        lda     DATEHI
+        lsr
+        php                     ; save C
+        sta     year
+        jsr     _ToBCD
+        sta     DateToWrite::year
+
+        lda     DATELO
+        plp                     ; restore C
+        ror
+        lsr
+        lsr
+        lsr
+        lsr
+        sta     month
+        jsr     _ToBCD
+        sta     DateToWrite::month
+
+        lda     DATELO
+        and     #%00011111
+        sta     day
+        jsr     _ToBCD
+        sta     DateToWrite::day
+
+        lda     TIMEHI
+        and     #%00011111
+        jsr     _ToBCD
+        sta     DateToWrite::hours
+
+        lda     TIMELO
+        and     #%00111111
+        jsr     _ToBCD
+        sta     DateToWrite::minutes
+
+        lda     #0
+        sta     DateToWrite::seconds
+        sta     DateToWrite::frac
+
+        ;; Compute day of week
+        lda     year
+        ;; 0-39 is 2000-2039
+        ;; Per Technical Note: ProDOS #28: ProDOS Dates -- 2000 and Beyond
+    IF A < #40
+        ;; Assert: C = 0
+        adc     #100
+    END_IF
+        tay                     ; Y = year - 1900
+        CALL    DayOfWeek, X=month, A=day
+    IF A = #0
+        lda     #7
+    END_IF
+        sta     DateToWrite::dow
+
+        ;; --------------------------------------------------
+        ;; Write to clock, if we know how
+
+        jsr     IsIIgs          ; C=0 if IIgs
+    IF CC
+        TAIL_CALL SetIIgsClock
+    END_IF
+
+        jsr     DetectThunderClock ; C=0 if detected
+    IF CC
+        TAIL_CALL SetThunderClock
+    END_IF
+
+        jsr     DetectNoSlotClockInSlotROM ; C=0 if detected
+    IF CC
+        TAIL_CALL SetNoSlotClockInSlotROM
+    END_IF
+
+        jsr     DetectNoSlotClockInInternalROM ; C=0 if detected
+    IF CC
+        TAIL_CALL SetNoSlotClockInInternalROM
+    END_IF
+
+        jsr     DetectROMXClock ; C=0 if detected
+    IF CC
+        TAIL_CALL SetROMXClock
+    END_IF
+
+        jsr     DetectTheCricketClock ; C=0 if detected
+    IF CC
+        TAIL_CALL SetTheCricketClock
+    END_IF
+
+        rts
+
+;;; Temporary non-BCD copy of values, for day-of-week calculation
+day:    .byte   0
+month:  .byte   0
+year:   .byte   0
+
+.proc _ToBCD
+        ldx     #AS_BYTE{-1}
+        sec
+    DO
+        inx
+        sbc     #10
+    WHILE CS
+        adc     #10
+        ;; Now X = tens, A = ones
+        sta     lo
+        txa
+        asl
+        asl
+        asl
+        asl
+        lo := *+1
+        ora     #SELF_MODIFIED_BYTE
+        rts
+.endproc ; _ToBCD
+
+.endproc ; MaybeSetClock
+
+;;; ============================================================
+
+;;; No Slot Clock - Internal ROM and Slot ROM are handled by separate
+;;; routines to minimize the complexity of self-modified code. Drivers
+;;; typically merge these paths since space is critical.
+
+.proc SetNoSlotClockInInternalROM
+
+        C8ROM := $C800
+
+        ;; --------------------------------------------------
+        ;; Save CPU state, disable interrupts
+
+        php
+        sei
+
+        ;; --------------------------------------------------
+        ;; Configure card to enable ROM
+
+        lda     PTRIG           ; Slow ZIP, IIc+ accelerator, etc
+        lda     $C00B           ; Ultrawarp bug workaround c/o @bobbimanners
+        lda     RDCXROM         ; save status of SLOTCXROM (high = enabled)
+        pha
+        sta     SETINTCXROM     ; read internal ROM
+        lda     C8ROM+$04       ; TODO: What is this for???
+
+        ;; --------------------------------------------------
+        ;; Unlock the NSC by bit-banging.
+
+        ldx     #8
+    DO
+        lda     NSCUnlockSequence-1,x
+        sec                     ; set high bit, so we know when we're done
+        ror     a               ; rotate out next offset
+      DO
+        pha
+        lda     #0
+        rol     a
+        tay                     ; Y=offset (0 or 1)
+        lda     C8ROM,y
+        pla
+        lsr     a               ; rotate out next offset
+      WHILE NOT ZERO
+    WHILE dex : NOT ZERO
+
+        ;; --------------------------------------------------
+        ;; Write 8 bytes * 8 bits of clock data by bit-banging
+
+        ldx     #8
+    DO
+        lda     DateToWrite-1,x ; byte to write
+        sec                     ; set high bit, so we know when we're done
+        ror     a               ; rotate out next offset
+      DO
+        pha
+        lda     #0
+        rol     a
+        tay                     ; Y=offset (0 or 1)
+        lda     C8ROM,y
+        pla
+        lsr     a               ; rotate out next offset
+      WHILE NOT ZERO
+    WHILE dex : NOT ZERO
+
+        ;; --------------------------------------------------
+        ;; Restore MMU and CPU state
+
+        pla
+    IF NC
+        sta     SETSLOTCXROM
+    END_IF
+
+        plp
+
+        rts
+.endproc ; SetNoSlotClockInInternalROM
+
+.proc DetectNoSlotClockInInternalROM
+
+        C8ROM := $C800
+
+        ;; --------------------------------------------------
+        ;; Save CPU state, disable interrupts
+
+        php
+        sei
+
+        ;; --------------------------------------------------
+        ;; Configure MMU to use internal ROM not slot ROM
+
+        lda     PTRIG           ; Slow ZIP, IIc+ accelerator, etc
+        lda     $C00B           ; Ultrawarp bug workaround c/o @bobbimanners
+        lda     RDCXROM         ; save status of SLOTCXROM (high = enabled)
+        pha
+        sta     SETINTCXROM     ; read internal ROM
+        lda     C8ROM+$04       ; TODO: What is this for???
+
+        ;; --------------------------------------------------
+        ;; Read reference sample of ROM data
+
+        ldx     #8
+    DO
+        ldy     #8
+      DO
+        lda     C8ROM+$04
+        ror     a
+        ror     rom_buf-1,x
+      WHILE dey : NOT ZERO
+    WHILE dex : NOT ZERO
+
+        ;; --------------------------------------------------
+        ;; Unlock the NSC by bit-banging.
+
+        ldx     #8
+    DO
+        lda     NSCUnlockSequence-1,x
+        sec                     ; set high bit, so we know when we're done
+        ror     a               ; rotate out next offset
+      DO
+        pha
+        lda     #0
+        rol     a
+        tay                     ; Y=offset (0 or 1)
+        lda     C8ROM,y
+        pla
+        lsr     a               ; rotate out next offset
+      WHILE NOT ZERO
+    WHILE dex : NOT ZERO
+
+        ;; --------------------------------------------------
+        ;; Read 8 bytes * 8 bits of (possible) clock data
+
+        ldx     #8
+    DO
+        ldy     #8
+      DO
+        lda     C8ROM+$04
+        ror     a
+        ror     nsc_buf-1,x
+      WHILE dey : NOT ZERO
+    WHILE dex : NOT ZERO
+
+        ;; --------------------------------------------------
+        ;; Restore MMU and CPU state
+
+        pla
+    IF NC
+        sta     SETSLOTCXROM
+    END_IF
+
+        plp
+
+        ;; --------------------------------------------------
+        ;; Check for a match
+
+        ldx     #8
+    DO
+      IF u8 rom_buf-1,x <> nsc_buf-1,x
+        ;; differs, so NSC intercepted the read
+        clc
+        rts
+      END_IF
+    WHILE dex : NOT ZERO
+
+        sec
+        rts
+
+.endproc ; DetectNoSlotClockInInternalROM
+
+;;; ------------------------------------------------------------
+
+.proc SetNoSlotClockInSlotROM
+
+        SLOTnROM := $C000
+
+        ;; --------------------------------------------------
+        ;; Save CPU state, disable interrupts
+
+        php
+        sei
+
+        ;; --------------------------------------------------
+        ;; Configure card to enable ROM
+
+        lda     PTRIG           ; Slow ZIP, IIc+ accelerator, etc
+        lda     $C00B           ; Ultrawarp bug workaround c/o @bobbimanners
+        lda     C8OFF
+        pha
+        slot_hi1 := *+2
+        sta     SLOTnROM        ; Select slot ROM; self-modified ($Cn00)
+        slot_hi2 := *+2
+        lda     SLOTnROM+$04    ; TODO: What is this for???; self-modified ($Cn04)
+
+        ;; --------------------------------------------------
+        ;; Unlock the NSC by bit-banging.
+
+        ldx     #8
+    DO
+        lda     NSCUnlockSequence-1,x
+        sec                     ; set high bit, so we know when we're done
+        ror     a               ; rotate out next offset
+      DO
+        pha
+        lda     #0
+        rol     a
+        tay                     ; Y=offset (0 or 1)
+        slot_hi3 := *+2
+        lda     $C000,y         ; self-modified ($Cn00)
+        pla
+        lsr     a               ; rotate out next offset
+      WHILE NOT ZERO
+    WHILE dex : NOT ZERO
+
+        ;; --------------------------------------------------
+        ;; Write 8 bytes * 8 bits of clock data by bit-banging
+
+        ldx     #8
+    DO
+        lda     DateToWrite-1,x ; byte to write
+        sec                     ; set high bit, so we know when we're done
+        ror     a               ; rotate out next offset
+      DO
+        pha
+        lda     #0
+        rol     a
+        tay                     ; Y=offset (0 or 1)
+        slot_hi4 := *+2
+        lda     $C000,y         ; self-modified ($Cn00)
+        pla
+        lsr     a               ; rotate out next offset
+      WHILE NOT ZERO
+    WHILE dex : NOT ZERO
+
+        ;; --------------------------------------------------
+        ;; Restore MMU and CPU state
+
+        pla
+    IF NC
+        sta     C8OFF
+    END_IF
+
+        plp
+
+        rts
+
+.endproc ; SetNoSlotClockInSlotROM
+
+.proc DetectNoSlotClockInSlotROM
+
+        SLOTnROM := $C000
+
+        ;; Scan slot ROMs (including motherboard C3 firmware)
+        lda     #$C7
+        sta     slot_hi1
+    DO
+        lda     slot_hi1
+        sta     slot_hi2
+        sta     slot_hi3
+        sta     slot_hi4
+        sta     slot_hi5
+
+        ;; Skip slots with no firmware ROM
+        jsr     IsSlotPopulated ; A=$Cn
+        jcc     next_slot       ; C=0 if not populated
+
+        ;; Skip slots with a Z80, as probing would activate it
+        copy8   #$00, $06
+        copy8   slot_hi1, $07
+        CALL    WithInterruptsDisabled, AX=#DetectZ80
+        bcs     next_slot
+
+        ;; --------------------------------------------------
+        ;; Save CPU state, disable interrupts
+
+        php
+        sei
+
+        ;; --------------------------------------------------
+        ;; Configure card to enable ROM
+
+        lda     PTRIG           ; Slow ZIP, IIc+ accelerator, etc
+        lda     $C00B           ; Ultrawarp bug workaround c/o @bobbimanners
+        lda     C8OFF
+        pha
+        slot_hi1 := *+2
+        sta     SLOTnROM        ; Select slot ROM; self-modified ($Cn00)
+        slot_hi2 := *+2
+        lda     SLOTnROM+$04    ; TODO: What is this for???; self-modified ($Cn04)
+
+        ;; --------------------------------------------------
+        ;; Read reference sample of ROM data
+
+        ldx     #8
+      DO
+        ldy     #8
+       DO
+        slot_hi3 := *+2         ; self-modified ($Cn04)
+        lda     $C004
+        ror     a
+        ror     rom_buf-1,x
+       WHILE dey : NOT ZERO
+      WHILE dex : NOT ZERO
+
+        ;; --------------------------------------------------
+        ;; Unlock the NSC by bit-banging.
+
+        ldx     #8
+      DO
+        lda     NSCUnlockSequence-1,x
+        sec                     ; set high bit, so we know when we're done
+        ror     a               ; rotate out next offset
+       DO
+        pha
+        lda     #0
+        rol     a
+        tay                     ; Y=offset (0 or 1)
+        slot_hi4 := *+2
+        lda     $C000,y         ; self-modified ($Cn00)
+        pla
+        lsr     a               ; rotate out next offset
+       WHILE NOT ZERO
+      WHILE dex : NOT ZERO
+
+        ;; --------------------------------------------------
+        ;; Read 8 bytes * 8 bits of (possible) clock data
+
+        ldx     #8
+      DO
+        ldy     #8
+       DO
+        slot_hi5 := *+2
+        lda     SLOTnROM+$04    ; self-modified ($Cn04)
+        ror     a
+        ror     nsc_buf-1,x
+       WHILE dey : NOT ZERO
+      WHILE dex : NOT ZERO
+
+        ;; --------------------------------------------------
+        ;; Restore MMU and CPU state
+
+        pla
+      IF NC
+        sta     C8OFF
+      END_IF
+
+        plp
+
+        ;; --------------------------------------------------
+        ;; Check for a match
+
+        ldx     #8
+      DO
+       IF u8 rom_buf-1,x <> nsc_buf-1,x
+        ;; differs, so NSC intercepted the read
+        lda     slot_hi1
+        sta     SetNoSlotClockInSlotROM::slot_hi1
+        sta     SetNoSlotClockInSlotROM::slot_hi2
+        sta     SetNoSlotClockInSlotROM::slot_hi3
+        sta     SetNoSlotClockInSlotROM::slot_hi4
+        clc
+        rts
+       END_IF
+      WHILE dex : NOT ZERO
+
+next_slot:
+    WHILE u8 --slot_hi1 <> #$C0
+
+        sec
+        rts
+
+.endproc ; DetectNoSlotClockInSlotROM
+
+;;; ------------------------------------------------------------
+
+rom_buf := $10
+nsc_buf := $20
+
+NSCUnlockSequence:
+        .byte   $5C, $A3, $3A, $C5
+        .byte   $5C, $A3, $3A, $C5
+
+;;; ------------------------------------------------------------
+
+.proc SetIIgsClock
+.pushcpu
+.p816
+.a8
+        lda     DateToWrite::month
+        jsr     _FromBCD
+        dec                     ; IIgs wants month 0..11
+        pha
+        lda     DateToWrite::day
+        jsr     _FromBCD
+        dec                     ; IIgs wants day 0..30
+        pha
+        lda     DateToWrite::year
+        jsr     _FromBCD
+        pha
+        lda     DateToWrite::hours
+        jsr     _FromBCD
+        pha
+        lda     DateToWrite::minutes
+        jsr     _FromBCD
+        pha
+        lda     DateToWrite::seconds
+        jsr     _FromBCD
+        pha
+
+.i16
+        clc                     ; leave emulation mode
+        xce
+        rep     #$30
+
+        ldx     #$0E03          ; `WriteTimeHex`
+        jsl     $E10000         ; Toolbox Call
+
+        sec                     ; re-enter emulation mode
+        xce
+        sep     #$30
+        rts
+.popcpu
+
+.proc _FromBCD
+        temp := $06
+
+        ;; From https://6502.org/users/mycorner/6502/shorts/bcd2bin.html
+        tax                             ; copy BCD value
+        and     #$F0                    ; mask top nibble
+        lsr     a                       ; /2 (/16*8)
+        sta     temp                    ; save it
+        lsr     a                       ; /4 (/16*4)
+        lsr     a                       ; /8 (/16*2)
+        adc     temp                    ; add /2 (carry always clear)
+                                        ; ((n/16*8)+(n/16*2) = (n/16*10))
+        sta     temp                    ; save it
+        txa                             ; get original back
+        and     #$0F                    ; mask low nibble
+        adc     temp                    ; add shifted (carry always clear)
+
+        rts
+.endproc ; _FromBCD
+
+.endproc ; SetIIgsClock
+
+;;; ------------------------------------------------------------
+
+.proc SetThunderClock
+        CLOCK_WRT  := $C00B
+        CLOCK_MODE := $05F8 - $C0 ; screen hole (+ `slot_hi`)
+
+        ;; Prepare initialization sequence
+        CALL    BCDToDigits, A=DateToWrite::month
+        stx     seq + 1
+        sta     seq + 2
+
+        CALL    BCDToDigits, A=DateToWrite::dow
+        sta     seq + 4
+
+        CALL    BCDToDigits, A=DateToWrite::day
+        stx     seq + 6
+        sta     seq + 7
+
+        CALL    BCDToDigits, A=DateToWrite::hours
+        stx     seq + 9
+        sta     seq + 10
+
+        CALL    BCDToDigits, A=DateToWrite::minutes
+        stx     seq + 12
+        sta     seq + 13
+
+        CALL    BCDToDigits, A=DateToWrite::seconds
+        stx     seq + 15
+        sta     seq + 16
+
+        ;; Save current mode
+        ldx     slot_hi
+        lda     CLOCK_MODE,x
+        pha
+
+        ldx     #0
+    DO
+        lda     seq,x
+        slot_hi := *+2
+        jsr     CLOCK_WRT       ; self-modified
+    WHILE inx : X < #kSeqLength
+
+        ;; Restore mode
+        pla
+        ldx     slot_hi
+        sta     CLOCK_MODE,x
+        rts
+
+seq:
+        .byte   "!mm w dd HH MM SS\r"
+        kSeqLength = * - seq
+
+.endproc ; SetThunderClock
+
+;;; Output: C=0 if found; `SetThunderClock` modified
+.proc DetectThunderClock
+        copy8   #$C7, slot_hi
+
+    DO
+        ;; Anything in the slot?
+        CALL    IsSlotPopulated, A=slot_hi
+        bcc     next_slot       ; C=0 if not populated
+
+        ldx     #kSigLength
+      DO
+        ldy     sig_offsets - 1,x
+
+        slot_hi := *+2
+        lda     $C000,y
+        cmp     sig_bytes - 1,x
+        bne     next_slot
+      WHILE dex : NOT ZERO
+
+        ;; match!
+        copy8   slot_hi, SetThunderClock::slot_hi
+        clc
+        rts
+
+next_slot:
+    WHILE u8 --slot_hi <> #$C0
+        sec
+        rts
+
+kSigLength = 4
+sig_offsets:    .byte   $00, $02, $04, $06
+sig_bytes:      .byte   $08, $28, $58, $70
+.endproc ; DetectThunderClock
+
+;;; ------------------------------------------------------------
+
+.proc SetTheCricketClock
+
+;;; SSC I/O Registers (for Slot 2)
+TDREG    := $C088 + $20         ; ACIA Transmit Register (write)
+RDREG    := $C088 + $20         ; ACIA Receive Register (read)
+STATUS   := $C089 + $20         ; ACIA Status/Reset Register
+COMMAND  := $C08A + $20         ; ACIA Command Register (read/write)
+CONTROL  := $C08B + $20         ; ACIA Control Register (read/write)
+
+;;; Offsets into template strings below; here to avoid ca65 warnings.
+kDOWOffset    = 3               ; Offset in `date_seq` for "MON" (etc)
+kMonthOffset  = 7               ; Offset in `date_seq`
+kDayOffset    = 10              ; Offset in `date_seq`
+kYearOffset   = 13              ; Offset in `date_seq`
+kHourOffset   = 3               ; Offset in `time_seq`
+kMinuteOffset = 6               ; Offset in `time_seq`
+kSecondOffset = 9               ; Offset in `time_seq`
+
+        ;; Prepare strings
+        ldx     DateToWrite::dow
+        copy8   dow_table1-1,x, date_seq + kDOWOffset+0
+        copy8   dow_table2-1,x, date_seq + kDOWOffset+1
+        copy8   dow_table3-1,x, date_seq + kDOWOffset+2
+
+        CALL BCDToDigits, A=DateToWrite::month
+        stx     date_seq+kMonthOffset
+        sta     date_seq+kMonthOffset+1
+
+        CALL BCDToDigits, A=DateToWrite::day
+        stx     date_seq+kDayOffset
+        sta     date_seq+kDayOffset+1
+
+        CALL BCDToDigits, A=DateToWrite::year
+        stx     date_seq+kYearOffset
+        sta     date_seq+kYearOffset+1
+
+        CALL BCDToDigits, A=DateToWrite::hours
+        stx     time_seq+kHourOffset
+        sta     time_seq+kHourOffset+1
+
+        CALL BCDToDigits, A=DateToWrite::minutes
+        stx     time_seq+kMinuteOffset
+        sta     time_seq+kMinuteOffset+1
+
+        CALL BCDToDigits, A=DateToWrite::seconds
+        stx     time_seq+kSecondOffset
+        sta     time_seq+kSecondOffset+1
+
+        ;; Disable interrupts
+        php
+        sei
+
+        ;; Save ACIA state
+        lda     COMMAND
+        pha
+        lda     CONTROL
+        pha
+
+        ;; Reset SSC
+        sta     KBDSTRB         ; Port 2 DSR line connected to KBDSTRB
+        lda     #0
+        sta     COMMAND
+        sta     CONTROL
+
+        ;; Configure SSC
+        lda     #%00001011      ; no parity/echo/interrupts, RTS low, DTR low
+        sta     COMMAND
+        lda     #%10011110      ; 9600 baud, 8 data bits, 2 stop bits
+        sta     CONTROL
+
+        ;; Clock Commands
+        ldx     #0
+    DO
+        CALL    _SendByte, A=date_seq,x
+    WHILE inx : A <> #CHAR_RETURN|$80
+
+        ldx     #0
+    DO
+        CALL    _SendByte, A=time_seq,x
+    WHILE inx : A <> #CHAR_RETURN|$80
+
+        ;; The Cricket! reset sequence
+        lda     #CHAR_RETURN|$80
+        jsr     _SendByte
+        lda     #CHAR_RETURN|$80
+        jsr     _SendByte
+        lda     #'!'|$80        ; "!" = Reset Cricket
+        jsr     _SendByte
+
+        ;; Restore ACIA state
+        pla
+        sta     CONTROL
+        pla
+        sta     COMMAND
+
+        ;; Restore interrupts
+        plp
+
+        rts
+
+.proc _SendByte
+        ora     #$80            ; The Cricket! requires high bit set
+        pha
+:       lda     STATUS
+        and     #(1 << 4)       ; transmit register empty? (bit 4)
+        beq     :-              ; nope, keep waiting
+        pla
+        sta     TDREG
+        rts
+.endproc ; _SendByte
+
+;;; Templates for command sequences sent to The Cricket!
+date_seq:       .byte   "SD WWW MM/DD/YY\r"
+time_seq:       .byte   "ST HH:MM:SS\r"
+
+;;; "MON", "TUE", etc., but in easily indexable form
+dow_table1:     .byte   "MTWTFSS"
+dow_table2:     .byte   "OUEHRAU"
+dow_table3:     .byte   "NEDUITN"
+
+.endproc ; SetTheCricketClock
+
+.proc DetectTheCricketClock
+        copy16  #$C200, $06
+        CALL    WithInterruptsDisabled, AX=#DetectTheCricket ; returns C=1 if found
+        ror
+        eor     #$80            ; invert C
+        rol
+        rts
+.endproc ; DetectTheCricketClock
+
+;;; ------------------------------------------------------------
+
+;;; https://jdmicro.com/documentation/romxce/ROMXce+%20API%20Reference.pdf
+
+.proc SetROMXClock
+
+kBufSize = 7
+RTC_BUF := $2B0
+
+REG_RTCSEC   = $00 ; bit 7=start oscillator, bit 6-4=SECTEN, bit 3-0=SECONE
+REG_RTCMIN   = $01 ; bit 6-4=MINTEN, bit 3-0=MINONE
+REG_RTCHOUR  = $02 ; bit 6=12/24 hour, bit 5-4=HRTEN, bit 3-0=HRONE
+REG_RTCWKDAY = $03 ; bit 5=OSCRUN, bit 4=PWRFAIL, bit 3=VBATEN, bit 2-0=WKDAY
+REG_RTCDATE  = $04 ; bit 5-4=DATETEN, bit 3-0=DATEONE
+REG_RTCMTH   = $05 ; bit 5=LPYR, bit 4=MTHTEN, bit 3-0=MTHONE
+REG_RTCYEAR  = $06 ; bit 7-4=YRTEN, bit 3-0=YRONE
+
+ZipSlo        :=  $C0E0       ; ZIP CHIP slowdown
+
+;;; ROMX locations
+SEL_MBANK     :=  $F851       ; Select Main bank reg
+Set_Clock     :=  $C803
+
+        ;; Disable interrupts
+        php
+        sei
+
+        ;; Preserve `RTC_BUF` contents
+        ldx     #kBufSize-1
+    DO
+        lda     RTC_BUF,x
+        pha
+    WHILE dex : POS
+
+        ;; Prepare new values in `RTC_BUF`
+        lda     DateToWrite::seconds
+        ora     #(1<<7)         ; bit 7 = 1 = oscillator enabled
+        sta     RTC_BUF+REG_RTCSEC
+
+        lda     DateToWrite::minutes
+        sta     RTC_BUF+REG_RTCMIN
+
+        lda     DateToWrite::hours
+        sta     RTC_BUF+REG_RTCHOUR ; bit 6 = 0 = 24-hour mode enabled
+
+        lda     DateToWrite::dow
+        ora     #(1<<3)         ; bit 3 = 1 = external battery enabled
+        sta     RTC_BUF+REG_RTCWKDAY
+
+        lda     DateToWrite::day
+        sta     RTC_BUF+REG_RTCDATE
+
+        lda     DateToWrite::month
+        sta     RTC_BUF+REG_RTCMTH
+
+        lda     DateToWrite::year
+        sta     RTC_BUF+REG_RTCYEAR
+
+        ;; Unlock the ROMX and call firmware routine
+
+        bit     ROMIN2          ; enable ROM
+
+        bit     ZipSlo          ; disable ZIP
+        bit     $FACA           ; enable ROMXe, temp bank 0
+        bit     $FACA
+        bit     $FAFE
+
+        lda     RDCXROM         ; save status of SLOTCXROM
+        pha
+        sta     SETINTCXROM     ; turn on internal ROM
+
+        jsr     Set_Clock
+
+        pla
+    IF NC
+        sta     SETSLOTCXROM
+    END_IF
+
+        bit     SEL_MBANK       ; restore original bank (unconditionally)
+
+        bit     LCBANK1         ; normal LC banking
+        bit     LCBANK1
+
+        ;; Restore `RTC_BUF` contents
+        ldx     #0
+    DO
+        pla
+        sta     RTC_BUF,x
+    WHILE inx : X < #kBufSize
+
+        ;; Restore interrupts
+        plp
+
+        rts
+
+.endproc ; SetROMXClock
+
+.proc DetectROMXClock
+ZipSlo        :=  $C0E0       ; ZIP CHIP slowdown
+
+;;; ROMX locations
+FWReadClock   :=  $D8F0       ; Firmware clock driver routine
+SigCk         :=  $DFFE       ; ROMX sig bytes
+SEL_MBANK     :=  $F851       ; Select Main bank reg
+
+        ;; Disable interrupts
+        php
+        sei
+
+        ;; Try to detect ROMX and RTC
+        bit     ROMIN2          ; enable ROM
+
+        bit     ZipSlo          ; disable ZIP
+        bit     $FACA           ; enable ROMXe, temp bank 0
+        bit     $FACA
+        bit     $FAFE
+
+        IF u8 SigCk <> #$4A GOTO nope    ; Check for ROMX signature bytes
+        IF u8 SigCk+1 <> #$CD GOTO nope
+        IF u8 FWReadClock <> #$AD GOTO nope ; is RTC code there?
+
+        clc                     ; found clock!
+        bcc     :+              ; always
+nope:   sec                     ; not found
+:
+
+        bit     SEL_MBANK       ; restore original bank (unconditionally)
+
+        bit     LCBANK1
+        bit     LCBANK1
+
+        ;; Restore interrupts
+        rol                     ; stash C
+        plp
+        ror                     ; restore C
+
+        rts
+
+.endproc ; DetectROMXClock
+
+;;; ============================================================
+
+;;; Input: A = slot (low nibble)
+;;; Output: C=1 if populated, C=0 otherwise
+.proc IsSlotPopulated
+        and     #%00001111      ; allow $Cn to be passed
+        tax
+        inx
+        lda     SLTBYT
+    DO
+        lsr     a               ; bit N into C
+    WHILE dex : NOT ZERO
+        rts
+.endproc ; IsSlotPopulated
+
+;;; ============================================================
+
+;;; Calls `IDROUTINE` with carry set; returns carry clear if
+;;; IIgs. Assumes we're running with LCBank1 banked in, and
+;;; restores that state afterwards.
+;;; Output: C=0 if IIgs, C=1 otherwise
+.proc IsIIgs
+        bit     ROMIN2          ; Check ROM - is this a IIgs?
+        CALL    IDROUTINE, C=1
+        bit     LCBANK1
+        bit     LCBANK1
+        rts
+.endproc ; IsIIgs
+
+;;; ============================================================
+
+;;; Input: A = BCD number
+;;; Output: A = low digit, X = high digit ('0'-'9')
+
+.proc BCDToDigits
+        pha
+        lsr
+        lsr
+        lsr
+        lsr
+        ora     #'0'
+        tax
+
+        pla
+        and     #$0F
+        ora     #'0'
+        rts
+.endproc ; BCDToDigits
+
+;;; ============================================================
+
+        .include "../lib/detect_z80.s"
+        .include "../lib/detect_thecricket.s"
+        .include "../lib/day_of_week.s"
         .include "../lib/save_settings.s"
+        .include "../lib/with_interrupts_disabled.s"
         .assert * < write_buffer, error, .sprintf("DA too big (at $%X)", *)
 
 ;;; ============================================================

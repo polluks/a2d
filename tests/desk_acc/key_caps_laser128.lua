@@ -6,8 +6,6 @@ DISKARGS="-hard1 $HARDIMG"
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(1)
-
 --[[
   Launch DeskTop. Apple Menu > Key Caps. Verify that the "original"
   layout is shown, with the backslash above the Return key.
@@ -15,7 +13,6 @@ a2d.ConfigureRepaintTime(1)
 test.Step(
   "Key Caps - Laser 128",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/KEY.CAPS", {no_validate=true})
-    emu.wait(2)
+    desktop.InvokePath("/A2.DESKTOP/APPLE.MENU/KEY.CAPS")
     test.Snap("verify the keyboard layout is \"original\"")
 end)

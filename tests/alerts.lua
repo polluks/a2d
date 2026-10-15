@@ -5,8 +5,6 @@ DISKARGS="-hard1 $HARDIMG -hard2 tests.hdv -flop1 prodos_floppy1.dsk -flop2 prod
 
 ======================================== ENDCONFIG ]]
 
-a2d.ConfigureRepaintTime(1)
-
 --[[
   Launch DeskTop. Trigger an alert with only OK (e.g. running a
   shortcut with disk ejected). Verify that Escape key closes alert.
@@ -14,17 +12,18 @@ a2d.ConfigureRepaintTime(1)
 test.Step(
   "DeskTop - Escape closes alert",
   function()
-    a2d.AddShortcut("/A2.DESKTOP/READ.ME")
-    a2d.RenamePath("/A2.DESKTOP/READ.ME", "README")
+    desktop.AddShortcut("/A2.DESKTOP/READ.ME")
+    desktop.RenamePath("/A2.DESKTOP/READ.ME", "README")
+    a2dtest.WaitForSystemTask()
     a2dtest.ExpectNothingChanged(function()
         a2d.OAShortcut("1")
         a2dtest.WaitForAlert({match="file cannot be found"})
         apple2.EscapeKey()
-        a2d.WaitForRepaint()
+        a2dtest.WaitForSystemTask()
     end)
 
     -- cleanup
-    a2d.RenamePath("/A2.DESKTOP/README", "READ.ME")
+    desktop.RenamePath("/A2.DESKTOP/README", "READ.ME")
 end)
 
 --[[
@@ -35,9 +34,10 @@ end)
 test.Step(
   "Shortcuts - Escape closes alert",
   function()
-    a2d.AddShortcut("/A2.DESKTOP/APPLE.MENU/CALCULATOR")
-    a2d.ToggleOptionShowShortcutsOnStartup() -- Enable
-    a2d.Reboot()
+    desktop.AddShortcut("/A2.DESKTOP/APPLE.MENU/CALCULATOR")
+    desktop.ToggleOptionShowShortcutsOnStartup() -- Enable
+    desktop.Reboot()
+    a2dtest.ConfigureForSelector()
     a2d.WaitForDesktopReady()
 
     a2dtest.ExpectNothingChanged(function()
@@ -45,13 +45,14 @@ test.Step(
         a2d.DialogOK()
         a2dtest.WaitForAlert({match="Unable to run the program"})
         apple2.EscapeKey()
-        a2d.WaitForRepaint()
+        a2dtest.WaitForSystemTask()
     end)
 
     -- cleanup
     apple2.Type("D") -- Desktop
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
-    a2d.ToggleOptionShowShortcutsOnStartup() -- Disable
+    desktop.ToggleOptionShowShortcutsOnStartup() -- Disable
 end)
 
 --[[
@@ -62,28 +63,36 @@ end)
 test.Step(
   "Disk Copy - Escape closes alert",
   function()
-    a2d.CopyDisk()
+    desktop.CopyDisk()
+    a2dtest.ConfigureForDiskCopy()
     a2d.WaitForDesktopReady()
 
     apple2.UpArrowKey() -- S6D2
     apple2.UpArrowKey() -- S6D1
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     apple2.UpArrowKey() -- S6D2
     a2d.DialogOK()
+    a2dtest.WaitForSystemTask()
 
     a2d.DialogOK() -- confirm inserting source
+    a2dtest.WaitForSystemTask()
     a2d.DialogOK() -- confirm inserting destination
+    a2dtest.WaitForSystemTask()
     a2d.DialogOK() -- confirm overwrite
+    a2dtest.WaitForSystemTask()
 
     a2dtest.WaitForAlert({match="copy was successful"})
     apple2.EscapeKey()
-    a2d.WaitForRepaint()
+    a2dtest.WaitForSystemTask()
     a2dtest.ExpectAlertNotShowing()
 
     a2d.OAShortcut("Q")
+    a2dtest.ConfigureForDeskTop()
     a2d.WaitForDesktopReady()
     a2d.DialogOK() -- dismiss duplicate volume name alert
+    a2dtest.WaitForSystemTask()
 end)
 
 --[[
@@ -97,11 +106,11 @@ end)
 test.Step(
   "Yes/No/All",
   function()
-    a2d.OpenPath("/A2.DESKTOP/APPLE.MENU/TOYS")
-    a2d.SelectAll()
-    a2d.CopySelectionTo("/RAM1")
+    desktop.OpenWindow("/A2.DESKTOP/APPLE.MENU/TOYS")
+    desktop.SelectAll()
+    desktop.CopySelectionTo("/RAM1")
     emu.wait(5) -- allow copy to complete
-    a2d.CopySelectionTo("/RAM1")
+    desktop.CopySelectionTo("/RAM1")
 
     local yes_x, yes_y, no_x, no_y, all_x, all_y
     local delta_x, delta_y = 30, 5
@@ -119,7 +128,7 @@ test.Step(
     a2d.InMouseKeysMode(function(m)
         m.MoveToApproximately(yes_x, yes_y)
         m.ButtonDown()
-        emu.wait(2/60)
+        m.Wait()
         test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "Yes", "should be down on Yes")
         m.MoveByApproximately(20, 20)
         a2dtest.ExpectNothingChanged(m.ButtonUp)
@@ -129,7 +138,7 @@ test.Step(
 
         m.MoveToApproximately(no_x, no_y)
         m.ButtonDown()
-        emu.wait(2/60)
+        m.Wait()
         test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "No", "should be down on No")
         m.MoveByApproximately(20, 20)
         a2dtest.ExpectNothingChanged(m.ButtonUp)
@@ -139,7 +148,7 @@ test.Step(
 
         m.MoveToApproximately(all_x, all_y)
         m.ButtonDown()
-        emu.wait(2/60)
+        m.Wait()
         test.ExpectMatch(a2dtest.OCRScreen({invert=true}), "All", "should be down on All")
         m.MoveByApproximately(20, 20)
         a2dtest.ExpectNothingChanged(m.ButtonUp)

@@ -212,18 +212,18 @@ init_window:
 ;;; Input loop
 
 .proc InputLoop
+    REPEAT
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         MGTK_CALL MGTK::GetEvent, event_params
-        lda     event_params::kind
-    IF A = #MGTK::EventKind::button_down
-        jsr     OnClick
-        jmp     InputLoop
-    END_IF
 
-        cmp     #MGTK::EventKind::key_down
-        bne     InputLoop
+        lda     event_params::kind
+      IF A = #MGTK::EventKind::button_down
+        jsr     OnClick
+      ELSE_IF A = #MGTK::EventKind::key_down
         jsr     OnKey
-        jmp     InputLoop
+      END_IF
+
+    FOREVER
 .endproc ; InputLoop
 
 ;;; ============================================================
@@ -236,43 +236,27 @@ init_window:
         ldx     event_params::modifiers
     IF NOT_ZERO
         jsr     ToUpperCase
-        cmp     #kShortcutCloseWindow
-        jeq     OnKeyOK
+        IF A = #kShortcutCloseWindow JUMP OnKeyOK
 
-        cmp     #res_char_shortcut_apple_1
-        jeq     OnClickMDY
-        cmp     #res_char_shortcut_apple_2
-        jeq     OnClickDMY
-        cmp     #res_char_shortcut_apple_3
-        jeq     OnClick12Hour
-        cmp     #res_char_shortcut_apple_4
-        jeq     OnClick24Hour
-        cmp     #res_char_shortcut_apple_5
-        jeq     OnClickSunday
-        cmp     #res_char_shortcut_apple_6
-        jeq     OnClickMonday
+        IF A = #res_char_shortcut_apple_1 JUMP OnClickMDY
+        IF A = #res_char_shortcut_apple_2 JUMP OnClickDMY
+        IF A = #res_char_shortcut_apple_3 JUMP OnClick12Hour
+        IF A = #res_char_shortcut_apple_4 JUMP OnClick24Hour
+        IF A = #res_char_shortcut_apple_5 JUMP OnClickSunday
+        IF A = #res_char_shortcut_apple_6 JUMP OnClickMonday
         rts
     END_IF
 
-        cmp     #CHAR_RETURN
-        jeq     OnKeyOK
-        cmp     #CHAR_ESCAPE
-        jeq     OnKeyOK
+        IF A = #CHAR_RETURN JUMP OnKeyOK
+        IF A = #CHAR_ESCAPE JUMP OnKeyOK
 
-        cmp     #CHAR_LEFT
-        beq     OnKeyPrev
-        cmp     #CHAR_UP
-        beq     OnKeyPrev
-        cmp     #CHAR_RIGHT
-        beq     OnKeyNext
-        cmp     #CHAR_TAB
-        beq     OnKeyNext
-        cmp     #CHAR_DOWN
-        beq     OnKeyNext
-        cmp     #' '
-        bcc     ret
-        cmp     #CHAR_DELETE
-        bcs     ret
+        IF A = #CHAR_LEFT GOTO OnKeyPrev
+        IF A = #CHAR_UP GOTO OnKeyPrev
+        IF A = #CHAR_RIGHT GOTO OnKeyNext
+        IF A = #CHAR_TAB GOTO OnKeyNext
+        IF A = #CHAR_DOWN GOTO OnKeyNext
+        IF A < #' ' GOTO ret
+        IF A >= #CHAR_DELETE GOTO ret
         jmp     OnKeyChar
 
 ret:    rts
@@ -290,8 +274,7 @@ ret:    rts
         clc
         lda     selected_field
         adc     #1
-        cmp     #Field::LAST+1
-        bcc     UpdateSelection
+        IF A < #Field::LAST+1 GOTO UpdateSelection
         FALL_THROUGH_TO UpdateSelection, A=#Field::FIRST
 .endproc ; OnKeyNext
 
@@ -336,14 +319,11 @@ update:
 
 .proc OnClick
         MGTK_CALL MGTK::FindWindow, event_params::xcoord
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        bne     miss
-        lda     findwindow_params::which_area
-        cmp     #MGTK::Area::content
-        beq     hit
-miss:   rts
-hit:
+    IF u8 findwindow_params::window_id <> #kDAWindowId \
+      OR u8 findwindow_params::which_area <> #MGTK::Area::content
+        rts
+    END_IF
+
         ;; ----------------------------------------
 
         MGTK_CALL MGTK::SetPort, winfo::port
@@ -355,12 +335,12 @@ hit:
         ;; ----------------------------------------
 
         MGTK_CALL MGTK::InRect, ok_button::rect
-        jne     OnClickOK
+        bne     OnClickOK
 
         ;; --------------------------------------------------
 
         MGTK_CALL MGTK::InRect, clock_12hour_button::rect
-        jne     OnClick12Hour
+        bne     OnClick12Hour
 
         MGTK_CALL MGTK::InRect, clock_24hour_button::rect
         jne     OnClick24Hour

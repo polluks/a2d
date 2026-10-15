@@ -198,26 +198,25 @@ auxtype:        .word   SELF_MODIFIED
 ;;; Input loop
 
 .proc InputLoop
-
-    IF bit auxtype_focused_flag : NC
+    REPEAT
+      IF bit auxtype_focused_flag : NC
         LETK_CALL LETK::Idle, type_le_params
-    ELSE
+      ELSE
         LETK_CALL LETK::Idle, auxtype_le_params
-    END_IF
+      END_IF
 
         JSR_TO_MAIN JUMP_TABLE_SYSTEM_TASK
         jsr     GetNextEvent
 
-        cmp     #kEventKindMouseMoved
-        jeq     HandleMouseMoved
+      IF A = #kEventKindMouseMoved
+        jsr     HandleMouseMoved
+      ELSE_IF A = #MGTK::EventKind::button_down
+        jsr     HandleButtonDown
+      ELSE_IF A = #MGTK::EventKind::key_down
+        jsr     HandleKeyDown
+      END_IF
 
-        cmp     #MGTK::EventKind::button_down
-        jeq     HandleButtonDown
-
-        cmp     #MGTK::EventKind::key_down
-        jeq     HandleKeyDown
-
-        jmp     InputLoop
+    FOREVER
 .endproc ; InputLoop
 
 ;;; ==================================================
@@ -230,26 +229,24 @@ auxtype:        .word   SELF_MODIFIED
         MGTK_CALL MGTK::InRect, type_rect
     IF NOT_ZERO
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
-        jmp     InputLoop
+        rts
     END_IF
 
         MGTK_CALL MGTK::InRect, auxtype_rect
     IF NOT_ZERO
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::ibeam
-        jmp     InputLoop
+        rts
     END_IF
 
         MGTK_CALL MGTK::SetCursor, MGTK::SystemCursor::pointer
-        jmp     InputLoop
+        rts
 .endproc ; HandleMouseMoved
 
 ;;; ============================================================
 
 .proc HandleButtonDown
         MGTK_CALL MGTK::FindWindow, findwindow_params
-        lda     findwindow_params::window_id
-        cmp     #kDAWindowId
-        jne     InputLoop
+        RTS_IF u8 findwindow_params::window_id <> #kDAWindowId
 
         copy8   #kDAWindowId, screentowindow_params::window_id
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
@@ -259,14 +256,14 @@ auxtype:        .word   SELF_MODIFIED
     IF NOT_ZERO
         BTK_CALL BTK::Track, ok_button
         jpl     ExitOK
-        jmp     InputLoop
+        rts
     END_IF
 
         MGTK_CALL MGTK::InRect, cancel_button::rect
     IF NOT_ZERO
         BTK_CALL BTK::Track, cancel_button
         jpl     ExitCancel
-        jmp     InputLoop
+        rts
     END_IF
 
         MGTK_CALL MGTK::InRect, type_rect
@@ -274,7 +271,7 @@ auxtype:        .word   SELF_MODIFIED
         jsr     FocusType
         COPY_STRUCT screentowindow_params::window, type_le_params::coords
         LETK_CALL LETK::Click, type_le_params
-        jmp     InputLoop
+        rts
     END_IF
 
         MGTK_CALL MGTK::InRect, auxtype_rect
@@ -282,10 +279,10 @@ auxtype:        .word   SELF_MODIFIED
         jsr     FocusAuxtype
         COPY_STRUCT screentowindow_params::window, auxtype_le_params::coords
         LETK_CALL LETK::Click, auxtype_le_params
-        jmp     InputLoop
+        rts
     END_IF
 
-        jmp     InputLoop
+        rts
 .endproc ; HandleButtonDown
 
 ;;; ============================================================
@@ -296,10 +293,9 @@ auxtype:        .word   SELF_MODIFIED
         ldx     event_params::modifiers
     IF NOT_ZERO
         jsr     ToUpperCase
-        cmp     #kShortcutCloseWindow
-        jeq     ExitCancel
+        IF A = #kShortcutCloseWindow JUMP ExitCancel
 
-        jmp     InputLoop
+        rts
     END_IF
 
     IF A = #CHAR_ESCAPE
@@ -319,17 +315,14 @@ auxtype:        .word   SELF_MODIFIED
       ELSE
         jsr     FocusType
       END_IF
-        jmp     InputLoop
+        rts
     END_IF
 
         jsr     IsControlChar
     IF CS
         jsr     IsHexChar
-      IF CS
-        jmp     InputLoop
-      END_IF
+        RTS_IF CS
     END_IF
-
 
     IF bit auxtype_focused_flag : NC
         sta     type_le_params::key
@@ -341,7 +334,7 @@ auxtype:        .word   SELF_MODIFIED
         LETK_CALL LETK::Key, auxtype_le_params
     END_IF
 
-        jmp     InputLoop
+        rts
 
 ;;; Input: A=character
 ;;; Output: C=0 if control, C=1 if not
@@ -360,15 +353,11 @@ yes:    RETURN  C=0
 .proc IsHexChar
         jsr     ToUpperCase
 
-        cmp     #'0'
-        bcc     no
-        cmp     #'9'+1
-        bcc     yes
+        IF A < #'0' GOTO no
+        IF A < #'9'+1 GOTO yes
 
-        cmp     #'A'
-        bcc     no
-        cmp     #'F'+1
-        bcc     yes
+        IF A < #'A' GOTO no
+        IF A < #'F'+1 GOTO yes
 
 no:     RETURN  C=1
 
@@ -402,8 +391,7 @@ yes:    RETURN  C=0
 
 .proc PadType
     DO
-        lda     str_type
-        BREAK_IF A = #2
+        BREAK_IF u8 str_type = #2
         copy8   str_type+1, str_type+2
         copy8   #'0', str_type+1
         inc     str_type
@@ -413,8 +401,7 @@ yes:    RETURN  C=0
 
 .proc PadAuxtype
     DO
-        lda     str_auxtype
-        BREAK_IF A = #4
+        BREAK_IF u8 str_auxtype = #4
         copy8   str_auxtype+3, str_auxtype+4
         copy8   str_auxtype+2, str_auxtype+3
         copy8   str_auxtype+1, str_auxtype+2
@@ -427,11 +414,17 @@ yes:    RETURN  C=0
 ;;; ============================================================
 
 .proc ExitOK
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         lda     #$80
         bne     Exit            ; always
 .endproc ; ExitOK
 
 .proc ExitCancel
+        ;; Don't return to `InputLoop`
+        pla
+        pla
         FALL_THROUGH_TO Exit, A=#0
 .endproc ; ExitCancel
 
@@ -440,8 +433,7 @@ yes:    RETURN  C=0
         MGTK_CALL MGTK::CloseWindow, closewindow_params
         JSR_TO_MAIN JUMP_TABLE_CLEAR_UPDATES
 
-        lda     str_type
-    IF ZERO
+    IF u8 str_type = #0
         CLEAR_BIT7_FLAG data::type_valid
     ELSE
         SET_BIT7_FLAG data::type_valid
@@ -450,8 +442,7 @@ yes:    RETURN  C=0
         sta     data::type
     END_IF
 
-        lda     str_auxtype
-    IF ZERO
+    IF u8 str_auxtype = #0
         CLEAR_BIT7_FLAG data::auxtype_valid
     ELSE
         SET_BIT7_FLAG data::auxtype_valid
@@ -647,12 +638,11 @@ callback:
         sta     data::auxtype_valid
     ELSE
         ;; Rest - determine if same type/auxtype
-        lda     gfi_params::file_type
-      IF A <> data::type
+      IF u8 gfi_params::file_type <> data::type
         CLEAR_BIT7_FLAG data::type_valid
       END_IF
 
-      IF ecmp16 gfi_params::aux_type, data::auxtype : NE
+      IF u16 gfi_params::aux_type <> data::auxtype
         CLEAR_BIT7_FLAG data::auxtype_valid
       END_IF
 
@@ -676,14 +666,14 @@ callback:
 
     IF bit data::type_valid : NS
         ;; Disallow changing type to/from directory
-      IF lda data::type : A <> gfi_params::file_type
+      IF u8 data::type <> gfi_params::file_type
         ;; type change - either one dir?
-       IF lda data::type : A = #FT_DIRECTORY
+       IF u8 data::type = #FT_DIRECTORY
         jsr     ShowDirError
         jmp     skip
        END_IF
 
-       IF lda gfi_params::file_type : A = #FT_DIRECTORY
+       IF u8 gfi_params::file_type = #FT_DIRECTORY
         jsr     ShowDirError
         jmp     skip
        END_IF

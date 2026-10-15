@@ -104,7 +104,6 @@ notpencopy:     .byte   MGTK::notpencopy
 
 kCDButtonW = 40
 kCDButtonH = 10
-kColW = 60
 
 kRow1 = 4
 kRow2 = 27
@@ -115,7 +114,6 @@ kCol2 = kCol1 + kCDButtonW + 10
 kCol3 = kCol2 + kCDButtonW + 10
 kCol4 = kCol3 + kCDButtonW + 10
 kCol5 = kCol4 + kCDButtonW + 10 + 10
-kCol6 = kCol5 + kCDButtonW + 10
 
         DEFINE_RECT_SZ display_rect, kCol1, kRow1, 190, 17
 
@@ -359,16 +357,13 @@ ep_size = * - ep_start
         JUMP_TABLE_MGTK_CALL MGTK::FindWindow, aux::findwindow_params
         jsr     CopyEventDataToMain
 
-        lda     findwindow_params::window_id
-    IF A = #aux::kDAWindowId
+    IF u8 findwindow_params::window_id = #aux::kDAWindowId
         lda     findwindow_params::which_area
-        cmp     #MGTK::Area::close_box
-        beq     HandleClose
-        cmp     #MGTK::Area::dragbar
-        beq     HandleDrag
-        cmp     #MGTK::Area::content
-        beq     HandleClick
+        IF A = #MGTK::Area::close_box GOTO HandleClose
+        IF A = #MGTK::Area::dragbar GOTO HandleDrag
+        IF A = #MGTK::Area::content GOTO HandleClick
     END_IF
+
         lda     #$FF            ; not a button
         rts
 .endproc ; HandleDown
@@ -379,8 +374,7 @@ ep_size = * - ep_start
         JUMP_TABLE_MGTK_CALL MGTK::TrackGoAway, aux::trackgoaway_params
         jsr     CopyEventDataToMain
 
-        lda     trackgoaway_params::clicked
-    IF NOT_ZERO
+    IF u8 trackgoaway_params::clicked <> #0
         pla                     ; not returning to the caller
         pla
         jmp     Exit
@@ -616,7 +610,7 @@ done:   rts
 
         ;; Copy rectangle
         copy16  ptr, STARTLO
-        add16_8 STARTLO, #.sizeof(MGTK::Rect)-1, ENDLO
+        add16   STARTLO, #.sizeof(MGTK::Rect)-1, ENDLO
         copy16  #rect, DESTINATIONLO
         CALL    AUXMOVE, C=0    ; aux>main
 
@@ -680,7 +674,6 @@ MAIN:                           ; "Null" out T/M/S values
                                 ; Do all the things!
         jsr     MainLoop
 
-EXIT:
         jmp     ::Exit
 
 ;;; ============================================================
@@ -752,14 +745,11 @@ ExitInitDriveDisc:
 
         ;; Re-check the status of the drive
         jsr     StatusDrive
-        lda     DrivePlayingFlag
-    IF NOT_ZERO
+    IF u8 DrivePlayingFlag <> #0
         ;; Drive is playing audio, watch for an AudioStatus return code of $03 = "Play operation complete"
         jsr     C24AudioStatus
-        lda     SPBuffer
-        cmp     #$03
         ;; Audio playback operation is not complete
-      IF EQ
+      IF u8 SPBuffer = #3
         ;; Deal with reaching the end of a playback operation.  It's complicated.  :)
         jsr     PlayBackComplete
       END_IF
@@ -787,8 +777,7 @@ CheckUserInput:
         jmp     MainLoop
     END_IF
 
-        cmp     #MGTK::EventKind::key_down
-        bne     MainLoop
+        IF A <> #MGTK::EventKind::key_down GOTO MainLoop
 
         ;; ----------------------------------------
 
@@ -798,17 +787,14 @@ HandleKey:
 
         ldx     event_params::modifiers
     IF NOT_ZERO
-        cmp     #kShortcutCloseWindow
-        jeq     DoQuitAction
+        IF A = #kShortcutCloseWindow JUMP DoQuitAction
     END_IF
 
         ;; $51 = Q (Quit)
-        cmp     #'Q'
-        jeq     DoQuitAction
+        IF A = #'Q' GOTO DoQuitAction
 
         ;; $1B = ESC (Quit)
-        cmp     #CHAR_ESCAPE
-        jeq     DoQuitAction
+        IF A = #CHAR_ESCAPE GOTO DoQuitAction
 
         ;; $4C = L (Continuous Play)
     IF A = #'L'
@@ -855,8 +841,7 @@ HandleKey:
 
         ;; $08 = ^H, LA (Previous Track, Scan Backward)
     IF A = #CHAR_LEFT
-        lda     event_params::modifiers
-      IF NOT_ZERO
+      IF u8 event_params::modifiers <> #0
         jsr     DoScanBackAction
         jmp     MainLoop
       END_IF
@@ -867,8 +852,7 @@ HandleKey:
 
         ;; $15 = ^U, RA (Next Track/Scan Forward)
     IF A = #CHAR_RIGHT
-        lda     event_params::modifiers
-      IF NOT_ZERO
+      IF u8 event_params::modifiers <> #0
         jsr     DoScanFwdAction
         jmp     MainLoop
       END_IF
@@ -894,8 +878,7 @@ HandleKey:
 ;;; ============================================================
 
 .proc PlayBackComplete
-        lda     RandomButtonState
-    IF NOT_ZERO
+    IF u8 RandomButtonState <> #0
 
         ;; Random button is active - handle rollover to next random track
         lda     PlayButtonState
@@ -903,11 +886,8 @@ HandleKey:
         beq     ExitHandler
 
         ;; Increment the count of how many tracks have been played
-        inc     HexPlayedCount0Base
-        lda     HexPlayedCount0Base
-        cmp     HexTrackCount0Base
-        ;; Haven't played all the tracks on the disc, so pick another one
-        bne     PlayARandomTrack
+        ;; Haven't played all the tracks on the disc? Pick another one
+        IF u8 ++HexPlayedCount0Base <> HexTrackCount0Base GOTO PlayARandomTrack
 
         ;; All tracks have been played randomly - clear the Play button STATE to inactive (with no UI change) ...
         lda     #$00
@@ -952,8 +932,7 @@ PlayARandomTrack:
         jsr     C21AudioPlay
     ELSE
         ;; Entire disc has been played to the end, do we need to loop?
-        lda     LoopButtonState
-      IF NOT_ZERO
+      IF u8 LoopButtonState <> #0
         ;; Loop button is active - reset stop point to EoT LastTrack
         jsr     C23AudioStop
         lda     PlayButtonState
@@ -1039,24 +1018,21 @@ ExitStatusDrive:
         ;; EXCEPTION - Explicitly stop the CD drive, forcibly clear the Play/Pause buttons, forcibly set the Stop button, and wipe the Track/Time display clean
 .proc HardShutdown
         jsr     DoStopAction
-        lda     PauseButtonState
-    IF NOT_ZERO
+    IF u8 PauseButtonState <> #0
         ;; Clear Pause button to inactive
         lda     #$00
         sta     PauseButtonState
         jsr     ToggleUIPauseButton
     END_IF
 
-        lda     PlayButtonState
-    IF NOT_ZERO
+    IF u8 PlayButtonState <> #0
         ;; Clear Play button to inactive
         lda     #$00
         sta     PlayButtonState
         jsr     ToggleUIPlayButton
     END_IF
 
-        lda     StopButtonState
-    IF ZERO
+    IF u8 StopButtonState = #0
         ;; Set Stop button to active
         lda     #$ff
         sta     StopButtonState
@@ -1120,28 +1096,22 @@ ExitReReadTOC:
 ;;; * Otherwise, sample until `MGTK::EventKind::button_up`
 
 .proc CheckGestureEnded
-        lda     event_params::kind
-        cmp     #MGTK::EventKind::key_down
-        beq     ended
+    IF u8 event_params::kind <> #MGTK::EventKind::key_down
 
         JUMP_TABLE_MGTK_CALL MGTK::GetEvent, aux::event_params
         jsr     CopyEventDataToMain
-        lda     event_params::kind
-        cmp     #MGTK::EventKind::button_up
-        beq     ended
+      IF u8 event_params::kind <> #MGTK::EventKind::button_up
+        RETURN  A=#$FF          ; N=1
+      END_IF
+    END_IF
 
-        lda     #$FF            ; N=1
-        rts
-
-ended:  lda     #$00            ; N=0
-        rts
+        RETURN  A=#$00          ; N=0
 .endproc ; CheckGestureEnded
 
 ;;; ============================================================
 
 .proc DoPlayAction
-        lda     PauseButtonState
-    IF NOT_ZERO
+    IF u8 PauseButtonState <> #0
         ;; Pause button is active - forcibly clear it to inactive and then...
         lda     #$00
         sta     PauseButtonState
@@ -1150,11 +1120,9 @@ ended:  lda     #$00            ; N=0
         jsr     C22AudioPause
     ELSE
 
-        lda     PlayButtonState
-      IF ZERO
+      IF u8 PlayButtonState = #0
         ;; Play button is inactive, we're starting from scratch - before activating, check the random mode
-        lda     RandomButtonState
-       IF NOT_ZERO
+       IF u8 RandomButtonState <> #0
         ;; Random button is active - initialize random mode, pick a Track, and start it
         jsr     RandomModeInit
         jsr     PickARandomTrack
@@ -1173,8 +1141,7 @@ ended:  lda     #$00            ; N=0
         dec     PlayButtonState
         jsr     ToggleUIPlayButton
 
-        lda     StopButtonState
-       IF NOT_ZERO
+       IF u8 StopButtonState <> #0
         ;; Set Stop button to inactive, then start the playback and exit
         lda     #$00
         sta     StopButtonState
@@ -1190,24 +1157,21 @@ ended:  lda     #$00            ; N=0
 ;;; ============================================================
 
 .proc DoStopAction
-        lda     StopButtonState
-    IF ZERO
+    IF u8 StopButtonState = #0
         ;; Reset First/Last to TOC values
         lda     BCDFirstTrackTOC
         sta     BCDFirstTrackNow
         lda     BCDLastTrackTOC
         sta     BCDLastTrackNow
 
-        lda     PlayButtonState
-      IF NOT_ZERO
+      IF u8 PlayButtonState <> #0
         ;; Clear Play button to inactive
         lda     #$00
         sta     PlayButtonState
         jsr     ToggleUIPlayButton
       END_IF
 
-        lda     PauseButtonState
-      IF NOT_ZERO
+      IF u8 PauseButtonState <> #0
         ;; Clear Pause button to inactive
         lda     #$00
         sta     PauseButtonState
@@ -1241,8 +1205,7 @@ ended:  lda     #$00            ; N=0
 ;;; ============================================================
 
 .proc DoPauseAction
-        lda     StopButtonState
-    IF ZERO
+    IF u8 StopButtonState = #0
         ;; Toggle Pause button
         lda     #$ff
         eor     PauseButtonState
@@ -1419,8 +1382,7 @@ ExitScanFwdAction:
         jsr     DrawTime
 
 WrapCheck:
-        lda     BCDRelTrack
-    IF A = BCDFirstTrackTOC
+    IF u8 BCDRelTrack = BCDFirstTrackTOC
         ;; If we're not at the "first" track, just decrement track #
         ;; Otherwise, wrap to the "last" track instead
         lda     BCDLastTrackTOC
@@ -1434,8 +1396,7 @@ WrapCheck:
         cld
     END_IF
 
-        lda     RandomButtonState
-    IF NOT_ZERO
+    IF u8 RandomButtonState <> #0
         ;; Random button is active - set the current Track as First/Last/Picked, and set the proper random Stop mode
         lda     BCDRelTrack
         sta     BCDFirstTrackNow
@@ -1477,8 +1438,7 @@ Counter:
         jsr     DrawTime
 
 WrapCheck:
-        lda     BCDRelTrack
-    IF A = BCDLastTrackTOC
+    IF u8 BCDRelTrack = BCDLastTrackTOC
         ;; If we're not at the "last" track, just increment track #
         ;; Otherwise, wrap to the "first" track instead
         lda     BCDFirstTrackTOC
@@ -1492,8 +1452,7 @@ WrapCheck:
         cld
     END_IF
 
-        lda     RandomButtonState
-    IF NOT_ZERO
+    IF u8 RandomButtonState <> #0
         ;; Random button is active - set the current Track as First/Last/Picked, and set the proper random Stop mode
         lda     BCDRelTrack
         sta     BCDFirstTrackNow
@@ -1536,20 +1495,17 @@ Counter:
 
         jsr     ToggleUIEjectButton
 
-        lda     StopButtonState
-    IF ZERO
+    IF u8 StopButtonState = #0
         ;; Stop button was active
 
-        lda     PauseButtonState
-      IF NOT_ZERO
+      IF u8 PauseButtonState <> #0
         ;; Clear Pause button to inactive
         lda     #$00
         sta     PauseButtonState
         jsr     ToggleUIPauseButton
       END_IF
 
-        lda     PlayButtonState
-      IF NOT_ZERO
+      IF u8 PlayButtonState <> #0
         ;; Clear Play button to inactive
         lda     #$00
         sta     PlayButtonState
@@ -1671,8 +1627,7 @@ ExecuteSearch:
         sta     SPBuffer + 6
         jsr     SPCallVector
 
-        lda     PauseButtonState
-    IF NOT_ZERO
+    IF u8 PauseButtonState <> #0
         ;; Clear Pause button to inactive
         inc     PauseButtonState
         jsr     ToggleUIPauseButton
@@ -2051,9 +2006,7 @@ SPBuffer        := DA_IO_BUFFER  ; 1K free to use in Main after loading
         pha
 
         ;; Only update/draw if changed
-        lda     BCDRelTrack
-        cmp     last_track
-        beq     skip
+    IF u8 BCDRelTrack <> last_track
 
         txa
         pha
@@ -2068,16 +2021,17 @@ SPBuffer        := DA_IO_BUFFER  ; 1K free to use in Main after loading
         sta     str_track_num+2 ; "_0"
 
         JUMP_TABLE_MGTK_CALL MGTK::GetWinPort, aux::getwinport_params
-    IF ZERO
+      IF ZERO
         JUMP_TABLE_MGTK_CALL MGTK::SetPort, aux::grafport
         jsr     ::DrawTrack
-    END_IF
+      END_IF
 
         pla
         tay
         pla
         tax
-skip:
+    END_IF
+
         pla
         rts
 .endproc ; DrawTrack
@@ -2086,13 +2040,7 @@ skip:
         pha
 
         ;; Only update/draw if changed
-        lda     BCDRelMinutes
-        cmp     last_min
-        bne     :+
-        lda     BCDRelSeconds
-        cmp     last_sec
-        beq     skip
-:
+    IF u8 BCDRelMinutes <> last_min OR u8 BCDRelSeconds <> last_sec
         txa
         pha
         tya
@@ -2114,16 +2062,17 @@ skip:
         sta     str_time+5      ; "__:_0"
 
         JUMP_TABLE_MGTK_CALL MGTK::GetWinPort, aux::getwinport_params
-    IF ZERO
+      IF ZERO
         JUMP_TABLE_MGTK_CALL MGTK::SetPort, aux::grafport
         jsr     ::DrawTime
-    END_IF
+      END_IF
 
         pla
         tay
         pla
         tax
-skip:
+    END_IF
+
         pla
         rts
 .endproc ; DrawTime
