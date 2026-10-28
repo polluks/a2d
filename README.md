@@ -22,7 +22,7 @@ The application started its life as **Mouse Desk** by Version Soft. Apple Comput
 * Manual: [Apple IIgs System Disk User’s Guide (1986)](https://mirrors.apple2.org.za/ftp.apple.asimov.net/documentation/misc/Apple%20IIgs%20System%20Disk%20Users%20Guide%20%281986%29.pdf) - Chapter 2 “The DeskTop”
 * [Disk Images for Mouse Desk and Apple II DeskTop](https://mirrors.apple2.org.za/ftp.apple.asimov.net/images/masters/other_os/gui/)
 
-Other GUI environments exist for the 8-bit Apples, including [GEOS](http://toastytech.com/guis/a2geos.html) (which includes productivity applications) and [Quark Catalyst](http://toastytech.com/guis/qcat.html). While Apple II DeskTop is more limited then GEOS, serving only as a file manager and application launcher, it follows more common interface paradigms and is better integrated with ProDOS.
+Other GUI environments exist for the 8-bit Apples, including [GEOS](http://toastytech.com/guis/a2geos.html) (which includes productivity applications) and [Quark Catalyst](https://web.archive.org/web/20260629000752/http://toastytech.com/guis/qcat.html). While Apple II DeskTop is more limited then GEOS, serving only as a file manager and application launcher, it follows more common interface paradigms and is better integrated with ProDOS.
 
 ## This Project
 
