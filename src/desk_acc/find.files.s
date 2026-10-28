@@ -386,7 +386,7 @@ search:
 
         ;; And invoke it!
         ldy     num_entries     ; A,X are trashed by macro
-        JSR_TO_MAIN  ::main::RecursiveCatalog::Start
+        JSR_TO_MAIN ::main::RecursiveCatalog::Start
         sty     num_entries
         sty     lb_params::new_size
         LBTK_CALL LBTK::SetSize, lb_params ; update scrollbar
@@ -436,14 +436,14 @@ finish:
         MGTK_CALL MGTK::InRect, search_button::rect
       IF NOT_ZERO
         BTK_CALL BTK::Track, search_button
-        bmi     done
+        IF NS GOTO done         ; N=0/Z=1 if clicked
         jmp     DoSearch
       END_IF
 
         MGTK_CALL MGTK::InRect, cancel_button::rect
       IF NOT_ZERO
         BTK_CALL BTK::Track, cancel_button
-        bmi     done
+        IF NS GOTO done         ; N=0/Z=1 if clicked
         jmp     Exit
       END_IF
 
@@ -582,7 +582,7 @@ NoOp:   rts
         asl16   offset
     WHILE dex : NOT_ZERO
 
-        add16_8 offset, num ; offset += num, so * 65
+        add16_8 offset, num     ; offset += num, so * 65
         add16   offset, #::main::entries_buffer, offset
 
         RETURN  AX=offset

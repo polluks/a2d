@@ -362,8 +362,7 @@ fin:    TAIL_CALL UpdateWindow
 
 .proc HandleClose
         MGTK_CALL MGTK::TrackGoAway, trackgoaway_params
-        lda     trackgoaway_params::clicked
-        jne     Exit
+        IF u8 trackgoaway_params::clicked <> #MGTK::goaway_canceled JUMP Exit
         rts
 .endproc ; HandleClose
 
@@ -512,10 +511,10 @@ notpencopy:     .byte   MGTK::notpencopy
         lda     index
         clc
         adc     first_dow
-      IF A >= #7
+       IF A >= #7
         ;; C=1
         sbc     #7
-      END_IF
+       END_IF
 
         asl
         tax
@@ -598,7 +597,7 @@ draw_date:
         add16_8 date_pos::ycoord, #kDayDY
       END_IF
 
-    WHILE u8 ++date <> #39        ; extra, to erase previous days
+    WHILE u8 ++date <> #39      ; extra, to erase previous days
 
         ;; --------------------------------------------------
         ;; Left/right arrow buttons

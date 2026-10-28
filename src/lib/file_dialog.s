@@ -204,7 +204,7 @@ ret:    rts
         MGTK_CALL MGTK::InRect, file_dialog_res::drives_button::rect
     IF NOT_ZERO
         BTK_CALL BTK::Track, file_dialog_res::drives_button
-        RTS_IF NS
+        RTS_IF NS               ; N=0/Z=1 if clicked
         jmp     _DoDrives
     END_IF
 
@@ -214,7 +214,7 @@ ret:    rts
         MGTK_CALL MGTK::InRect, file_dialog_res::open_button::rect
     IF NOT_ZERO
         BTK_CALL BTK::Track, file_dialog_res::open_button
-        RTS_IF NS
+        RTS_IF NS               ; N=0/Z=1 if clicked
         jmp     _DoOpen
     END_IF
 
@@ -224,7 +224,7 @@ ret:    rts
         MGTK_CALL MGTK::InRect, file_dialog_res::close_button::rect
     IF NOT_ZERO
         BTK_CALL BTK::Track, file_dialog_res::close_button
-        RTS_IF NS
+        RTS_IF NS               ; N=0/Z=1 if clicked
         jmp     _DoClose
     END_IF
 
@@ -234,7 +234,7 @@ ret:    rts
         MGTK_CALL MGTK::InRect, file_dialog_res::ok_button::rect
     IF NOT_ZERO
         BTK_CALL BTK::Track, file_dialog_res::ok_button
-        RTS_IF NS
+        RTS_IF NS               ; N=0/Z=1 if clicked
         jmp     HandleOK
     END_IF
 
@@ -244,7 +244,7 @@ ret:    rts
         MGTK_CALL MGTK::InRect, file_dialog_res::cancel_button::rect
     IF NOT_ZERO
         BTK_CALL BTK::Track, file_dialog_res::cancel_button
-        RTS_IF NS
+        RTS_IF NS               ; N=0/Z=1 if clicked
         jmp     HandleCancel
     END_IF
 
@@ -586,9 +586,8 @@ file_char:
         RETURN  A=#0
 
 .proc _FindMatch
-    IF u8 num_file_names = #0
-        RETURN  A=#$FF
-    END_IF
+        IF u8 num_file_names = #0 \
+          RETURN A=#$FF
 
         copy8   #0, index
     DO
@@ -737,15 +736,15 @@ found:  RETURN  A=index
 
         ;; List box position
         ldy     #MGTK::Winfo::port+MGTK::GrafPort::viewloc
-        add16in (ptr),y, #file_dialog_res::kListBoxLeft, file_dialog_res::winfo_listbox::port+MGTK::GrafPort::viewloc+MGTK::Point::xcoord
+        add16   (ptr),y, #file_dialog_res::kListBoxLeft, file_dialog_res::winfo_listbox::port+MGTK::GrafPort::viewloc+MGTK::Point::xcoord
         iny
-        add16in (ptr),y, #file_dialog_res::kListBoxTop, file_dialog_res::winfo_listbox::port+MGTK::GrafPort::viewloc+MGTK::Point::ycoord
+        add16   (ptr),y, #file_dialog_res::kListBoxTop, file_dialog_res::winfo_listbox::port+MGTK::GrafPort::viewloc+MGTK::Point::ycoord
 
         ;; Frame rect size
         ldy     #MGTK::Winfo::port+MGTK::GrafPort::maprect+MGTK::Rect::bottomright
-        sub16in (ptr),y, #kBorderDX*2-1, file_dialog_res::dialog_frame_rect::x2
+        sub16   (ptr),y, #kBorderDX*2-1, file_dialog_res::dialog_frame_rect::x2
         iny
-        sub16in (ptr),y, #kBorderDY*2-1, file_dialog_res::dialog_frame_rect::y2
+        sub16   (ptr),y, #kBorderDY*2-1, file_dialog_res::dialog_frame_rect::y2
 
         ;; Open and decorate the window
 

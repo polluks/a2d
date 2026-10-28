@@ -539,7 +539,7 @@ hit_target_jump_table:
 
 .proc OnClickOK
         BTK_CALL BTK::Track, ok_button
-        IF NC GOTO OnOK
+        IF NC GOTO OnOK         ; N=0/Z=1 if clicked
         rts
 .endproc ; OnClickOK
 
@@ -968,9 +968,9 @@ label_downarrow:
 .endproc ; UpdateOptionButtons
 
 .proc ZToButtonState
-    IF ZC
-        RETURN  A=#BTK::kButtonStateNormal
-    END_IF
+        IF ZC \
+          RETURN A=#BTK::kButtonStateNormal
+
         RETURN  A=#BTK::kButtonStateChecked
 .endproc ; ZToButtonState
 

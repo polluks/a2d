@@ -10,7 +10,7 @@ The macros are unevenly distributed, based on actual need. For example, there ar
 
 In general, the macros are crafted to allow passing arguments in any addressing mode, including immediate (`#$1234`), absolute (`$1234`), and indexed (`$1234,x`) without needing special syntax. So it's fine to call a macro like `copy16 buf1,x, buf2,y` with 4 actual arguments (`buf1`, `x`, `buf2`, `y`); it will be treated as 2 effective arguments (`buf1,x`, `buf2,y`).
 
-Indirect addressing modes (e.g. `($12),y`) require using dedicated macros.
+Indirect addressing modes (e.g. `($12),y`) require using dedicated macros that increment Y.
 
 Most macros use the accumulator.
 
@@ -84,9 +84,13 @@ Add `arg1` to X,Y. X,Y is dirtied. The result is stored to `arg2` if given, othe
 
 Add `arg2` to `arg1`, store result in `destination`.
 
+If any argument uses indirect indexed addressing mode (i.e. `(zp),y`), the Y register is incremented between processing the low and high bytes.
+
 ### `sub16 arg1, arg2, destination`
 
 Subtract `arg2` from `arg1`, store result in `destination`.
+
+If any argument uses indirect indexed addressing mode (i.e. `(zp),y`), the Y register is incremented between processing the low and high bytes.
 
 ### `add16_8 arg1, arg2 [, destination]`
 
@@ -103,6 +107,8 @@ If `destination` is provided and `arg2` is an immediate value then the generated
 ### `copy16 source, destination`
 
 Copy the 16-bit value from `source` to `destination`
+
+If any argument uses indirect indexed addressing mode (i.e. `(zp),y`), the Y register is incremented between processing the low and high bytes.
 
 ### `copylohi lo, hi, destination`
 
@@ -137,14 +143,6 @@ Right shift, with sign extension. i.e. signed divide-by-two.
 ### `push16 arg`
 
 Increment/decrement/push-to-stack.
-
-## 16-Bit Operations - Indirect Addressing
-
-### `add16in arg1, arg2, destination`
-### `sub16in arg1, arg2, destination`
-### `copy16in arg1, destination`
-
-The Y register is incremented between processing the high byte, so `add16in (ptr),y, delta, (ptr),y` works.
 
 ## 24-bit Operations
 

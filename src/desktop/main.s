@@ -3122,9 +3122,8 @@ CmdNewFolder    := CmdNewFolderImpl::start
 
 .proc SelectFileIconByName
         CALL    FindIconByName, Y=active_window_id
-    IF ZERO                     ; not found
-        RETURN  C=1
-    END_IF
+        IF ZERO \
+          RETURN C=1            ; not found
 
         jsr     SelectIconAndEnsureVisible
         RETURN  C=0
@@ -4811,7 +4810,7 @@ _PreamblePreCached:
 .endproc ; PageDown
 
 .proc _Page_hi
-        add16 viewport+MGTK::Rect::bottomright,x, viewport_size,x, viewport+MGTK::Rect::bottomright,x
+        add16   viewport+MGTK::Rect::bottomright,x, viewport_size,x, viewport+MGTK::Rect::bottomright,x
         rts
 .endproc ; _Page_hi
 
@@ -5607,9 +5606,8 @@ alert:  jmp     ShowAlert       ; either `ERR_INVALID_PATHNAME` or `ERR_FILE_NOT
         jsr     _TryActivateReloadAndRefreshWindow
         pla                     ; A = window id
 
-    IF bit exception_flag : NC
-        RETURN  A=#0
-    END_IF
+        IF bit exception_flag : NC \
+          RETURN A=#0
 
         jsr     CloseWindow ; A = window id
         RETURN  A=#$FF
@@ -5730,8 +5728,7 @@ exception_flag:
 .proc HandleCloseClick
         lda     active_window_id
         MGTK_CALL MGTK::TrackGoAway, trackgoaway_params
-        lda     trackgoaway_params::goaway
-        RTS_IF ZERO
+        RTS_IF u8 trackgoaway_params::goaway = #MGTK::goaway_canceled
 
         ;; If modifier is down, close all windows
         lda     MainLoop::modifiers ; bit7 = OA, bit6 = SA
@@ -5942,9 +5939,9 @@ validate_windows_flag:
 ;;; return zero.
 ;;; Z=0 and A=icon num if only one, Z=0 and A=0 otherwise
 .proc GetSingleSelectedIcon
-    IF u8 selected_icon_count <> #1
-        RETURN  A=#0
-    END_IF
+        IF u8 selected_icon_count <> #1 \
+          RETURN A=#0
+
         RETURN  A=selected_icon_list
 .endproc ; GetSingleSelectedIcon
 
@@ -6887,7 +6884,7 @@ done:
         ;; clipped port.
 
         jsr     UnsafeSetPortForWindowIdAndAdjustForEntries ; CHECKED
-        RTS_IF NOT_ZERO         ; obscured
+        RTS_IF NOT_ZERO                                     ; obscured
 
         jsr     PushPointers
         jsr     CacheActiveWindowIconList
@@ -6896,22 +6893,22 @@ done:
         COPY_STRUCT MGTK::Rect, window_grafport+MGTK::GrafPort::maprect, tmp_rect
 
         ldx     #0
-       DO
+      DO
         txa
         pha                     ; A = index
 
         copy8   selected_icon_list,x, icon_param
 
         ITK_CALL IconTK::IconInRect, icon_param
-        IF NOT ZERO
+       IF NOT ZERO
         ITK_CALL IconTK::DrawIconRaw, icon_param ; CHECKED
-        ELSE
+       ELSE
         jsr     CheckEvents
-        END_IF
+       END_IF
 
         pla                     ; A = index
         tax
-       WHILE inx : X <> selected_icon_count
+      WHILE inx : X <> selected_icon_count
 
         jsr     CachedIconsWindowToScreen
         jsr     PopPointers     ; do not tail-call optimize!
@@ -7253,9 +7250,7 @@ enough_room:
         record := $1F00
 
 do_entry:
-        inc     index_in_dir
-        ucmp8   index_in_dir, dir_header::file_count
-        IF ZERO JUMP finish
+        IF u8 ++index_in_dir = dir_header::file_count JUMP finish
 
 next:   inc     index_in_block
     IF u8 index_in_block <> dir_header::entries_per_block
@@ -7438,9 +7433,8 @@ CreateFileRecordsForRefreshedWindow := CreateFileRecordsForWindowImpl::refresh_w
         pla                     ; A = original length
         sta     src_path_buf
 
-    IF CS
-        RETURN  A=#$FF          ; failure
-    END_IF
+        IF CS \
+          RETURN A=#$FF         ; failure
 
         ;; aux = total blocks
         copy16  src_file_info_params::blocks_used, vol_blocks_used
@@ -7586,9 +7580,9 @@ vol_blocks_used:  .word   0
         ;; (Only done for width because height is treated as fixed.)
 
         ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + MGTK::Rect::x1
-        add16in (winfo_ptr),y, iconbb_rect+MGTK::Rect::x1, (winfo_ptr),y
+        add16   (winfo_ptr),y, iconbb_rect+MGTK::Rect::x1, (winfo_ptr),y
         ldy     #MGTK::Winfo::port + MGTK::GrafPort::maprect + MGTK::Rect::x2
-        add16in (winfo_ptr),y, iconbb_rect+MGTK::Rect::x1, (winfo_ptr),y
+        add16   (winfo_ptr),y, iconbb_rect+MGTK::Rect::x1, (winfo_ptr),y
         rts
 .endproc ; AdjustViewportForNewIcons
 
@@ -7657,7 +7651,7 @@ vol_blocks_used:  .word   0
         ;; Set up pointers to suffix and filename
         ptr_suffix      := $08
         ldy     #ICTRecord::aux_suf
-        copy16in (ptr),y, ptr_suffix
+        copy16  (ptr),y, ptr_suffix
         ;; Start at the end of the strings
         ldy     #0
         copy8   (ptr_suffix),y, suffix_pos
@@ -7701,9 +7695,9 @@ next:   add16_8 ptr, #.sizeof(ICTRecord)
         ldy     #FileRecord::file_type
         copy8   (file_record),y, src_file_info_params::file_type
         ldy     #FileRecord::aux_type
-        copy16in (file_record),y, src_file_info_params::aux_type
+        copy16  (file_record),y, src_file_info_params::aux_type
         ldy     #FileRecord::blocks
-        copy16in (file_record),y, src_file_info_params::blocks_used
+        copy16  (file_record),y, src_file_info_params::blocks_used
         rts
 .endproc ; FileRecordToSrcFileInfo
 
@@ -8756,9 +8750,9 @@ map_delta_y:    .word   0
         stax    ptr
 
         ldy     #MGTK::Point::xcoord
-        add16in map_delta_x, (ptr),y, (ptr),y
+        add16   map_delta_x, (ptr),y, (ptr),y
         iny                     ; Y = #MGTK::Point::ycoord
-        add16in map_delta_y, (ptr),y, (ptr),y
+        add16   map_delta_y, (ptr),y, (ptr),y
 
         jsr     PopPointers     ; do not tail-call optimize!
         rts
@@ -8795,9 +8789,8 @@ start:
         sta     block_params::unit_num
 
         ;; Special case for RAM.DRV.SYSTEM/RAMAUX.SYSTEM
-    IF A IN #kRamDrvSystemUnitNum, #kRamAuxSystemUnitNum
-        RETURN  AX=#str_device_type_ramdisk, Y=#IconType::ramdisk
-    END_IF
+        IF A IN #kRamDrvSystemUnitNum, #kRamAuxSystemUnitNum \
+          RETURN AX=#str_device_type_ramdisk, Y=#IconType::ramdisk
 
         ;; Special case for VEDRIVE
         jsr     DeviceDriverAddress
@@ -8817,9 +8810,8 @@ vdrive: RETURN  AX=#str_device_type_vdrive, Y=#IconType::fileshare
         ;; Is Disk II? A dedicated test that takes advantage of the
         ;; fact that Disk II devices are never remapped.
         CALL    IsDiskII, A=block_params::unit_num
-    IF ZS
-        RETURN  AX=#str_device_type_diskii, Y=#IconType::floppy140
-    END_IF
+        IF ZS \
+          RETURN AX=#str_device_type_diskii, Y=#IconType::floppy140
 
         ;; Look up driver address
         CALL    DeviceDriverAddress, A=block_params::unit_num ; Z=1 if $Cn
@@ -8896,12 +8888,13 @@ done_adjust_case:
         ;; https://web.archive.org/web/2007/http://web.pdx.edu/~heiss/technotes/smpt/tn.smpt.4.html
         lda     dib_buffer+SPDIB::Device_Type_Code
         ASSERT_EQUALS SPDeviceType::MemoryExpansionCard, 0
-    IF ZERO                     ; $00 = Memory Expansion Card (RAM Disk)
-        RETURN  AX=#dib_buffer+SPDIB::ID_String_Length, Y=#IconType::ramdisk
-    END_IF
+        ;; $00 = Memory Expansion Card (RAM Disk)
+        IF ZERO \
+          RETURN  AX=#dib_buffer+SPDIB::ID_String_Length, Y=#IconType::ramdisk
 
-        cmp     #SPDeviceType::SCSICDROM
-        bne     test_size
+        IF A <> #SPDeviceType::SCSICDROM \
+          GOTO test_size
+
         RETURN  AX=#dib_buffer+SPDIB::ID_String_Length, Y=#IconType::cdrom
 
         ;; NOTE: Codes for 3.5" disk ($01) and 5-1/4" disk ($0A) are not trusted
@@ -8912,9 +8905,8 @@ done_adjust_case:
 not_sp:
         ;; Not SmartPort - try AppleTalk
         MLI_CALL READ_BLOCK, block_params
-    IF A = #ERR_NETWORK_ERROR
-        RETURN  AX=#str_device_type_appletalk, Y=#IconType::fileshare
-    END_IF
+        IF A = #ERR_NETWORK_ERROR \
+          RETURN AX=#str_device_type_appletalk, Y=#IconType::fileshare
 
         ;; RAM-based driver or not SmartPort
 generic:
@@ -9103,16 +9095,16 @@ error:
 
         ;; Center it horizontally
         ldy     #IconResource::maprect + MGTK::Rect::x2
-        copy16in (icon_defn_ptr),y, offset
+        copy16  (icon_defn_ptr),y, offset
         lsr16   offset          ; offset = (icon_width-1) / 2
         ldy     #IconEntry::iconx
-        sub16in (icon_ptr),y, offset, (icon_ptr),y
+        sub16   (icon_ptr),y, offset, (icon_ptr),y
 
         ;; Adjust vertically
         ldy     #IconResource::maprect + MGTK::Rect::y2
-        copy16in (icon_defn_ptr),y, offset ; offset = (icon_height-1)
+        copy16  (icon_defn_ptr),y, offset ; offset = (icon_height-1)
         ldy     #IconEntry::icony
-        sub16in (icon_ptr),y, offset, (icon_ptr),y
+        sub16   (icon_ptr),y, offset, (icon_ptr),y
 
         jsr     PopPointers
         RETURN  A=#0
@@ -10500,9 +10492,8 @@ retry:  MLI_CALL GET_FILE_INFO, dst_file_info_params
         ;; Copying a volume? If so, `src_file_info_params` has total
         ;; blocks used on the volume, which isn't useful for an
         ;; incremental copy.
-    IF u8 src_file_info_params::storage_type = #ST_VOLUME_DIRECTORY
-        RETURN  C=0
-    END_IF
+        IF u8 src_file_info_params::storage_type = #ST_VOLUME_DIRECTORY \
+          RETURN C=0
 
         ;; --------------------------------------------------
         ;; Check how much space might be reclaimed if we're
@@ -10707,7 +10698,7 @@ failure:
         bcs     ret
         entry_ptr := $06
         ldy     #FileEntry::case_bits
-        copy16in (entry_ptr),y, case_bits
+        copy16  (entry_ptr),y, case_bits
     END_IF
 
         clc                     ; success
@@ -10727,7 +10718,7 @@ ret:    rts
         MLI_CALL READ_BLOCK, block_params
         bcs     ret
         ldy     #FileEntry::case_bits
-        copy16in case_bits, (block_ptr),y
+        copy16  case_bits, (block_ptr),y
         MLI_CALL WRITE_BLOCK, block_params
 
 ret:    rts
@@ -11273,11 +11264,11 @@ retry:  MLI_CALL DESTROY, destroy_src_params
         ;; Locked?
         lda     src_file_info_params::access
         and     #ACCESS_DEFAULT
-      IF A = #ACCESS_DEFAULT
+    IF A = #ACCESS_DEFAULT
         ;; Already unlocked, so we just fail with unknown error.
         ;; TODO: If it's a directory, this could be because it's not empty,
         TAIL_CALL ShowErrorAlert, A=#kErrUnknown
-      END_IF
+    END_IF
 
         bit     operations::all_flag
         bmi     unlock
@@ -12385,7 +12376,7 @@ retry:
         ldy     #IconEntry::iconx
       DO
         sub16   tmpc,x, tmp_rect::bottomright,x, delta
-        add16in (icon_ptr),y, delta, (icon_ptr),y
+        add16   (icon_ptr),y, delta, (icon_ptr),y
         iny
       WHILE inx : inx : X <> #4
     ELSE
@@ -12535,14 +12526,12 @@ DoRename        := DoRenameImpl::start
 .proc _ClickHandler
         MGTK_CALL MGTK::FindWindow, findwindow_params
         lda     findwindow_params::which_area
-    IF A <> #MGTK::Area::content
-        RETURN  A=#PromptResult::ok
-    END_IF
+        IF A <> #MGTK::Area::content \
+          RETURN A=#PromptResult::ok
 
         lda     findwindow_params::window_id
-    IF A <> #winfo_rename_dialog::kWindowId
-        RETURN  A=#PromptResult::ok
-    END_IF
+        IF A <> #winfo_rename_dialog::kWindowId \
+          RETURN A=#PromptResult::ok
 
         copy8   winfo_rename_dialog, event_params
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
@@ -12564,13 +12553,11 @@ DoRename        := DoRenameImpl::start
         bne     allow           ; pass through modified keys
 
         ;; No modifiers
-    IF A = #CHAR_RETURN
-        RETURN  A=#PromptResult::ok
-    END_IF
+        IF A = #CHAR_RETURN \
+          RETURN A=#PromptResult::ok
 
-    IF A = #CHAR_ESCAPE
-        RETURN  A=#PromptResult::cancel
-    END_IF
+        IF A = #CHAR_ESCAPE \
+          RETURN A=#PromptResult::cancel
 
         jsr     IsControlChar   ; pass through control characters
         bcc     allow
@@ -13006,7 +12993,7 @@ ok:     RETURN  A=#0
 ;;; Uses `DIR_READ_DATA_BUFFER` and `IO_BUFFER`
 .proc ExecuteStartupItems
         ;; Does the directory exist?
-        CALL GetFileInfo, AX=#str_startup_items
+        CALL    GetFileInfo, AX=#str_startup_items
         RTS_IF CS
         RTS_IF u8 file_info_params::file_type <> #FT_DIRECTORY
 
@@ -13496,13 +13483,11 @@ found_slash:
 
 .proc _ClickHandler
         MGTK_CALL MGTK::FindWindow, findwindow_params
-    IF u8 findwindow_params::which_area <> #MGTK::Area::content
-        RETURN  A=#$FF
-    END_IF
+        IF u8 findwindow_params::which_area <> #MGTK::Area::content \
+          RETURN A=#$FF
 
-    IF u8 findwindow_params::window_id <> #winfo_prompt_dialog::kWindowId
-        RETURN  A=#$FF
-    END_IF
+        IF u8 findwindow_params::window_id <> #winfo_prompt_dialog::kWindowId \
+          RETURN A=#$FF
 
         copy8   winfo_prompt_dialog, event_params
         MGTK_CALL MGTK::ScreenToWindow, screentowindow_params
@@ -13511,7 +13496,7 @@ found_slash:
         MGTK_CALL MGTK::InRect, ok_button::rect
     IF NOT_ZERO
         BTK_CALL BTK::Track, ok_button
-      IF NC
+      IF NC                     ; N=0/Z=1 if clicked
         lda     #PromptResult::ok
       END_IF
         rts
@@ -13523,7 +13508,7 @@ found_slash:
         MGTK_CALL MGTK::InRect, cancel_button::rect
       IF NOT_ZERO
         BTK_CALL BTK::Track, cancel_button
-       IF NC
+       IF NC                    ; N=0/Z=1 if clicked
         lda     #PromptResult::cancel
        END_IF
         rts
@@ -13599,9 +13584,9 @@ KeyHookRelay:
 
 .proc _HandleKeyOK
         BTK_CALL BTK::Flash, ok_button
-    IF NS
-        RETURN  A=#$FF          ; ignore
-    END_IF
+        IF NS \
+          RETURN A=#$FF          ; ignore
+
         RETURN  A=#PromptResult::ok
 .endproc ; _HandleKeyOK
 
@@ -13770,7 +13755,7 @@ recurse_down:
         next_ptr := $0A
 
         ldy     #MGTK::Winfo::nextwinfo
-        copy16in (winfo_ptr),y, next_ptr
+        copy16  (winfo_ptr),y, next_ptr
         ora     next_ptr
         beq     recurse_up      ; Nope - just finish.
 
@@ -13970,9 +13955,8 @@ kEntriesPerBlock = $0D
     WHILE dey : NOT_ZERO
 
         dey                     ; length not including '/'
-    IF ZERO
-        RETURN  C=1             ; was a volume path - failure
-    END_IF
+        IF ZERO \
+          RETURN C=1            ; was a volume path - failure
 
         tya
         pha                     ; A = new path length
@@ -14036,7 +14020,7 @@ next_entry:
         ora     current_block+1
     IF ZERO
         ldy     #FileEntry::header_pointer
-        copy16in (entry_ptr),y, current_block
+        copy16  (entry_ptr),y, current_block
     END_IF
 
         ;; See if this is the file we're looking for

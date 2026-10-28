@@ -149,11 +149,14 @@
         nop
     FOREVER
 
-;;; BREAK_IF
+;;; BREAK_IF / IF ...  BREAK
     DO
         nop
         BREAK_IF NC
         BREAK_IF NOT NC
+        nop
+        IF NC BREAK
+        IF NOT NC BREAK
         nop
     WHILE CS
 
@@ -162,13 +165,19 @@
         BREAK_IF NC
         BREAK_IF NOT NC
         nop
+        IF NC BREAK
+        IF NOT NC BREAK
+        nop
     FOREVER
 
-;;; CONTINUE_IF
+;;; CONTINUE_IF / IF ... CONTINUE
     DO
         nop
         CONTINUE_IF NC
         CONTINUE_IF NOT NC
+        nop
+        IF NC CONTINUE
+        IF NOT NC CONTINUE
         nop
     WHILE CS
 
@@ -180,13 +189,19 @@
         CONTINUE_IF NC
         CONTINUE_IF NOT NC
         nop
+        IF NC CONTINUE
+        IF NOT NC CONTINUE
+        nop
     FOREVER
 
-;;; REDO_IF
+;;; REDO_IF / IF ... REDO
     DO
         nop
         REDO_IF NC
         REDO_IF NOT NC
+        nop
+        IF NC REDO
+        IF NOT NC REDO
         nop
     WHILE CS
 
@@ -194,6 +209,9 @@
         nop
         REDO_IF NC
         REDO_IF NOT NC
+        nop
+        IF NC REDO
+        IF NOT NC REDO
         nop
     FOREVER
 
@@ -249,27 +267,36 @@
         nop
     UNTIL NOT A < #$12
 
-;;; BREAK_IF
+;;; BREAK_IF / IF ... BREAK
     DO
         nop
         BREAK_IF A < #$12
         BREAK_IF NOT A < #$12
         nop
+        IF A < #$12 BREAK
+        IF NOT A < #$12 BREAK
+        nop
     WHILE CS
 
-;;; REDO_IF
+;;; REDO_IF / IF ... REDO
     DO
         nop
         REDO_IF A < #$12
         REDO_IF NOT A < #$12
         nop
+        IF A < #$12 REDO
+        IF NOT A < #$12 REDO
+        nop
     WHILE CS
 
-;;; CONTINUE_IF
+;;; CONTINUE_IF / IF ... CONTINUE
     DO
         nop
         CONTINUE_IF A < #$12
         CONTINUE_IF NOT A < #$12
+        nop
+        IF A < #$12 CONTINUE
+        IF NOT A < #$12 CONTINUE
         nop
     WHILE CS
 
@@ -309,24 +336,30 @@ table := *
         nop
     UNTIL A < table,y
 
-;;; BREAK_IF
+;;; BREAK_IF / IF ... BREAK
     DO
         nop
         BREAK_IF A < table,y
         nop
+        IF A < table,y BREAK
+        nop
     WHILE CS
 
-;;; REDO_IF
+;;; REDO_IF / IF ... REDO
     DO
         nop
         REDO_IF A < table,y
         nop
+        IF A < table,y REDO
+        nop
     WHILE CS
 
-;;; CONTINUE_IF
+;;; CONTINUE_IF / IF ... CONTINUE
     DO
         nop
         CONTINUE_IF A < table,y
+        nop
+        IF A < table,y CONTINUE
         nop
     WHILE CS
 
@@ -423,11 +456,15 @@ table := *
         nop
         BREAK_IF X IN #1, #2, #3
         nop
+        IF X IN #1, #2, #3 BREAK
+        nop
     WHILE CC
 
     DO
         nop
         BREAK_IF X NOT_IN #1, #2, #3
+        nop
+        IF X NOT_IN #1, #2, #3 BREAK
         nop
     WHILE CC
 
@@ -435,11 +472,15 @@ table := *
         nop
         BREAK_IF NOT X IN #1, #2, #3
         nop
+        IF NOT X IN #1, #2, #3 BREAK
+        nop
     WHILE CC
 
     DO
         nop
         BREAK_IF NOT X NOT_IN #1, #2, #3
+        nop
+        IF NOT X NOT_IN #1, #2, #3 BREAK
         nop
     WHILE CC
 
@@ -448,11 +489,15 @@ table := *
         nop
         REDO_IF X IN #1, #2, #3
         nop
+        IF X IN #1, #2, #3 REDO
+        nop
     WHILE CC
 
     DO
         nop
         REDO_IF X NOT_IN #1, #2, #3
+        nop
+        IF X NOT_IN #1, #2, #3 REDO
         nop
     WHILE CC
 
@@ -460,11 +505,15 @@ table := *
         nop
         REDO_IF NOT X IN #1, #2, #3
         nop
+        IF NOT X IN #1, #2, #3 REDO
+        nop
     WHILE CC
 
     DO
         nop
         REDO_IF NOT X NOT_IN #1, #2, #3
+        nop
+        IF NOT X NOT_IN #1, #2, #3 REDO
         nop
     WHILE CC
 
@@ -473,11 +522,15 @@ table := *
         nop
         CONTINUE_IF X IN #1, #2, #3
         nop
+        IF X IN #1, #2, #3 CONTINUE
+        nop
     WHILE CC
 
     DO
         nop
         CONTINUE_IF X NOT_IN #1, #2, #3
+        nop
+        IF X NOT_IN #1, #2, #3 CONTINUE
         nop
     WHILE CC
 
@@ -485,11 +538,15 @@ table := *
         nop
         CONTINUE_IF NOT X IN #1, #2, #3
         nop
+        IF NOT X IN #1, #2, #3 CONTINUE
+        nop
     WHILE CC
 
     DO
         nop
         CONTINUE_IF NOT X NOT_IN #1, #2, #3
+        nop
+        IF NOT X NOT_IN #1, #2, #3 CONTINUE
         nop
     WHILE CC
 
@@ -600,11 +657,15 @@ table := *
         nop
         BREAK_IF A BETWEEN #'A', #'Z'
         nop
+        IF A BETWEEN #'A', #'Z' BREAK
+        nop
     WHILE CS
 
     DO
         nop
         BREAK_IF A NOT_BETWEEN #'A', #'Z'
+        nop
+        IF A NOT_BETWEEN #'A', #'Z' BREAK
         nop
     WHILE CS
 
@@ -612,11 +673,15 @@ table := *
         nop
         BREAK_IF NOT A BETWEEN #'A', #'Z'
         nop
+        IF NOT A BETWEEN #'A', #'Z' BREAK
+        nop
     WHILE CS
 
     DO
         nop
         BREAK_IF NOT A NOT_BETWEEN #'A', #'Z'
+        nop
+        IF NOT A NOT_BETWEEN #'A', #'Z' BREAK
         nop
     WHILE CS
 
@@ -625,11 +690,15 @@ table := *
         nop
         REDO_IF A BETWEEN #'A', #'Z'
         nop
+        IF A BETWEEN #'A', #'Z' REDO
+        nop
     WHILE CS
 
     DO
         nop
         REDO_IF A NOT_BETWEEN #'A', #'Z'
+        nop
+        IF A NOT_BETWEEN #'A', #'Z' REDO
         nop
     WHILE CS
 
@@ -637,11 +706,15 @@ table := *
         nop
         REDO_IF NOT A BETWEEN #'A', #'Z'
         nop
+        IF NOT A BETWEEN #'A', #'Z' REDO
+        nop
     WHILE CS
 
     DO
         nop
         REDO_IF NOT A NOT_BETWEEN #'A', #'Z'
+        nop
+        IF NOT A NOT_BETWEEN #'A', #'Z' REDO
         nop
     WHILE CS
 
@@ -650,11 +723,15 @@ table := *
         nop
         CONTINUE_IF A BETWEEN #'A', #'Z'
         nop
+        IF A BETWEEN #'A', #'Z' CONTINUE
+        nop
     WHILE CS
 
     DO
         nop
         CONTINUE_IF A NOT_BETWEEN #'A', #'Z'
+        nop
+        IF A NOT_BETWEEN #'A', #'Z' CONTINUE
         nop
     WHILE CS
 
@@ -662,11 +739,15 @@ table := *
         nop
         CONTINUE_IF NOT A BETWEEN #'A', #'Z'
         nop
+        IF NOT A BETWEEN #'A', #'Z' CONTINUE
+        nop
     WHILE CS
 
     DO
         nop
         CONTINUE_IF NOT A NOT_BETWEEN #'A', #'Z'
+        nop
+        IF NOT A NOT_BETWEEN #'A', #'Z' CONTINUE
         nop
     WHILE CS
 
@@ -926,8 +1007,17 @@ var2 := *
     DO
 @cheap:
         BREAK_IF CS
+        nop
+        IF CS BREAK
+        nop
         REDO_IF CS
+        nop
+        IF CS REDO
+        nop
         CONTINUE_IF CS
+        nop
+        IF CS CONTINUE
+        nop
         beq     @cheap
     WHILE A < #123
 
@@ -1137,9 +1227,15 @@ var2 := *
         nop
         REDO_IF bit var : NS
         nop
+        IF bit var : NS REDO
+        nop
         CONTINUE_IF bit var : NS
         nop
+        IF bit var : NS CONTINUE
+        nop
         BREAK_IF bit var : NS
+        nop
+        IF bit var : NS BREAK
         nop
     WHILE POS
 
@@ -1299,6 +1395,34 @@ ft21:
         RETURN  Y=#kConstant, AX=var
         RETURN  C=1, A=table,x, X=table,y
 
+;;; IF ... RETURN
+
+        IF CS RETURN
+
+        IF CS RETURN A=#0
+        IF CS RETURN A=#kConstant
+        IF CS RETURN A=var
+        IF CS RETURN A=table,x
+
+        IF CS RETURN A=#0
+        IF CS RETURN X=#0
+        IF CS RETURN Y=#0
+        IF CS RETURN AX=#0
+        IF CS RETURN AY=#0
+        IF CS RETURN XY=#0
+
+        IF CS RETURN C=0
+        IF CS RETURN C=1
+        IF CS RETURN C=kClear
+        IF CS RETURN C=kSet
+
+        IF CS RETURN C=1
+        IF CS RETURN D=1
+
+        IF CS RETURN C=0, D=1, A=#0, X=#1, Y=#2
+        IF CS RETURN Y=#kConstant, AX=var
+        IF CS RETURN C=1, A=table,x, X=table,y
+
 ;;; --------------------------------------------------
 ;;; Cheap Local Label Compatibility
 ;;; --------------------------------------------------
@@ -1404,6 +1528,24 @@ varC:   .word   9870
         SET u16 varA >>= #1
         SET u16 varA >>= #4
 
+        SET u16 AX = varA
+        SET u16 XY = varA
+        SET u16 varA = AX
+        SET u16 varA = XY
+        SET u16 varA += AX
+        SET u16 varA += XY
+        SET u16 varB = varA + AX
+        SET u16 varB = varA + XY
+        SET u16 varB = varA + XY
+        SET u16 varB = AX + varA
+        SET u16 varB = XY + varA
+        SET u16 varA -= AX
+        SET u16 varB = varA - AX
+
+        SET u16 varA += u8 varB
+        SET u16 varC = varA + u8 varB
+        SET u16 varA -= u8 varB
+        SET u16 varC = varA - u8 varB
 
 ;;; s16
         SET s16 varB = varA
@@ -1416,6 +1558,24 @@ varC:   .word   9870
         SET s16 varA <<= #4
         SET s16 varA >>= #1
         SET s16 varA >>= #4
+
+        SET s16 AX = varA
+        SET s16 XY = varA
+        SET s16 varA = AX
+        SET s16 varA = XY
+        SET s16 varA += AX
+        SET s16 varA += XY
+        SET s16 varB = varA + AX
+        SET s16 varB = varA + XY
+        SET s16 varB = AX + varA
+        SET s16 varB = XY + varA
+        SET s16 varA -= AX
+        SET s16 varB = varA - AX
+
+        SET s16 varA += u8 varB
+        SET s16 varC = varA + u8 varB
+        SET s16 varA -= u8 varB
+        SET s16 varC = varA - u8 varB
 
 ;;; u24
         SET u24 varB = varA
@@ -1456,6 +1616,7 @@ varC:   .word   9870
         RTS_IF                     ; RTS_IF: Empty expression
         RTS_IF CS X                ; RTS_IF: Unexpected token: 'X'
         RTS_IF CS,CC               ; RTS_IF: Unexpected token: ','
+        RTS_IF A                   ; RTS_IF: Expected operator (=, <>, <, >=, IN, BETWEEN)
         RTS_IF A > #123            ; RTS_IF: Greater-than operator ('>') not supported
         RTS_IF A <= #123           ; RTS_IF: Less-than-or-equal operator ('<=') not supported
         RTS_IF A = 1               ; RTS_IF: Numeric literal in '=' comparison; did you mean '#1'?
@@ -1476,7 +1637,7 @@ varC:   .word   9870
         RTS_IF A = var++           ; RTS_IF: Unexpected '++' (only supported at start of typed comparison)
 
         RTS_IF u16                 ; RTS_IF: Expected argument(s) after type 'u16'
-        RTS_IF u16 var             ; RTS_IF: Expected operator (=, <>, <, >=)
+        RTS_IF u16 var             ; RTS_IF: Expected operator (=, <>, <, <=, >, >=)
         RTS_IF u16 var <           ; RTS_IF: Expected argument(s) after operator '<'
         RTS_IF u16 var < #123,456  ; RTS_IF: Unexpected non-index-register after comparison '<'
         RTS_IF u16 var < 123       ; RTS_IF: Numeric literal in '<' comparison; did you mean '#123'?
@@ -1486,8 +1647,9 @@ varC:   .word   9870
         RTS_IF u8 var = --var      ; RTS_IF: Unexpected '--' (only supported at start of typed comparison)
         RTS_IF u8 var = ++var      ; RTS_IF: Unexpected '++' (only supported at start of typed comparison)
 
-        CALL    target, FOO=        ; CALL: Expected 'reg=...'
-        CALL    target, A           ; CALL: Expected 'A=...'
+        CALL    target, FOO=        ; CALL: Expected 'reg=...', saw identifier ('FOO')
+        CALL    target, A           ; CALL: Expected '=' after register 'A'
+        CALL    target, A=          ; CALL: Expected expression after 'A='
         CALL    target, A=0         ; CALL: Numeric literal in 'A=expr' assignment; did you mean '#0'?
         CALL    target, A=kConstant ; CALL: Constant in 'A=expr' assignment; did you mean '#kConstant'?
         CALL    target, C=1 bad     ; CALL: Unexpected tokens after 'C=...'
@@ -1497,8 +1659,13 @@ varC:   .word   9870
 
         IF NS GOTO                  ; IF: Expected target after GOTO
         IF NS JUMP                  ; IF: Expected target after JUMP
+        IF NS BREAK label           ; IF: Expected nothing after BREAK, saw identifier ('label')
+        IF NS CONTINUE label        ; IF: Expected nothing after CONTINUE, saw identifier ('label')
+        IF NS REDO label            ; IF: Expected nothing after REDO, saw identifier ('label')
 
         SET                         ; SET: Expected type (u8,u16,s16,u24,u32)
+        SET A                       ; SET: Expected type (u8,u16,s16,u24,u32), saw register 'A'
+        SET , u8                    ; SET: Expected type (u8,u16,s16,u24,u32), saw comma (',')
         SET u16                     ; SET: Expected assignment target
         SET u16 target              ; SET: Expected assignment operator (=, +=, -=)
         SET u16 target =            ; SET: Expected argument(s) after operator '='
@@ -1517,3 +1684,4 @@ varC:   .word   9870
         SET u16 target <<= #kNonConstant ; SET: Expected constant expression after '<<='
         SET u16 target <<= #0            ; SET: Expected non-zero count
 .endif
+

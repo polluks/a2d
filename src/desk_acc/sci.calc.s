@@ -615,8 +615,8 @@ init:
 
     IF A = #MGTK::Area::close_box ; Close box?
         MGTK_CALL MGTK::TrackGoAway, trackgoaway_params
-        lda     trackgoaway_params::goaway
-        beq     ret
+        IF u8 trackgoaway_params::goaway = #MGTK::goaway_canceled GOTO ret
+
         pla                     ; pop OnClick
         pla
         jmp     ExitDA
@@ -1521,14 +1521,14 @@ END_PROC_AT
         ROM_CALL NEGOP          ; FAC = -X*X
         lday    #CON_ONE
         ROM_CALL FADD           ; FAC = -X*X+1
-   IF NOT ZERO
+    IF NOT ZERO
         ROM_CALL SQR            ; FAC = SQR(-X*X+1)
         jsr     PopARG          ; ARG = X
         jsr     FixSGNCPR
         ROM_CALL FDIVT          ; FAC = X/SQR(-X*X+1)
         ROM_CALL ATN            ; FAC = ATN(X/SQR(-X*X+1))
         rts
-   END_IF
+    END_IF
 
         ;; Handle 1/-1
         jsr     PopARG

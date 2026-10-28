@@ -198,9 +198,8 @@ ret:
 
 .proc FlashImpl
         ;; If disabled, return canceled
-    IF bit state : NS
-        RETURN  A=#$80
-    END_IF
+        IF bit state : NS \
+          RETURN A=#$80
 
         jsr     _SetPort
         jsr     _Invert
@@ -337,9 +336,8 @@ window          .tag MGTK::Point
 UNSUPPRESS_SHADOW_WARNING
 
         ;; If disabled, return canceled
-    IF bit state : NS
-        RETURN  A=#$80
-    END_IF
+        IF bit state : NS \
+          RETURN A=#$80
 
         jsr     _SetPort
 
@@ -351,8 +349,8 @@ loop_i: jsr     _Invert
 
         ;; Event loop
 loop:   MGTK_CALL MGTK::GetEvent, event_params
-        ucmp8   event_params::kind, #MGTK::EventKind::button_up
-        beq     exit
+        IF u8 event_params::kind =  #MGTK::EventKind::button_up GOTO exit
+
         lda     window_id
     IF ZERO
         MGTK_CALL MGTK::MoveTo, event_params::coords

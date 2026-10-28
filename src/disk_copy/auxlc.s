@@ -856,13 +856,13 @@ menu_offset_table:
 
 .proc HandleKey
         lda     event_params::key
-      IF A IN #CHAR_UP, #CHAR_DOWN
+    IF A IN #CHAR_UP, #CHAR_DOWN
         sta     lb_params::key
         copy8   event_params::modifiers, lb_params::modifiers
         LBTK_CALL LBTK::Key, lb_params
         jsr     UpdateOKButton
         RETURN  A=#$FF
-      END_IF
+    END_IF
 
     IF u8 event_params::modifiers = #0
       IF u8 event_params::key <> #CHAR_ESCAPE
@@ -892,9 +892,8 @@ ignore: RETURN  A=#$FF
 
 .proc HandleMenuSelection
         ldx     menuselect_params::menu_id
-    IF ZERO
-        RETURN  A=#$FF
-    END_IF
+        IF ZERO \
+          RETURN A=#$FF
 
         ;; Compute offset into command table - menu offset + item offset
         lda     menuselect_params::menu_item ; menu item index is 1-based
@@ -969,9 +968,8 @@ CmdDiskCopy := SetCopyModeImpl::disk_copy
         jmp     HandleMenuSelection
     END_IF
 
-    IF A <> #MGTK::Area::content
-        RETURN  A=#$FF
-    END_IF
+        IF A <> #MGTK::Area::content \
+          RETURN A=#$FF
 
         lda     findwindow_params::window_id
         cmp     #winfo_dialog::kWindowId
@@ -1019,7 +1017,7 @@ ret:    rts
         MGTK_CALL MGTK::InRect, dialog_ok_button::rect
     IF NOT_ZERO
         BTK_CALL BTK::Track, dialog_ok_button
-      IF NC
+      IF NC                     ; N=0/Z=1 if clicked
         lda     #$00
       END_IF
         rts
@@ -1028,7 +1026,7 @@ ret:    rts
         MGTK_CALL MGTK::InRect, read_drive_button::rect
     IF NOT_ZERO
         BTK_CALL BTK::Track, read_drive_button
-      IF NC
+      IF NC                     ; N=0/Z=1 if clicked
         lda     #$01
       END_IF
     END_IF
@@ -1118,9 +1116,9 @@ params: .res    3
         ldy     #0
         lda     (src_ptr),y
         tay
-      DO
+    DO
         copy8   (src_ptr),y, (dst_ptr),y
-      WHILE dey : POS
+    WHILE dey : POS
         rts
 .endproc ; AssignDriveName
 
@@ -1142,9 +1140,9 @@ match:  RETURN  C=0
 ;;; Output: C=0 if DOS 3.3 volume, C=1 otherwise
 
 .proc IsDOS33BootBlock
-    IF u8 default_block_buffer+1 <> #$A5 OR u8 default_block_buffer+2 <> #$27
-        RETURN  C=1
-    END_IF
+        IF u8 default_block_buffer+1 <> #$A5 OR u8 default_block_buffer+2 <> #$27 \
+          RETURN  C=1
+
         RETURN  C=0
 .endproc ; IsDOS33BootBlock
 
@@ -2151,11 +2149,8 @@ ShowAlertDialog := ShowAlertDialogImpl::start
 
         jsr     SystemTask
         MGTK_CALL MGTK::GetEvent, Alert::event_params
-        ucmp8   Alert::event_kind, #MGTK::EventKind::key_down
-        bne     @retry
-
-        ucmp8   Alert::event_key, #CHAR_ESCAPE
-        bne     @retry
+        IF u8 Alert::event_kind <> #MGTK::EventKind::key_down GOTO @retry
+        IF u8 Alert::event_key <> #CHAR_ESCAPE GOTO @retry
         RETURN  A=#$80
 
 done:   RETURN  A=#$00

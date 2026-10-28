@@ -386,7 +386,7 @@ update:
 
 .proc OnClickOK
         BTK_CALL BTK::Track, ok_button
-        beq     OnOK
+        IF ZS GOTO OnOK         ; N=0/Z=1 if clicked
         rts
 .endproc ; OnClickOK
 
@@ -566,9 +566,8 @@ dialog_result:  .byte   0
 .endproc ; UpdateFirstDOWOptionButtons
 
 .proc ZToButtonState
-    IF ZC
-        RETURN  A=#BTK::kButtonStateNormal
-    END_IF
+        IF ZC \
+          RETURN A=#BTK::kButtonStateNormal
         RETURN  A=#BTK::kButtonStateChecked
 .endproc ; ZToButtonState
 

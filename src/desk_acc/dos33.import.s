@@ -310,14 +310,14 @@ port:           .addr   grafport_win
         MGTK_CALL MGTK::InRect, ok_button::rect
       IF NOT_ZERO
         BTK_CALL BTK::Track, ok_button
-        bmi     done
+        IF NS GOTO done         ; N=0/Z=1 if clicked
         jmp     Exit
       END_IF
 
         MGTK_CALL MGTK::InRect, cancel_button::rect
       IF NOT_ZERO
         BTK_CALL BTK::Track, cancel_button
-        bmi     done
+        IF NS GOTO done         ; N=0/Z=1 if clicked
         copy8   #$FF, listbox_rec::selected_index
         jmp     Exit
       END_IF
@@ -633,14 +633,14 @@ remainder:      .word   0                 ; (out)
         MGTK_CALL MGTK::InRect, import_button::rect
       IF NOT_ZERO
         BTK_CALL BTK::Track, import_button
-        bmi     done
+        IF NS GOTO done         ; N=0/Z=1 if clicked
         jmp     Import
       END_IF
 
         MGTK_CALL MGTK::InRect, close_button::rect
       IF NOT_ZERO
         BTK_CALL BTK::Track, close_button
-        bmi     done
+        IF NS GOTO done         ; N=0/Z=1 if clicked
         jmp     ExitOK
       END_IF
     END_IF
@@ -1167,9 +1167,7 @@ start:
         lda     prefix_path
         clc
         adc     str_name
-    IF A >= #kMaxPathLength     ; not +1 because we'll add '/'
-        RETURN  A=#ERR_INVALID_PATHNAME
-    END_IF
+        IF A >= #kMaxPathLength RETURN A=#ERR_INVALID_PATHNAME ; not +1 because we'll add '/'
 
         COPY_STRING prefix_path, path_buf
 
